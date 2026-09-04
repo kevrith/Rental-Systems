@@ -24,6 +24,57 @@ import { PageLoader } from '@/components/ui'
 const AgencyDashboardPage = lazy(() =>
   import('@/features/agency/AgencyDashboardPage').then((m) => ({ default: m.AgencyDashboardPage })),
 )
+const ApplicationsPage = lazy(() =>
+  import('@/features/applications/ApplicationsPage').then((m) => ({ default: m.ApplicationsPage })),
+)
+const ApplicationDetailPage = lazy(() =>
+  import('@/features/applications/ApplicationDetailPage').then((m) => ({
+    default: m.ApplicationDetailPage,
+  })),
+)
+const PublicApplyPage = lazy(() =>
+  import('@/features/applications/PublicApplyPage').then((m) => ({ default: m.PublicApplyPage })),
+)
+const GuaranteeResponsePage = lazy(() =>
+  import('@/features/applications/PublicResponsePages').then((m) => ({
+    default: m.GuaranteeResponsePage,
+  })),
+)
+const ReferenceResponsePage = lazy(() =>
+  import('@/features/applications/PublicResponsePages').then((m) => ({
+    default: m.ReferenceResponsePage,
+  })),
+)
+const FleetPage = lazy(() =>
+  import('@/features/rentals/FleetPage').then((m) => ({ default: m.FleetPage })),
+)
+const AssetDetailPage = lazy(() =>
+  import('@/features/rentals/AssetDetailPage').then((m) => ({ default: m.AssetDetailPage })),
+)
+const CompliancePage = lazy(() =>
+  import('@/features/facilities/CompliancePage').then((m) => ({ default: m.CompliancePage })),
+)
+const FacilitiesPage = lazy(() =>
+  import('@/features/facilities/FacilitiesPage').then((m) => ({ default: m.FacilitiesPage })),
+)
+const VacancyDeskPage = lazy(() =>
+  import('@/features/vacancies/VacancyDeskPage').then((m) => ({ default: m.VacancyDeskPage })),
+)
+const PublicListingPage = lazy(() =>
+  import('@/features/vacancies/PublicListingPage').then((m) => ({ default: m.PublicListingPage })),
+)
+const DataExportPage = lazy(() =>
+  import('@/features/vacancies/DataExportPage').then((m) => ({ default: m.DataExportPage })),
+)
+const BulkOperationsPage = lazy(() =>
+  import('@/features/bulk/BulkOperationsPage').then((m) => ({ default: m.BulkOperationsPage })),
+)
+const TenantImportPage = lazy(() =>
+  import('@/features/bulk/TenantImportPage').then((m) => ({ default: m.TenantImportPage })),
+)
+const ServiceChargePage = lazy(() =>
+  import('@/features/properties/ServiceChargePage').then((m) => ({ default: m.ServiceChargePage })),
+)
 const AnalyticsPage = lazy(() =>
   import('@/features/analytics/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })),
 )
@@ -228,6 +279,13 @@ function App() {
         <Route path="/portal/setup" element={<PortalSetupPage />} />
         {/* The renewal link is the tenant's whole authentication — no account. */}
         <Route path="/renew/:token" element={<RenewalPage />} />
+        {/* Screening reaches three people who have no login: the applicant, their
+            guarantor, and their previous landlord. */}
+        <Route path="/apply/:unitId" element={<PublicApplyPage />} />
+        {/* A vacancy listing is meant to be pasted into WhatsApp groups. */}
+        <Route path="/listing/:slug" element={<PublicListingPage />} />
+        <Route path="/guarantee/:token" element={<GuaranteeResponsePage />} />
+        <Route path="/reference/:token" element={<ReferenceResponsePage />} />
 
         {/* Tenant portal */}
         <Route element={<ProtectedRoute allowRoles={['tenant']} />}>
@@ -285,6 +343,30 @@ function App() {
             <Route path="/maintenance/new" element={<MaintenanceFormPage />} />
             <Route path="/maintenance/analytics" element={<MaintenanceAnalyticsPage />} />
             <Route path="/maintenance/:requestId" element={<MaintenanceDetailPage />} />
+
+            {/* Phase 3 — vehicle and equipment hire */}
+            <Route path="/fleet" element={<FleetPage />} />
+            <Route path="/fleet/:assetId" element={<AssetDetailPage />} />
+
+            {/* Phase 3 — facilities */}
+            <Route path="/compliance" element={<CompliancePage />} />
+            <Route path="/properties/:propertyId/facilities" element={<FacilitiesPage />} />
+
+            {/* Phase 3 — vacancy marketing and export */}
+            <Route path="/vacancies" element={<VacancyDeskPage />} />
+            <Route path="/settings/exports" element={<DataExportPage />} />
+
+            {/* Phase 3 — service charges and bulk actions */}
+            <Route
+              path="/properties/:propertyId/service-charge"
+              element={<ServiceChargePage />}
+            />
+            <Route path="/bulk" element={<BulkOperationsPage />} />
+            <Route path="/bulk/import" element={<TenantImportPage />} />
+
+            {/* Phase 3 — tenant screening */}
+            <Route path="/applications" element={<ApplicationsPage />} />
+            <Route path="/applications/:applicationId" element={<ApplicationDetailPage />} />
 
             {/* Phase 3 — vendor registry */}
             <Route path="/vendors" element={<VendorsPage />} />

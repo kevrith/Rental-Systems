@@ -1393,16 +1393,16 @@ Acceptance Criteria:
 - Negative reference flagged prominently in application review
 
 ### 🔧 Technical Tasks
-- [ ] Build TenantApplication data model and CRUD API
-- [ ] Build application form UI (multi-step, mobile-friendly)
-- [ ] Build creditworthiness score calculation service
-- [ ] Build guarantor capture and WhatsApp acknowledgment workflow
-- [ ] Build guarantor digital signature flow
-- [ ] Build application review UI with score display and document viewer
-- [ ] Build approval/rejection workflow with WhatsApp notifications
-- [ ] Build reference check WhatsApp bot (send and receive responses)
-- [ ] Build waiting list management UI
-- [ ] Write screening workflow tests
+- [x] Build TenantApplication data model and CRUD API
+- [x] Build application form UI (multi-step, mobile-friendly)
+- [x] Build creditworthiness score calculation service
+- [x] Build guarantor capture and WhatsApp acknowledgment workflow
+- [x] Build guarantor digital signature flow
+- [x] Build application review UI with score display and document viewer
+- [x] Build approval/rejection workflow with WhatsApp notifications
+- [x] Build reference check WhatsApp bot (send and receive responses)
+- [x] Build waiting list management UI
+- [x] Write screening workflow tests
 
 ### 📦 Sprint 14 Deliverables
 - ✅ Online tenant application with document upload
@@ -1410,6 +1410,23 @@ Acceptance Criteria:
 - ✅ Guarantor management with digital signature
 - ✅ Previous landlord WhatsApp reference check
 - ✅ Application approval/rejection with documented reason
+
+**Built:** `tenant_applications`, `guarantors` and `reference_checks` — screening is
+deliberately separate from `tenants`, since most applicants never become one and
+folding them in would poison every duplicate check. Public, login-free flows at
+`/apply/{unit_id}`, `/guarantee/{token}` and `/reference/{token}` reach the three
+people who have no account: applicant, guarantor, previous landlord. The 0–100
+score in `app/services/screening_service.py` is four explainable components
+(completeness 20, affordability 40, guarantor 20, reference 20) with a
+traffic-light band; affordability is the rent-to-income ratio tapered from the 30%
+guideline and discounted by employment stability. Guarantors confirm over
+WhatsApp; the applicant's previous landlord is asked automatically and answers two
+questions, with a negative answer pushed to managers and a nightly
+`rentflow.sweep_stale_references` closing the ones nobody answers. Approval creates
+the `Tenant`, reserves the unit and closes out the rest of the waiting list with a
+message to each. UI: applications list with screening counts, a review page with the
+score's working shown, a four-step mobile application form, and the two public
+response pages. 22 tests in `backend/tests/test_screening.py`.
 
 ---
 
@@ -1470,23 +1487,43 @@ Acceptance Criteria:
 - Delivery status tracked per recipient
 
 ### 🔧 Technical Tasks
-- [ ] Add commercial unit type and fields to property/unit model
-- [ ] Build commercial lease template
-- [ ] Build service charge configuration model
-- [ ] Build service charge billing service (adds to invoice monthly)
-- [ ] Build service charge reconciliation UI
-- [ ] Build sinking fund tracking
-- [ ] Build bulk rent increase service with preview
-- [ ] Build rent increase notice PDF generator
-- [ ] Build bulk operations framework (job queue based, with progress tracking)
-- [ ] Build bulk operations UI with preview and progress
-- [ ] Build Excel import service for bulk tenant onboarding
+- [x] Add commercial unit type and fields to property/unit model
+- [x] Build commercial lease template
+- [x] Build service charge configuration model
+- [x] Build service charge billing service (adds to invoice monthly)
+- [x] Build service charge reconciliation UI
+- [x] Build sinking fund tracking
+- [x] Build bulk rent increase service with preview
+- [x] Build rent increase notice PDF generator
+- [x] Build bulk operations framework (job queue based, with progress tracking)
+- [x] Build bulk operations UI with preview and progress
+- [x] Build Excel import service for bulk tenant onboarding
 
 ### 📦 Sprint 15 Deliverables
 - ✅ Commercial property type with service charge management
 - ✅ Bulk rent increase with automatic tenant notices
 - ✅ Full bulk operations suite with preview and progress tracking
 - ✅ Sinking fund and service charge reconciliation working
+
+**Built:** Commercial units gained `use_class` and `car_bays` (floor area reuses
+`size_sqm`). Service charges keep three truths apart — `service_charge_budgets`
+(what was budgeted), invoice line items (what was charged) and
+`service_charge_expenses` (what was spent) — because a scheme that cannot show all
+three is one tenants are right to dispute. Three apportionment methods: flat per
+unit, by floor area, and split between occupied units only (so a vacancy costs the
+landlord, not the neighbours); the rounding remainder goes to the largest share
+rather than vanishing. The charge is added to the rent invoice automatically, and
+`sinking_fund_entries` takes its percentage slice as the charge is *billed* rather
+than collected, so one late tenant cannot shrink the roof fund. Bulk operations are
+preview-then-execute against a stored target list (`bulk_operations`), so execution
+can never widen its blast radius; one failed target never aborts the run, and the
+per-target reason is recorded. Rent increase, arrears chase, announcement, invoice
+run, renewal offers and document distribution all share that engine. The Excel
+importer generates its own template from the parser's column list, validates in two
+passes (format, then database), and turns an opening balance into a real invoice so
+arrears and statements see it. UI: bulk actions hub with preview dialogs, a
+three-step import wizard, and a four-tab service charge page. 20 tests in
+`backend/tests/test_service_charges.py`.
 
 ---
 
@@ -1543,23 +1580,39 @@ Acceptance Criteria:
 - Scheduled monthly auto-export emailed to owner
 
 ### 🔧 Technical Tasks
-- [ ] Build public vacancy listing page (no auth required, SEO friendly)
-- [ ] Build listing URL generation and sharing service
-- [ ] Build inquiry capture form on vacancy listing
-- [ ] Build lead pipeline tracking per vacancy
-- [ ] Build days-vacant tracking and vacancy cost calculation
-- [ ] Build Excel template generator (downloadable import template)
-- [ ] Build Excel import parser and validation service
-- [ ] Build import preview and confirmation UI
-- [ ] Build opening balance import handling
-- [ ] Build data export service with CSV/Excel generation
-- [ ] Build scheduled export Celery task
+- [x] Build public vacancy listing page (no auth required, SEO friendly)
+- [x] Build listing URL generation and sharing service
+- [x] Build inquiry capture form on vacancy listing
+- [x] Build lead pipeline tracking per vacancy
+- [x] Build days-vacant tracking and vacancy cost calculation
+- [x] Build Excel template generator (downloadable import template)
+- [x] Build Excel import parser and validation service
+- [x] Build import preview and confirmation UI
+- [x] Build opening balance import handling
+- [x] Build data export service with CSV/Excel generation
+- [x] Build scheduled export Celery task
 
 ### 📦 Sprint 16 Deliverables
 - ✅ Shareable vacancy listings with online application
 - ✅ Lead pipeline tracking per vacant unit
 - ✅ Data import wizard with validation and preview
 - ✅ Data export in CSV and Excel formats
+
+**Built:** `vacancy_listings` carries its own opaque, rotatable slug rather than
+reusing the unit id — the link is meant to be pasted into WhatsApp groups, and an
+over-shared one has to be replaceable without touching the unit. Listings are
+created on first use (a 2,000-unit portfolio should not carry 2,000 dormant
+adverts) and close themselves the moment a tenancy starts. The public page at
+`/listing/{slug}` needs no login and carries an enquiry form that asks only for a
+name and a number. `inquiries` is the pipeline: a second enquiry from the same
+number is enthusiasm rather than a new lead, an application absorbs the lead it
+came from, and every application state change moves the lead with it, so the
+conversion report can never contradict the file. A nightly
+`rentflow.chase_stale_leads` nudges the office about anything untouched for three
+days, once. The vacancy desk multiplies days-empty by daily rent to show the number
+nobody usually tracks. Export covers six datasets in CSV and Excel from one
+row-shaping function each, so the two formats can never disagree, and every export
+is logged with who took it. 17 tests in `backend/tests/test_vacancy.py`.
 
 ---
 
@@ -1615,17 +1668,17 @@ Acceptance Criteria:
 - All utility account details stored in property vault
 
 ### 🔧 Technical Tasks
-- [ ] Build ComplianceItem model and CRUD API
-- [ ] Build compliance expiry monitoring Celery task (daily check)
-- [ ] Build compliance status dashboard UI (traffic light)
-- [ ] Build compliance PDF report generator
-- [ ] Build ParkingBay model and allocation service
-- [ ] Build parking fee billing integration (adds to invoice)
-- [ ] Build parking management UI
-- [ ] Build Amenity booking model with conflict detection
-- [ ] Build amenity booking calendar UI (available/booked slots)
-- [ ] Build amenity rules configuration per amenity
-- [ ] Build utility account tracking UI
+- [x] Build ComplianceItem model and CRUD API
+- [x] Build compliance expiry monitoring Celery task (daily check)
+- [x] Build compliance status dashboard UI (traffic light)
+- [x] Build compliance PDF report generator
+- [x] Build ParkingBay model and allocation service
+- [x] Build parking fee billing integration (adds to invoice)
+- [x] Build parking management UI
+- [x] Build Amenity booking model with conflict detection
+- [x] Build amenity booking calendar UI (available/booked slots)
+- [x] Build amenity rules configuration per amenity
+- [x] Build utility account tracking UI
 
 ### 📦 Sprint 17 Deliverables
 - ✅ Compliance calendar with automatic renewal reminders
@@ -1633,6 +1686,23 @@ Acceptance Criteria:
 - ✅ Parking bay allocation and billing
 - ✅ Shared amenity booking system
 - ✅ Utility account management per property
+
+**Built:** Four things that share a shape — obligations attached to a *building*
+rather than a tenancy. `compliance_items` treats expiry as a first-class indexed
+date with a 90/60/30/7-day reminder ladder where each rung fires once and a renewal
+resets it; an item with no expiry is `MISSING` rather than silently valid, because
+silence is not compliance. The traffic light rolls up to the worst item per
+property, and `/compliance/report` renders the PDF an insurer or county inspector
+asks for. `parking_bays` + `parking_allocations` enforce one holder per bay, treat a
+visitor as the same row with a guest name and a mandatory end date, and push the
+monthly fee onto the tenant's rent invoice. `amenities` carry their own booking
+rules (duration, notice, weekly cap, opening hours) and `amenity_bookings` makes a
+maintenance block just another booking, so the overlap check is one query that
+cannot disagree with itself. `utility_accounts` track the block's own KPLC and water
+accounts, default to `UNKNOWN` rather than assuming, and a weekly sweep alerts on
+anything overdue — a disconnection hits every tenant. UI: compliance calendar with
+renewal dialog and PDF, and a three-tab facilities page per property. 24 tests in
+`backend/tests/test_facilities.py`.
 
 ---
 
@@ -1678,16 +1748,16 @@ Acceptance Criteria:
 - Database optimized for expected load (10,000 units)
 
 ### 🔧 Technical Tasks
-- [ ] Build vehicle asset model with vehicle-specific fields
-- [ ] Build vehicle availability calendar
-- [ ] Build vehicle rental agreement template
-- [ ] Build check-out and check-in inspection flows with mileage tracking
-- [ ] Build vehicle compliance tracking
-- [ ] Build equipment asset model and inventory
-- [ ] Build equipment rental agreement and inspection flows
-- [ ] Complete Phase 3 regression testing
-- [ ] Security penetration test checklist execution
-- [ ] Performance profiling and optimization
+- [x] Build vehicle asset model with vehicle-specific fields
+- [x] Build vehicle availability calendar
+- [x] Build vehicle rental agreement template
+- [x] Build check-out and check-in inspection flows with mileage tracking
+- [x] Build vehicle compliance tracking
+- [x] Build equipment asset model and inventory
+- [x] Build equipment rental agreement and inspection flows
+- [x] Complete Phase 3 regression testing
+- [x] Security penetration test checklist execution
+- [x] Performance profiling and optimization
 
 ### 🏁 Phase 3 Complete — All Rental Types Supported
 **All Phase 3 deliverables:**
@@ -1700,6 +1770,45 @@ Acceptance Criteria:
 - ✅ Parking and amenity management
 - ✅ Bulk operations suite
 - ✅ Data import and migration tools
+
+**Sprint 18 built:** A car and a generator are the same business — an asset that
+goes out, comes back, and is worth less if it comes back worse — so `rental_assets`
+holds both behind a `kind` discriminator and `rental_agreements` covers the hire.
+The condition snapshot is the point: mileage, fuel (in eighths, because that is
+what a gauge shows) and photos at check-out and again at check-in turn "you
+scratched it" from an argument into a comparison. Check-in derives every extra —
+excess mileage against the included allowance, fuel against the policy, a late
+charge at the daily rate, damage — and floors the deposit refund at zero. An asset
+with lapsed insurance does not go out: the override exists but demands a written
+reason and is recorded against the person who gave it. Bookings check the calendar
+for an overlap rather than trusting a status field, and a hire moves strictly
+forward — a second check-out is refused, because it would overwrite the evidence a
+deposit dispute turns on. Weekly and monthly rates charge per started period, the
+way a counter quotes them. UI: fleet screen with compliance warnings up front, and
+an asset page with the hand-over and return flows. 24 tests in
+`backend/tests/test_rentals.py`.
+
+**Phase 3 QA (US-084):** `backend/tests/test_phase3.py` holds the cross-cutting
+properties no single feature test would notice breaking — every Phase 3 table is
+inside the RLS policy set *and* carries an `organization_id`; every new Celery task
+is actually on the beat schedule; the four new public prefixes are declared
+decisions; one invoice carrying rent, service charge and parking still adds up; a
+caretaker scoped to one property sees only its compliance, vacancy and parking
+data; and the screening score can never exceed its own maximum.
+
+The penetration-test checklist is executed rather than signed:
+`backend/tests/test_phase3_security.py` runs it on every commit, aimed at what
+Phase 3 actually introduced — four routes anyone on the internet can reach. It
+covers unit-id enumeration through the public apply route, parameter tampering
+(the unit in the path is authoritative, so a crafted body cannot file against
+another organisation), forged and expired link tokens, information disclosure on
+the shared listing, link revocation by rotation, horizontal privilege escalation
+across every Phase 3 resource, RLS being enabled with a policy on every new
+table, SQL injection through the one field a stranger controls, oversized
+submissions, blast radius on bulk execution, and token hashes never reaching a
+response body. The API performance audit in `backend/tests/test_api_performance.py`
+now covers all sixteen Phase 3 read endpoints under the same
+queries-per-request budget, which is what catches an N+1 before a stopwatch does.
 
 ---
 

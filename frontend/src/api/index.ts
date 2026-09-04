@@ -25,8 +25,38 @@ import type {
   InspectionSummary,
   LeaseRenewal,
   LeaseTemplateStarter,
+  BulkOperation,
+  GuarantorInvite,
+  ImportPreview,
+  ImportResult,
   MaintenanceAnalytics,
   MaintenanceOverview,
+  PublicUnitListing,
+  ReferenceInvite,
+  Amenity,
+  AvailabilityRow,
+  AmenityBooking,
+  AmenityUsageRow,
+  ComplianceDashboard,
+  ComplianceItem,
+  ConversionReport,
+  FleetOverview,
+  DataExportRow,
+  InquiryRow,
+  ParkingOverview,
+  PublicListing,
+  RentalAgreement,
+  RentalAsset,
+  ScreeningSummary,
+  ServiceChargeExpense,
+  ServiceChargeReconciliation,
+  ServiceChargeScheme,
+  SinkingFundEntry,
+  TenantApplication,
+  UtilityAccount,
+  VacancyListingRow,
+  VacancyReport,
+  WaitingListEntry,
   ProposedTerms,
   RenewalOffer,
   PropertyPerformance,
@@ -262,6 +292,191 @@ export const maintenanceApi = {
   close: (id: string) => post<MaintenanceRequest>(`/maintenance/${id}/close`),
   cancel: (id: string, reason?: string) =>
     post<MaintenanceRequest>(`/maintenance/${id}/cancel`, { reason }),
+}
+
+export const assetsApi = {
+  overview: () => get<FleetOverview>('/assets/overview'),
+  list: (params?: {
+    kind?: string
+    asset_status?: string
+    search?: string
+    available_from?: string
+    available_to?: string
+  }) => get<RentalAsset[]>('/assets', params),
+  get: (id: string) => get<RentalAsset>(`/assets/${id}`),
+  create: (body: unknown) => post<RentalAsset>('/assets', body),
+  update: (id: string, body: unknown) => patch<RentalAsset>(`/assets/${id}`, body),
+  availability: (id: string, params?: { day_from?: string; day_to?: string }) =>
+    get<AvailabilityRow[]>(`/assets/${id}/availability`, params),
+}
+
+export const rentalAgreementsApi = {
+  list: (params?: {
+    asset_id?: string
+    tenant_id?: string
+    agreement_status?: string
+    overdue_only?: boolean
+  }) => get<RentalAgreement[]>('/rental-agreements', params),
+  get: (id: string) => get<RentalAgreement>(`/rental-agreements/${id}`),
+  book: (body: unknown) => post<RentalAgreement>('/rental-agreements', body),
+  checkOut: (id: string, body: unknown) =>
+    post<RentalAgreement>(`/rental-agreements/${id}/check-out`, body),
+  checkIn: (id: string, body: unknown) =>
+    post<RentalAgreement>(`/rental-agreements/${id}/check-in`, body),
+  cancel: (id: string, reason?: string) =>
+    post<RentalAgreement>(`/rental-agreements/${id}/cancel`, { reason }),
+}
+
+export const complianceApi = {
+  dashboard: () => get<ComplianceDashboard>('/compliance/dashboard'),
+  list: (params?: { property_id?: string; item_status?: string }) =>
+    get<ComplianceItem[]>('/compliance', params),
+  create: (body: unknown) => post<ComplianceItem>('/compliance', body),
+  update: (id: string, body: unknown) => patch<ComplianceItem>(`/compliance/${id}`, body),
+  reportUrl: (propertyId?: string) =>
+    propertyId ? `/compliance/report?property_id=${propertyId}` : '/compliance/report',
+}
+
+export const parkingApi = {
+  overview: (propertyId: string) => get<ParkingOverview>(`/parking/property/${propertyId}`),
+  createBay: (body: unknown) => post<{ id: string; bay_number: string }>('/parking/bays', body),
+  allocate: (bayId: string, body: unknown) => post(`/parking/bays/${bayId}/allocate`, body),
+  release: (allocationId: string) => post(`/parking/allocations/${allocationId}/release`),
+}
+
+export const amenitiesApi = {
+  list: (propertyId?: string) =>
+    get<Amenity[]>('/amenities', propertyId ? { property_id: propertyId } : undefined),
+  create: (body: unknown) => post<Amenity>('/amenities', body),
+  calendar: (amenityId: string, params?: { day_from?: string; day_to?: string }) =>
+    get<AmenityBooking[]>(`/amenities/${amenityId}/calendar`, params),
+  book: (amenityId: string, body: unknown) =>
+    post<AmenityBooking>(`/amenities/${amenityId}/bookings`, body),
+  block: (amenityId: string, body: unknown) =>
+    post<AmenityBooking>(`/amenities/${amenityId}/block`, body),
+  cancel: (bookingId: string) => post<AmenityBooking>(`/amenities/bookings/${bookingId}/cancel`),
+  usage: (propertyId: string, months = 1) =>
+    get<AmenityUsageRow[]>(`/amenities/usage/${propertyId}`, { months }),
+}
+
+export const utilitiesApi = {
+  list: (propertyId?: string) =>
+    get<UtilityAccount[]>('/utilities', propertyId ? { property_id: propertyId } : undefined),
+  save: (body: unknown) => put<UtilityAccount>('/utilities', body),
+  updateStatus: (accountId: string, body: unknown) =>
+    post<UtilityAccount>(`/utilities/${accountId}/status`, body),
+}
+
+export const vacanciesApi = {
+  desk: () => get<VacancyReport>('/vacancies'),
+  conversion: () => get<ConversionReport>('/vacancies/conversion'),
+  listingForUnit: (unitId: string) =>
+    get<VacancyListingRow>(`/vacancies/units/${unitId}/listing`),
+  updateListing: (listingId: string, body: unknown) =>
+    patch<VacancyListingRow>(`/vacancies/listings/${listingId}`, body),
+  rotateLink: (listingId: string) =>
+    post<VacancyListingRow>(`/vacancies/listings/${listingId}/rotate-link`),
+  inquiries: (params?: { unit_id?: string; stage?: string; stale_only?: boolean }) =>
+    get<InquiryRow[]>('/vacancies/inquiries', params),
+  updateInquiry: (id: string, body: unknown) =>
+    patch<InquiryRow>(`/vacancies/inquiries/${id}`, body),
+  exports: () => get<DataExportRow[]>('/vacancies/exports'),
+}
+
+/** The public advert and its enquiry form — no login anywhere in here. */
+export const publicListingApi = {
+  get: (slug: string) => get<PublicListing>(`/listings/${slug}`),
+  inquire: (slug: string, body: unknown) =>
+    post<{ status: string; message: string }>(`/listings/${slug}/inquire`, body),
+}
+
+export const serviceChargesApi = {
+  forProperty: (propertyId: string) =>
+    get<ServiceChargeScheme | null>(`/service-charges/property/${propertyId}`),
+  save: (propertyId: string, body: unknown) =>
+    put<ServiceChargeScheme>(`/service-charges/property/${propertyId}`, body),
+  reconciliation: (schemeId: string, params: { period_start: string; period_end: string }) =>
+    get<ServiceChargeReconciliation>(`/service-charges/${schemeId}/reconciliation`, params),
+  expenses: (schemeId: string, params?: { since?: string; until?: string }) =>
+    get<ServiceChargeExpense[]>(`/service-charges/${schemeId}/expenses`, params),
+  recordExpense: (schemeId: string, body: unknown) =>
+    post<ServiceChargeExpense>(`/service-charges/${schemeId}/expenses`, body),
+  sinkingFund: (schemeId: string) =>
+    get<SinkingFundEntry[]>(`/service-charges/${schemeId}/sinking-fund`),
+  recordSinkingFund: (schemeId: string, body: unknown) =>
+    post<SinkingFundEntry>(`/service-charges/${schemeId}/sinking-fund`, body),
+}
+
+/** Every bulk action is preview-then-execute: nothing is sent on the preview. */
+export const bulkApi = {
+  list: (params?: { kind?: string; limit?: number }) => get<BulkOperation[]>('/bulk', params),
+  get: (id: string) => get<BulkOperation>(`/bulk/${id}`),
+  previewRentIncrease: (body: unknown) =>
+    post<BulkOperation>('/bulk/rent-increase/preview', body),
+  previewReminders: (body: unknown) => post<BulkOperation>('/bulk/reminders/preview', body),
+  previewAnnouncement: (body: unknown) => post<BulkOperation>('/bulk/announcement/preview', body),
+  previewInvoiceRun: (body: unknown) => post<BulkOperation>('/bulk/invoices/preview', body),
+  previewRenewals: (body: unknown) => post<BulkOperation>('/bulk/renewals/preview', body),
+  previewDocuments: (body: unknown) => post<BulkOperation>('/bulk/documents/preview', body),
+  execute: (id: string) => post<BulkOperation>(`/bulk/${id}/execute`),
+  cancel: (id: string) => post<BulkOperation>(`/bulk/${id}/cancel`),
+
+  templateUrl: () => '/bulk/import/template',
+  previewImport: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return apiClient
+      .post<ImportPreview>('/bulk/import/preview', form)
+      .then((response) => response.data)
+  },
+  commitImport: (rows: unknown[]) => post<ImportResult>('/bulk/import/commit', { rows }),
+}
+
+export const applicationsApi = {
+  list: (params?: {
+    unit_id?: string
+    property_id?: string
+    application_status?: string
+    open_only?: boolean
+    search?: string
+    limit?: number
+  }) => get<TenantApplication[]>('/applications', params),
+  get: (id: string) => get<TenantApplication>(`/applications/${id}`),
+  create: (body: unknown) => post<TenantApplication>('/applications', body),
+  update: (id: string, body: unknown) => patch<TenantApplication>(`/applications/${id}`, body),
+  summary: () => get<ScreeningSummary>('/applications/summary'),
+  waitingList: (unitId: string) => get<WaitingListEntry[]>(`/applications/waiting-list/${unitId}`),
+
+  review: (id: string) => post<TenantApplication>(`/applications/${id}/review`),
+  interview: (id: string, body: { scheduled_for: string; note?: string }) =>
+    post<TenantApplication>(`/applications/${id}/interview`, body),
+  approve: (id: string, body: { note?: string; reject_others?: boolean }) =>
+    post<TenantApplication>(`/applications/${id}/approve`, body),
+  reject: (id: string, body: { reason: string; note?: string }) =>
+    post<TenantApplication>(`/applications/${id}/reject`, body),
+  withdraw: (id: string, reason?: string) =>
+    post<TenantApplication>(`/applications/${id}/withdraw`, { reason }),
+  addGuarantor: (id: string, body: unknown) =>
+    post<TenantApplication>(`/applications/${id}/guarantors`, body),
+  requestReference: (id: string, body: unknown) =>
+    post<TenantApplication>(`/applications/${id}/references`, body),
+  sendGuaranteeForSigning: (id: string, guarantorId: string) =>
+    post<TenantApplication>(`/applications/${id}/guarantors/${guarantorId}/sign`),
+}
+
+/** The three unauthenticated screening flows: applicant, guarantor, referee. */
+export const publicScreeningApi = {
+  listing: (unitId: string) => get<PublicUnitListing>(`/apply/${unitId}`),
+  apply: (unitId: string, body: unknown) =>
+    post<{ reference_code: string; status: string; message: string }>(`/apply/${unitId}`, body),
+  guarantee: (token: string) => get<GuarantorInvite>(`/guarantee/${token}`),
+  respondToGuarantee: (token: string, body: { accepted: boolean; reason?: string }) =>
+    post<{ status: string; message: string }>(`/guarantee/${token}`, body),
+  reference: (token: string) => get<ReferenceInvite>(`/reference/${token}`),
+  respondToReference: (
+    token: string,
+    body: { paid_on_time: boolean; would_rent_again: boolean; note?: string },
+  ) => post<{ status: string; message: string }>(`/reference/${token}`, body),
 }
 
 export const vendorsApi = {

@@ -2,7 +2,7 @@
 {% block title %}Lease Agreement — {{ tenancy.reference_code }}{% endblock %}
 
 {% block content %}
-  <div class="doc-title">Tenancy / Lease Agreement</div>
+  <div class="doc-title">{% if is_commercial %}Commercial Lease Agreement{% else %}Tenancy / Lease Agreement{% endif %}</div>
 
   <div class="ref-bar">
     <div><span>Agreement No.</span> <strong>{{ tenancy.reference_code }}</strong></div>
@@ -22,7 +22,13 @@
     <tr><td class="label">Property</td><td class="value">{{ property.name }}</td></tr>
     <tr><td class="label">Address</td><td class="value">{{ property.address }}{% if property.county %}, {{ property.county }} County{% endif %}</td></tr>
     <tr><td class="label">Unit</td><td class="value">{{ unit.unit_number }}{% if unit.unit_type %} ({{ unit.unit_type }}){% endif %}</td></tr>
-    {% if unit.bedrooms %}
+    {% if is_commercial %}
+      <tr><td class="label">Permitted use</td><td class="value">{{ unit.use_class.value|replace("_", " ")|title }}</td></tr>
+      {% if unit.size_sqm %}
+        <tr><td class="label">Floor area</td><td class="value">{{ unit.size_sqm }} m&sup2;</td></tr>
+      {% endif %}
+      <tr><td class="label">Parking bays</td><td class="value">{{ unit.car_bays }}</td></tr>
+    {% elif unit.bedrooms %}
       <tr><td class="label">Configuration</td><td class="value">{{ unit.bedrooms }} bedroom(s), {{ unit.bathrooms or 0 }} bathroom(s)</td></tr>
     {% endif %}
   </table>

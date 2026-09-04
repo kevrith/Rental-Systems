@@ -1,0 +1,69 @@
+{% extends "pdf_base.html" %}
+{% block title %}Notice of Rent Review — Unit {{ unit.unit_number }}{% endblock %}
+
+{% block content %}
+  <div class="doc-title">Notice of Rent Review</div>
+
+  <div class="ref-bar">
+    <div><span>Tenancy</span> <strong>{{ tenancy.reference_code }}</strong></div>
+    <div><span>Unit</span> <strong>{{ unit.unit_number }}</strong></div>
+    <div><span>Date</span> <strong>{{ generated_at|longdate }}</strong></div>
+  </div>
+
+  <p>
+    Dear {{ tenant.full_name }},
+  </p>
+
+  <p>
+    This is formal written notice that the rent payable for Unit {{ unit.unit_number }},
+    {{ property.name }}, {{ property.address }}, will be reviewed with effect from
+    <strong>{{ effective_date|longdate }}</strong>.
+  </p>
+
+  <h2>The change</h2>
+  <div class="panel">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>&nbsp;</th>
+          <th>Current</th>
+          <th>From {{ effective_date|longdate }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Monthly rent</td>
+          <td>KES {{ old_rent|kes }}</td>
+          <td><strong>KES {{ new_rent|kes }}</strong></td>
+        </tr>
+        <tr>
+          <td>Increase</td>
+          <td>&mdash;</td>
+          <td>KES {{ increase|kes }}{% if increase_percent %} ({{ increase_percent }}%){% endif %}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    This notice is given {{ notice_days }} days before the change takes effect, which meets the
+    {{ tenancy.notice_period_days }} days' notice required under your tenancy agreement. All other
+    terms of that agreement are unchanged.
+  </p>
+
+  <p>
+    Your rent should continue at the current amount until {{ effective_date|longdate }}, from which
+    date the new amount becomes payable on day {{ tenancy.billing_day }} of each month as usual.
+  </p>
+
+  <p>
+    If you would like to discuss this review, please contact us before the effective date and we
+    will be glad to talk it through.
+  </p>
+
+  <p class="muted">
+    Issued by {{ organization.legal_name or organization.name }}
+    {% if organization.contact_phone %}&middot; {{ organization.contact_phone }}{% endif %}
+    {% if organization.contact_email %}&middot; {{ organization.contact_email }}{% endif %}
+  </p>
+{% endblock %}

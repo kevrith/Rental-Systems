@@ -2,11 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Archive,
   ArchiveRestore,
+  Car,
   Building2,
   FolderOpen,
   Layers,
   MapPin,
   Pencil,
+  Scale,
   Plus,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -96,6 +98,20 @@ export function PropertyDetailPage() {
             <Link to={`/properties/${propertyId}/documents`} className={linkButtonClass('outline')}>
               <FolderOpen className="h-4 w-4" />
               Documents
+            </Link>
+            <Link
+              to={`/properties/${propertyId}/service-charge`}
+              className={linkButtonClass('outline')}
+            >
+              <Scale className="h-4 w-4" />
+              Service charge
+            </Link>
+            <Link
+              to={`/properties/${propertyId}/facilities`}
+              className={linkButtonClass('outline')}
+            >
+              <Car className="h-4 w-4" />
+              Facilities
             </Link>
             {canManage && (
               <>

@@ -17,6 +17,8 @@ jinja2==3.1.5
 weasyprint==63.1
 # Pure-Python QR codes for the eTIMS receipt stamp (US-053).
 segno==1.6.1
+# Excel import/export for bulk onboarding and data migration (US-072, US-076, US-077).
+openpyxl==3.1.5
 boto3==1.35.92
 pywebpush==2.0.0
 resend==2.10.0

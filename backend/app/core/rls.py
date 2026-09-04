@@ -65,7 +65,28 @@ ETIMS_ORG_SCOPED_TABLES: Sequence[str] = (
 )
 
 # Phase 3 tables, added by the Sprint 13 migration.
-PHASE_3_ORG_SCOPED_TABLES: Sequence[str] = ("vendors",)
+PHASE_3_ORG_SCOPED_TABLES: Sequence[str] = (
+    "vendors",
+    "tenant_applications",
+    "guarantors",
+    "reference_checks",
+    "service_charge_schemes",
+    "service_charge_budgets",
+    "service_charge_expenses",
+    "sinking_fund_entries",
+    "bulk_operations",
+    "vacancy_listings",
+    "inquiries",
+    "data_exports",
+    "compliance_items",
+    "parking_bays",
+    "parking_allocations",
+    "amenities",
+    "amenity_bookings",
+    "utility_accounts",
+    "rental_assets",
+    "rental_agreements",
+)
 
 ORG_SCOPED_TABLES: Sequence[str] = (
     *PHASE_1_ORG_SCOPED_TABLES,

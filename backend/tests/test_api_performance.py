@@ -161,6 +161,24 @@ AUDITED_ENDPOINTS: list[tuple[str, dict | None]] = [
     ("/api/v1/etims/report", None),
     ("/api/v1/renewals", None),
     ("/api/v1/lease-templates", None),
+    # Phase 3 (US-084). Every one of these fans out over the portfolio, so they
+    # are exactly where an N+1 would hide.
+    ("/api/v1/vendors", None),
+    ("/api/v1/maintenance/analytics", {"months": 12}),
+    ("/api/v1/applications", None),
+    ("/api/v1/applications/summary", None),
+    ("/api/v1/bulk", None),
+    ("/api/v1/vacancies", None),
+    ("/api/v1/vacancies/conversion", None),
+    ("/api/v1/vacancies/inquiries", None),
+    ("/api/v1/vacancies/exports", None),
+    ("/api/v1/compliance", None),
+    ("/api/v1/compliance/dashboard", None),
+    ("/api/v1/amenities", None),
+    ("/api/v1/utilities", None),
+    ("/api/v1/assets", None),
+    ("/api/v1/assets/overview", None),
+    ("/api/v1/rental-agreements", None),
 ]
 
 

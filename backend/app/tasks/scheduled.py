@@ -727,3 +727,60 @@ def flag_overdue_maintenance() -> dict[str, int]:
     flagged = run_async(maintenance_service.flag_overdue_jobs)
     logger.info("Flagged %s overdue maintenance job(s)", flagged)
     return {"flagged": flagged}
+
+
+@celery_app.task(name="rentflow.sweep_stale_references")
+@monitored("rentflow.sweep_stale_references")
+def sweep_stale_references() -> dict[str, int]:
+    """Close out landlord references nobody answered, so a screening score stops
+    crediting a maybe (US-068)."""
+    from app.services import screening_service
+
+    closed = run_async(screening_service.sweep_stale_references)
+    logger.info("Closed %s unanswered landlord reference(s)", closed)
+    return {"closed": closed}
+
+
+@celery_app.task(name="rentflow.chase_stale_leads")
+@monitored("rentflow.chase_stale_leads")
+def chase_stale_leads() -> dict[str, int]:
+    """Nudge the office about vacancy enquiries nobody has followed up (US-075)."""
+    from app.services import vacancy_service
+
+    chased = run_async(vacancy_service.chase_stale_leads)
+    logger.info("Chased %s stale lead(s)", chased)
+    return {"chased": chased}
+
+
+@celery_app.task(name="rentflow.monthly_data_export")
+@monitored("rentflow.monthly_data_export")
+def monthly_data_export() -> dict[str, int]:
+    """Build each organisation's monthly tenancy export so nobody is ever locked
+    in by inertia (US-077)."""
+    from app.services import export_service
+
+    built = run_async(export_service.run_scheduled_exports)
+    logger.info("Built %s scheduled export(s)", built)
+    return {"built": built}
+
+
+@celery_app.task(name="rentflow.sweep_compliance_expiry")
+@monitored("rentflow.sweep_compliance_expiry")
+def sweep_compliance_expiry() -> dict[str, int]:
+    """Walk the 90/60/30/7-day reminder ladder on every certificate (US-078)."""
+    from app.services import facilities_service
+
+    sent = run_async(facilities_service.sweep_compliance_expiry)
+    logger.info("Sent %s compliance reminder(s)", sent)
+    return {"sent": sent}
+
+
+@celery_app.task(name="rentflow.sweep_overdue_utilities")
+@monitored("rentflow.sweep_overdue_utilities")
+def sweep_overdue_utilities() -> dict[str, int]:
+    """Flag the building's own bills that have gone past due (US-081)."""
+    from app.services import facilities_service
+
+    alerted = run_async(facilities_service.sweep_overdue_utilities)
+    logger.info("Flagged %s overdue utility account(s)", alerted)
+    return {"alerted": alerted}

@@ -89,6 +89,45 @@ export const queryKeys = {
   vaultUsage: ['vault', 'usage'] as const,
 
   // Agency mode (Phase 2)
+  // Vehicle and equipment hire (Phase 3)
+  fleetOverview: ['assets', 'overview'] as const,
+  assets: (filters?: unknown) => ['assets', filters ?? {}] as const,
+  asset: (id: string) => ['assets', id] as const,
+  assetAvailability: (id: string) => ['assets', id, 'availability'] as const,
+  rentalAgreements: (filters?: unknown) => ['rental-agreements', filters ?? {}] as const,
+  rentalAgreement: (id: string) => ['rental-agreements', id] as const,
+
+  // Facilities (Phase 3)
+  complianceDashboard: ['compliance', 'dashboard'] as const,
+  compliance: (filters?: unknown) => ['compliance', filters ?? {}] as const,
+  parking: (propertyId: string) => ['parking', propertyId] as const,
+  amenities: (propertyId?: string) => ['amenities', propertyId ?? 'all'] as const,
+  amenityCalendar: (amenityId: string) => ['amenities', amenityId, 'calendar'] as const,
+  amenityUsage: (propertyId: string) => ['amenities', 'usage', propertyId] as const,
+  utilities: (propertyId?: string) => ['utilities', propertyId ?? 'all'] as const,
+
+  // Vacancy marketing and export (Phase 3)
+  vacancyDesk: ['vacancies', 'desk'] as const,
+  vacancyConversion: ['vacancies', 'conversion'] as const,
+  unitListing: (unitId: string) => ['vacancies', 'listing', unitId] as const,
+  inquiries: (filters?: unknown) => ['vacancies', 'inquiries', filters ?? {}] as const,
+  dataExports: ['vacancies', 'exports'] as const,
+
+  // Service charges and bulk operations (Phase 3)
+  serviceCharge: (propertyId: string) => ['service-charges', propertyId] as const,
+  serviceChargeExpenses: (schemeId: string) => ['service-charges', schemeId, 'expenses'] as const,
+  serviceChargeReconciliation: (schemeId: string, from: string, to: string) =>
+    ['service-charges', schemeId, 'reconciliation', from, to] as const,
+  sinkingFund: (schemeId: string) => ['service-charges', schemeId, 'sinking-fund'] as const,
+  bulkOperations: (kind?: string) => ['bulk', kind ?? 'all'] as const,
+  bulkOperation: (id: string) => ['bulk', id] as const,
+
+  // Tenant screening (Phase 3)
+  applications: (filters?: unknown) => ['applications', filters ?? {}] as const,
+  application: (id: string) => ['applications', id] as const,
+  screeningSummary: ['applications', 'summary'] as const,
+  waitingList: (unitId: string) => ['applications', 'waiting-list', unitId] as const,
+
   // Vendors and the maintenance lifecycle (Phase 3)
   vendors: (filters?: unknown) => ['vendors', filters ?? {}] as const,
   vendor: (id: string) => ['vendors', id] as const,

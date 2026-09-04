@@ -1,6 +1,10 @@
 # RentFlow Kenya — Data Model
 
-> Phase 1 schema. Generated against Alembic head `2c1d19d1badc`.
+> Schema through Phase 3 (Sprints 1–18). Current Alembic head: `a3b4c5d6e7f8`.
+>
+> Phases 1 and 2 are described in full below. The Phase 3 tables are summarised
+> in their own section; each model file carries the reasoning that would
+> otherwise be repeated here.
 
 ## Multi-tenant isolation strategy
 
@@ -144,6 +148,32 @@ Payments settle **oldest invoice first** (`payment_service._allocate`).
 Payment, receipt, security and account notifications are **mandatory** and ignore
 preferences (`notification_service.MANDATORY_TYPES`).
 
+### Phase 3 — screening, commercial, marketing, facilities, hire
+
+All of these carry `organization_id` and sit inside the RLS policy set; the list
+they are registered in is `PHASE_3_ORG_SCOPED_TABLES` in
+[`app/core/rls.py`](../backend/app/core/rls.py), and
+`tests/test_phase3.py` fails if a table is added without both.
+
+| Table | Purpose | Why it is shaped this way |
+|---|---|---|
+| `vendors` | The approved contractor list, with specialties, ratings and job counts. | Not a `User`: most fundis never log in. Ratings are a running total and count so "who is my best plumber" needs no join. |
+| `tenant_applications` | Someone applying for a vacant unit, with their score. | Deliberately **not** a `Tenant` — most applicants never become one, and folding them in would poison every duplicate check. |
+| `guarantors` | Who stands behind the tenant, and whether they agreed. | Carries its own token: a guarantor is worthless unless they knew they were one. |
+| `reference_checks` | The previous landlord's two-question verdict. | `NO_RESPONSE` is a real state — silence is a signal, not a gap. |
+| `service_charge_schemes` / `_budgets` / `_expenses` | What was budgeted, charged and spent on a building. | Three separate truths. A scheme that cannot show all three is one tenants are right to dispute. |
+| `sinking_fund_entries` | The reserve held back for capital work. | A ledger, not a balance column, so the reserve can be explained line by line. |
+| `bulk_operations` | Preview then execute, with the resolved target list stored. | Execution runs over the stored list, so it can never quietly widen its blast radius. |
+| `vacancy_listings` | The shareable advert for one empty unit. | Its own opaque, rotatable slug rather than the unit id — the link is pasted into WhatsApp groups. |
+| `inquiries` | Everyone who asked before they were ready to apply. | Tiny on purpose: a name and a number is all anyone gives before a viewing. |
+| `data_exports` | A log of who took what data, and when. | This is the whole tenant book leaving the building. |
+| `compliance_items` | Certificates, licences and insurance, with expiry. | Expiry is indexed and drives a 90/60/30/7-day ladder. No expiry recorded is `MISSING`, never "valid". |
+| `parking_bays` / `parking_allocations` | Bays and who holds them. | A visitor allocation is the same row with a guest name, so the conflict check is one query. |
+| `amenities` / `amenity_bookings` | Bookable shared facilities. | A maintenance block is a booking with `status = BLOCKED`, so overlap detection cannot disagree with itself. |
+| `utility_accounts` | The building's own KPLC and water accounts. | Defaults to `UNKNOWN`: nobody has checked is more honest than assuming paid. |
+| `rental_assets` | Vehicles and equipment, one table, `kind` discriminator. | A car and a generator are the same business. Vehicle compliance lives here, checked per hire rather than annually. |
+| `rental_agreements` | One hire, with condition snapshots at both ends. | Mileage, fuel and photos out and back turn "you scratched it" into a comparison. |
+
 ---
 
 ## Reference codes
@@ -172,6 +202,13 @@ and written down.
 | `978bef97001b` | Initial: organizations, users |
 | `becdc2a16b45` | Phase 1: portfolio, tenancy, billing, operations, notifications |
 | `2c1d19d1badc` | Row Level Security policies |
+| `a1b2c3d4e5f6` → `a7b8c9d0e1f2` | Phase 2: agency mode, inspections, signatures, eTIMS, renewals, task telemetry, hot-path indexes |
+| `b8c9d0e1f2a3` | Sprint 13: vendor registry, full maintenance lifecycle, property maintenance budget |
+| `c9d0e1f2a3b4` | Sprint 14: tenant applications, guarantors, landlord reference checks |
+| `d0e1f2a3b4c5` | Sprint 15: service charges, commercial unit fields, bulk operations |
+| `e1f2a3b4c5d6` | Sprint 16: vacancy listings, lead pipeline, data exports |
+| `f2a3b4c5d6e7` | Sprint 17: compliance calendar, parking, amenities, utility accounts |
+| `a3b4c5d6e7f8` | Sprint 18: rental assets and hire agreements |
 
 ```bash
 cd backend

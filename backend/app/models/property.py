@@ -22,6 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.models.base import ArchivableMixin, OrgScopedMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.service_charge import UseClass
 
 if TYPE_CHECKING:
     from app.models.agency import OwnerProfile
@@ -120,6 +121,11 @@ class Unit(OrgScopedMixin, ArchivableMixin, UUIDPrimaryKeyMixin, TimestampMixin,
     monthly_rent: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
     deposit_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
     features: Mapped[list[Any]] = mapped_column(JSONB, default=list, nullable=False)
+
+    # Commercial lettings (US-069). `size_sqm` above doubles as the floor area a
+    # proportional service charge is apportioned by.
+    use_class: Mapped[UseClass | None] = mapped_column(Enum(UseClass, name="unit_use_class"), nullable=True)
+    car_bays: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     status: Mapped[UnitStatus] = mapped_column(
         Enum(UnitStatus, name="unit_status"), default=UnitStatus.VACANT, nullable=False, index=True

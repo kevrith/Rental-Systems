@@ -113,6 +113,9 @@ export interface Unit {
   monthly_rent: string
   deposit_amount: string
   features: string[]
+  /** Commercial lettings; `size_sqm` above is the floor area. */
+  use_class: UseClass | null
+  car_bays: number
   status: UnitStatus
   vacancy_date: string | null
   expected_vacancy_date: string | null
@@ -1230,4 +1233,770 @@ export interface MaintenanceOverview {
   expensive_units: MaintenanceUnitCost[]
   top_vendors: MaintenanceVendorStat[]
   monthly_trend: MaintenanceMonthPoint[]
+}
+
+// ------------------------------------------- tenant screening (Sprint 14)
+
+export type ApplicationStatus =
+  | 'submitted'
+  | 'under_review'
+  | 'interview_scheduled'
+  | 'approved'
+  | 'rejected'
+  | 'withdrawn'
+export type EmploymentStatus =
+  | 'employed'
+  | 'self_employed'
+  | 'business_owner'
+  | 'student'
+  | 'retired'
+  | 'unemployed'
+export type ApplicationRejectionReason =
+  | 'insufficient_income'
+  | 'failed_reference_check'
+  | 'incomplete_application'
+  | 'no_guarantor'
+  | 'unit_taken'
+  | 'other'
+export type GuarantorStatus = 'pending' | 'acknowledged' | 'declined' | 'expired'
+export type ReferenceStatus = 'sent' | 'positive' | 'negative' | 'no_response'
+export type ScoreBand = 'green' | 'amber' | 'red'
+
+export interface ScoreComponent {
+  label: string
+  points: number
+  max: number
+  note: string
+}
+
+export interface ScoreBreakdown {
+  score: number
+  band: ScoreBand
+  income_ratio: number | null
+  income_ratio_exceeded: boolean
+  employment_status: EmploymentStatus
+  monthly_rent: number
+  components: ScoreComponent[]
+}
+
+export interface GuarantorRow {
+  id: string
+  full_name: string
+  relationship_to_applicant: string
+  phone_number: string
+  email: string | null
+  national_id: string | null
+  employer_name: string | null
+  occupation: string | null
+  monthly_income: string | null
+  status: GuarantorStatus
+  acknowledged_at: string | null
+  declined_reason: string | null
+  signature_id: string | null
+  id_document_url: string | null
+}
+
+export interface ReferenceCheckRow {
+  id: string
+  landlord_name: string
+  landlord_phone: string
+  property_reference: string | null
+  status: ReferenceStatus
+  sent_at: string
+  responded_at: string | null
+  paid_on_time: boolean | null
+  would_rent_again: boolean | null
+  response_note: string | null
+}
+
+export interface TenantApplication {
+  id: string
+  organization_id: string
+  reference_code: string
+  unit_id: string
+
+  full_name: string
+  phone_number: string
+  email: string | null
+  national_id: string | null
+  date_of_birth: string | null
+
+  current_address: string | null
+  current_landlord_name: string | null
+  current_landlord_phone: string | null
+  years_at_current_address: string | null
+  reason_for_moving: string | null
+
+  employment_status: EmploymentStatus
+  employer_name: string | null
+  employer_phone: string | null
+  job_title: string | null
+  monthly_income: string | null
+  months_in_employment: number | null
+
+  occupants: number
+  intended_move_in: string | null
+  notes: string | null
+
+  score: number
+  score_breakdown: ScoreBreakdown
+  status: ApplicationStatus
+  reviewed_at: string | null
+  interview_at: string | null
+  interview_notes: string | null
+  decided_at: string | null
+  rejection_reason: ApplicationRejectionReason | null
+  decision_note: string | null
+  tenant_id: string | null
+  tenancy_id: string | null
+  submitted_online: boolean
+  created_at: string
+
+  unit_number: string | null
+  property_name: string | null
+  property_id: string | null
+  monthly_rent: string | null
+  decided_by_name: string | null
+  band: ScoreBand
+  id_document_url: string | null
+  passport_photo_url: string | null
+  payslip_urls: string[]
+  guarantors: GuarantorRow[]
+  references: ReferenceCheckRow[]
+}
+
+export interface ScreeningSummary {
+  open: number
+  awaiting_review: number
+  approved: number
+  rejected: number
+  last_30_days: number
+  awaiting_guarantor: number
+  awaiting_reference: number
+}
+
+export interface WaitingListEntry {
+  rank: number
+  application_id: string
+  reference_code: string
+  full_name: string
+  phone_number: string
+  score: number
+  band: ScoreBand
+  status: ApplicationStatus
+  applied_at: string
+}
+
+export interface PublicUnitListing {
+  unit_id: string
+  unit_number: string
+  property_name: string
+  property_address: string
+  monthly_rent: string
+  deposit_amount: string
+  bedrooms: number | null
+  unit_type: string | null
+  description: string | null
+  photo_urls: string[]
+  accepting_applications: boolean
+}
+
+export interface GuarantorInvite {
+  guarantor_name: string
+  applicant_name: string
+  relationship_to_applicant: string
+  unit_number: string
+  property_name: string
+  monthly_rent: string
+  status: GuarantorStatus
+  already_answered: boolean
+}
+
+export interface ReferenceInvite {
+  landlord_name: string
+  applicant_name: string
+  property_reference: string | null
+  already_answered: boolean
+}
+
+// ------------------------------- service charges & bulk ops (Sprint 15)
+
+export type UseClass =
+  | 'office'
+  | 'retail'
+  | 'warehouse'
+  | 'industrial'
+  | 'restaurant'
+  | 'medical'
+  | 'other'
+export type Apportionment = 'fixed_per_unit' | 'by_floor_area' | 'by_occupied_unit'
+export type ServiceChargeCategory =
+  | 'security'
+  | 'cleaning'
+  | 'common_area_maintenance'
+  | 'generator'
+  | 'lift'
+  | 'water'
+  | 'landscaping'
+  | 'insurance'
+  | 'management'
+  | 'other'
+export type SinkingFundMovement = 'contribution' | 'withdrawal'
+
+export interface BudgetLine {
+  category: ServiceChargeCategory
+  monthly_budget: string
+  notes: string | null
+}
+
+export interface UnitCharge {
+  unit_id: string
+  unit_number: string
+  size_sqm: number | null
+  occupied: boolean
+  monthly_charge: number
+}
+
+export interface ServiceChargeScheme {
+  id: string
+  organization_id: string
+  property_id: string
+  name: string
+  apportionment: Apportionment
+  fixed_amount: string
+  monthly_pool: string
+  sinking_fund_percent: string
+  is_active: boolean
+  bill_with_rent: boolean
+  notes: string | null
+  created_at: string
+  property_name: string | null
+  budgets: BudgetLine[]
+  monthly_total: number
+  sinking_fund_balance: number
+  units: UnitCharge[]
+}
+
+export interface ServiceChargeExpense {
+  id: string
+  category: ServiceChargeCategory
+  amount: string
+  incurred_on: string
+  description: string
+  vendor_id: string | null
+  receipt_file_id: string | null
+  created_at: string
+}
+
+export interface SinkingFundEntry {
+  id: string
+  movement: SinkingFundMovement
+  amount: string
+  entry_date: string
+  description: string
+  billing_period: string | null
+  created_at: string
+}
+
+export interface ReconciliationLine {
+  category: ServiceChargeCategory
+  budgeted: number
+  spent: number
+  variance: number
+  over_budget: boolean
+}
+
+export interface ServiceChargeReconciliation {
+  scheme_id: string
+  property_name: string | null
+  period_start: string
+  period_end: string
+  months: number
+  total_budgeted: number
+  total_charged: number
+  total_spent: number
+  surplus_or_deficit: number
+  sinking_fund_balance: number
+  lines: ReconciliationLine[]
+}
+
+export type BulkOperationKind =
+  | 'rent_increase'
+  | 'payment_reminder'
+  | 'announcement'
+  | 'generate_invoices'
+  | 'renewal_notices'
+  | 'document_distribution'
+  | 'tenant_import'
+export type BulkOperationStatus =
+  | 'previewed'
+  | 'running'
+  | 'completed'
+  | 'partial'
+  | 'failed'
+  | 'cancelled'
+
+export interface BulkTarget {
+  tenancy_id: string
+  tenant_id: string
+  tenant_name: string
+  phone_number: string
+  unit_id: string
+  unit_number: string
+  property_name: string
+  current_rent: number
+  new_rent?: number
+  increase?: number
+  increase_percent?: number | null
+}
+
+export interface BulkFailure {
+  tenant_name: string | null
+  unit_number: string | null
+  reason: string
+}
+
+export interface BulkOperation {
+  id: string
+  organization_id: string
+  kind: BulkOperationKind
+  status: BulkOperationStatus
+  parameters: Record<string, unknown>
+  targets: BulkTarget[]
+  total: number
+  succeeded: number
+  failed: number
+  failures: BulkFailure[]
+  property_id: string | null
+  effective_date: string | null
+  started_at: string | null
+  finished_at: string | null
+  summary: string | null
+  error: string | null
+  created_at: string
+}
+
+export interface ImportRow {
+  row: number
+  full_name: string
+  phone_number: string
+  email: string | null
+  national_id: string | null
+  property_name: string
+  unit_number: string
+  monthly_rent: string
+  deposit_amount: string
+  start_date: string
+  end_date: string | null
+  billing_day: number
+  opening_balance: string
+  notes: string | null
+  property_id: string
+  unit_exists: boolean
+  unit_id: string | null
+}
+
+export interface ImportPreview {
+  ready: ImportRow[]
+  errors: { row: number; reason: string }[]
+  total_rows: number
+  ready_count: number
+  error_count: number
+}
+
+export interface ImportResult {
+  created: number
+  failed: number
+  failures: { row: number; reason: string }[]
+}
+
+// ----------------------------- vacancy marketing & export (Sprint 16)
+
+export type ListingStatus = 'draft' | 'published' | 'closed'
+export type LeadStage =
+  | 'inquired'
+  | 'applied'
+  | 'under_review'
+  | 'approved'
+  | 'rejected'
+  | 'lost'
+export type ExportKind =
+  | 'tenants'
+  | 'tenancies'
+  | 'payments'
+  | 'properties'
+  | 'units'
+  | 'invoices'
+export type ExportFormat = 'csv' | 'excel'
+
+export interface VacancyListingRow {
+  id: string
+  organization_id: string
+  unit_id: string
+  slug: string
+  headline: string | null
+  description: string | null
+  contact_name: string | null
+  contact_phone: string | null
+  status: ListingStatus
+  vacant_since: string | null
+  published_at: string | null
+  closed_at: string | null
+  view_count: number
+  days_vacant: number | null
+  created_at: string
+}
+
+export interface PublicListing {
+  slug: string
+  unit_id: string
+  unit_number: string
+  unit_type: string | null
+  bedrooms: number | null
+  bathrooms: number | null
+  size_sqm: number | null
+  features: string[]
+  monthly_rent: number
+  deposit_amount: number
+  headline: string | null
+  description: string | null
+  property_name: string
+  property_address: string
+  county: string | null
+  latitude: number | null
+  longitude: number | null
+  amenities: string[]
+  contact_name: string | null
+  contact_phone: string | null
+  photo_urls: string[]
+}
+
+export interface InquiryRow {
+  id: string
+  unit_id: string
+  full_name: string
+  phone_number: string
+  email: string | null
+  message: string | null
+  stage: LeadStage
+  application_id: string | null
+  last_contacted_at: string | null
+  notes: string | null
+  is_stale: boolean
+  created_at: string
+  unit_number: string | null
+  property_name: string | null
+}
+
+export interface VacancyRow {
+  unit_id: string
+  unit_number: string
+  property_name: string
+  status: string
+  monthly_rent: number
+  vacant_since: string | null
+  days_vacant: number | null
+  revenue_lost: number
+  listing_slug: string | null
+  listing_status: string | null
+  views: number
+  open_leads: number
+  applications: number
+}
+
+export interface VacancyReport {
+  vacant_units: number
+  total_revenue_lost: number
+  monthly_revenue_at_risk: number
+  units: VacancyRow[]
+}
+
+export interface ConversionReport {
+  inquiries: number
+  applications: number
+  approvals: number
+  stale_leads: number
+  inquiry_to_application_percent: number | null
+  application_to_approval_percent: number | null
+}
+
+export interface DataExportRow {
+  id: string
+  kind: ExportKind
+  export_format: ExportFormat
+  date_from: string | null
+  date_to: string | null
+  row_count: number
+  file_id: string | null
+  is_scheduled: boolean
+  error: string | null
+  created_at: string
+  download_url: string | null
+  requested_by_name: string | null
+}
+
+// ------------------------------------------ facilities (Sprint 17)
+
+export type ComplianceType =
+  | 'fire_safety'
+  | 'health_inspection'
+  | 'nema'
+  | 'lift_inspection'
+  | 'electrical_inspection'
+  | 'water_safety'
+  | 'insurance'
+  | 'business_permit'
+  | 'structural_survey'
+  | 'other'
+export type ComplianceStatus = 'valid' | 'expiring_soon' | 'expired' | 'missing'
+export type BayType = 'covered' | 'open' | 'reserved' | 'visitor' | 'disabled'
+export type AmenityKind =
+  | 'gym'
+  | 'meeting_room'
+  | 'rooftop'
+  | 'pool'
+  | 'clubhouse'
+  | 'playground'
+  | 'laundry'
+  | 'other'
+export type BookingStatus = 'confirmed' | 'cancelled' | 'blocked'
+export type UtilityAccountType = 'kplc' | 'water' | 'internet' | 'garbage' | 'other'
+export type UtilityPaymentStatus = 'paid' | 'unpaid' | 'unknown'
+
+export interface ComplianceItem {
+  id: string
+  property_id: string
+  compliance_type: ComplianceType
+  name: string
+  reference_number: string | null
+  issued_on: string | null
+  expires_on: string | null
+  issuing_authority: string | null
+  responsible_party: string | null
+  responsible_phone: string | null
+  document_id: string | null
+  insurer_name: string | null
+  insurer_contact: string | null
+  coverage_amount: string | null
+  premium_amount: string | null
+  premium_due_on: string | null
+  notes: string | null
+  status: ComplianceStatus
+  days_until_expiry: number | null
+  created_at: string
+  property_name: string | null
+  document_url: string | null
+}
+
+export interface CompliancePropertyRow {
+  property_id: string
+  property_name: string
+  worst: ComplianceStatus
+  items: {
+    id: string
+    name: string
+    type: ComplianceType
+    expires_on: string | null
+    days_until_expiry: number | null
+    status: ComplianceStatus
+  }[]
+}
+
+export interface ComplianceDashboard {
+  total_items: number
+  counts: Record<ComplianceStatus, number>
+  needs_attention: number
+  properties: CompliancePropertyRow[]
+}
+
+export interface BayRow {
+  bay_id: string
+  bay_number: string
+  bay_type: BayType
+  level: string | null
+  monthly_fee: number
+  is_active: boolean
+  allocation_id: string | null
+  holder: string | null
+  vehicle_registration: string | null
+  allocated_until: string | null
+}
+
+export interface ParkingOverview {
+  total_bays: number
+  allocated: number
+  available: number
+  monthly_parking_income: number
+  bays: BayRow[]
+}
+
+export interface Amenity {
+  id: string
+  property_id: string
+  name: string
+  kind: AmenityKind
+  description: string | null
+  max_hours_per_booking: number
+  min_notice_hours: number
+  max_bookings_per_week: number
+  opens_at_hour: number
+  closes_at_hour: number
+  is_bookable: boolean
+  booking_fee: string
+  created_at: string
+}
+
+export interface AmenityBooking {
+  id: string
+  amenity_id: string
+  tenancy_id: string | null
+  tenant_id: string | null
+  starts_at: string
+  ends_at: string
+  status: BookingStatus
+  purpose: string | null
+  guests: number
+  created_at: string
+  tenant_name: string | null
+  amenity_name: string | null
+}
+
+export interface AmenityUsageRow {
+  amenity_id: string
+  name: string
+  kind: AmenityKind
+  bookings: number
+  hours_booked: number
+  distinct_tenants: number
+}
+
+export interface UtilityAccount {
+  id: string
+  property_id: string
+  account_type: UtilityAccountType
+  account_number: string
+  account_name: string | null
+  provider: string | null
+  payment_status: UtilityPaymentStatus
+  last_paid_on: string | null
+  last_amount: string | null
+  next_due_on: string | null
+  status_updated_at: string | null
+  notes: string | null
+  is_overdue: boolean
+  created_at: string
+}
+
+// ------------------------------ vehicle & equipment hire (Sprint 18)
+
+export type AssetKind = 'vehicle' | 'equipment'
+export type AssetStatus = 'available' | 'on_hire' | 'maintenance' | 'retired'
+export type FuelPolicy = 'full_to_full' | 'same_to_same' | 'prepaid'
+export type RateBasis = 'daily' | 'weekly' | 'monthly'
+export type AgreementStatus = 'booked' | 'out' | 'returned' | 'cancelled'
+
+export interface RentalAsset {
+  id: string
+  organization_id: string
+  reference_code: string
+  kind: AssetKind
+  name: string
+  property_id: string | null
+  status: AssetStatus
+  daily_rate: string
+  weekly_rate: string | null
+  monthly_rate: string | null
+  deposit_amount: string
+  notes: string | null
+  registration_number: string | null
+  make: string | null
+  model: string | null
+  year: number | null
+  colour: string | null
+  mileage: number | null
+  fuel_policy: FuelPolicy
+  daily_mileage_limit: number | null
+  excess_mileage_rate: string | null
+  insurance_expiry: string | null
+  inspection_expiry: string | null
+  road_licence_expiry: string | null
+  serial_number: string | null
+  category: string | null
+  service_interval_days: number | null
+  last_serviced_on: string | null
+  service_due_on: string | null
+  compliance_warnings: string[]
+  created_at: string
+  photo_urls: string[]
+  current_hire: string | null
+  current_hirer: string | null
+}
+
+export interface RentalAgreement {
+  id: string
+  organization_id: string
+  reference_code: string
+  asset_id: string
+  tenant_id: string
+  start_date: string
+  end_date: string
+  rate_basis: RateBasis
+  rate: string
+  deposit_amount: string
+  deposit_refunded: string | null
+  status: AgreementStatus
+  checked_out_at: string | null
+  mileage_out: number | null
+  fuel_out_eighths: number | null
+  condition_out: string | null
+  checked_in_at: string | null
+  mileage_in: number | null
+  fuel_in_eighths: number | null
+  condition_in: string | null
+  hire_charge: string
+  excess_mileage_charge: string
+  damage_charge: string
+  fuel_charge: string
+  late_charge: string
+  total_charge: string
+  notes: string | null
+  cancelled_reason: string | null
+  hire_days: number
+  mileage_covered: number | null
+  is_overdue: boolean
+  created_at: string
+  asset_name: string | null
+  asset_kind: AssetKind | null
+  registration_number: string | null
+  hirer_name: string | null
+  hirer_phone: string | null
+  photos_out_urls: string[]
+  photos_in_urls: string[]
+}
+
+export interface AvailabilityRow {
+  agreement_id: string
+  reference_code: string
+  start_date: string
+  end_date: string
+  status: AgreementStatus
+  hirer: string | null
+}
+
+export interface FleetOverview {
+  total_assets: number
+  vehicles: number
+  equipment: number
+  on_hire: number
+  available: number
+  in_maintenance: number
+  overdue_returns: number
+  revenue_this_month: number
+  compliance_warnings: {
+    asset_id: string
+    name: string
+    reference_code: string
+    kind: AssetKind
+    warnings: string[]
+  }[]
 }

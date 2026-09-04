@@ -31,6 +31,11 @@ class Permission(str, enum.Enum):
     TENANCY_VIEW = "tenancy:view"
     TENANCY_MANAGE = "tenancy:manage"
     LEASE_TEMPLATE_MANAGE = "lease_template:manage"
+    APPLICATION_VIEW = "application:view"
+    APPLICATION_MANAGE = "application:manage"
+    # Approving or rejecting commits the landlord to a person, so it is separated
+    # from the day-to-day management of the application file.
+    APPLICATION_DECIDE = "application:decide"
 
     # Money
     PAYMENT_VIEW = "payment:view"
@@ -73,6 +78,9 @@ _FULL_OPERATOR_PERMISSIONS: set[Permission] = {
     Permission.TENANCY_VIEW,
     Permission.TENANCY_MANAGE,
     Permission.LEASE_TEMPLATE_MANAGE,
+    Permission.APPLICATION_VIEW,
+    Permission.APPLICATION_MANAGE,
+    Permission.APPLICATION_DECIDE,
     Permission.PAYMENT_VIEW,
     Permission.PAYMENT_RECORD,
     Permission.INVOICE_VIEW,
@@ -109,6 +117,7 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.TENANT_MANAGE,
         Permission.TENANCY_VIEW,
         Permission.TENANCY_MANAGE,
+        Permission.APPLICATION_VIEW,
         Permission.PAYMENT_VIEW,
         Permission.PAYMENT_RECORD,
         Permission.INVOICE_VIEW,

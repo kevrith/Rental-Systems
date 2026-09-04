@@ -1,0 +1,109 @@
+{% extends "pdf_base.html" %}
+{% block title %}Hire Agreement — {{ agreement.reference_code }}{% endblock %}
+
+{% block content %}
+  <div class="doc-title">
+    {% if asset.kind.value == "vehicle" %}Vehicle Hire Agreement{% else %}Equipment Hire Agreement{% endif %}
+  </div>
+
+  <div class="ref-bar">
+    <div><span>Agreement No.</span> <strong>{{ agreement.reference_code }}</strong></div>
+    <div><span>Asset</span> <strong>{{ asset.reference_code }}</strong></div>
+    <div><span>Date</span> <strong>{{ generated_at|longdate }}</strong></div>
+  </div>
+
+  <p>
+    THIS AGREEMENT is made between <strong>{{ organization.legal_name or organization.name }}</strong>
+    ("the Owner") and <strong>{{ hirer.full_name }}</strong> ("the Hirer") of telephone
+    {{ hirer.phone_number }}{% if hirer.national_id %}, National ID {{ hirer.national_id }}{% endif %}.
+  </p>
+
+  <h2>1. The Asset</h2>
+  <table class="kv">
+    <tr><td class="label">Description</td><td class="value">{{ asset.name }}</td></tr>
+    {% if asset.kind.value == "vehicle" %}
+      <tr><td class="label">Registration</td><td class="value">{{ asset.registration_number }}</td></tr>
+      <tr><td class="label">Make and model</td><td class="value">{{ asset.make or "" }} {{ asset.model or "" }}{% if asset.year %} ({{ asset.year }}){% endif %}</td></tr>
+      <tr><td class="label">Odometer at hand-over</td><td class="value">{% if agreement.mileage_out is not none %}{{ "{:,}".format(agreement.mileage_out) }} km{% else %}To be recorded{% endif %}</td></tr>
+      <tr><td class="label">Fuel policy</td><td class="value">{{ asset.fuel_policy.value|replace("_", " ")|title }}</td></tr>
+    {% else %}
+      <tr><td class="label">Serial number</td><td class="value">{{ asset.serial_number }}</td></tr>
+      {% if asset.category %}<tr><td class="label">Category</td><td class="value">{{ asset.category }}</td></tr>{% endif %}
+    {% endif %}
+  </table>
+
+  <h2>2. Period and Charges</h2>
+  <table class="kv">
+    <tr><td class="label">From</td><td class="value">{{ agreement.start_date|longdate }}</td></tr>
+    <tr><td class="label">To</td><td class="value">{{ agreement.end_date|longdate }}</td></tr>
+    <tr><td class="label">Duration</td><td class="value">{{ agreement.hire_days }} day(s)</td></tr>
+    <tr><td class="label">Rate</td><td class="value">KES {{ agreement.rate|kes }} per {{ agreement.rate_basis.value }}</td></tr>
+    <tr><td class="label">Hire charge</td><td class="value"><strong>KES {{ agreement.hire_charge|kes }}</strong></td></tr>
+    <tr><td class="label">Refundable deposit</td><td class="value">KES {{ agreement.deposit_amount|kes }}</td></tr>
+    {% if asset.daily_mileage_limit %}
+      <tr><td class="label">Mileage included</td><td class="value">{{ asset.daily_mileage_limit }} km per day ({{ asset.daily_mileage_limit * agreement.hire_days }} km total)</td></tr>
+      <tr><td class="label">Excess mileage</td><td class="value">KES {{ asset.excess_mileage_rate|kes }} per km</td></tr>
+    {% endif %}
+  </table>
+
+  <h2>3. Terms</h2>
+  <ol>
+    <li>
+      The Hirer shall take reasonable care of the asset, use it only for its intended purpose,
+      and return it on the date above in the condition in which it was received, fair wear and
+      tear excepted.
+    </li>
+    {% if asset.kind.value == "vehicle" %}
+      <li>
+        The vehicle shall be driven only by the Hirer or a driver named in writing to the Owner,
+        each holding a valid driving licence. It shall not be driven under the influence of
+        alcohol or drugs, used for hire or reward, or taken outside Kenya without written consent.
+      </li>
+      <li>
+        Fuel is on a {{ asset.fuel_policy.value|replace("_", " ") }} basis. A shortfall on return
+        is charged at the Owner's prevailing rate per eighth of a tank.
+      </li>
+      <li>
+        Traffic fines, parking penalties and toll charges incurred during the hire are the
+        Hirer's responsibility, whenever they come to light.
+      </li>
+    {% else %}
+      <li>
+        The Hirer shall operate the equipment in accordance with the manufacturer's instructions
+        and shall not modify it, sub-hire it, or move it from the site stated without consent.
+      </li>
+    {% endif %}
+    <li>
+      The deposit is held against damage, late return, excess mileage and any charge arising
+      under this agreement. It is refunded at check-in, less any such charges, which shall be
+      itemised in writing.
+    </li>
+    <li>
+      Late return is charged at the daily rate for each day or part-day beyond the agreed return
+      date, in addition to any loss the Owner suffers from a booking it could not fulfil.
+    </li>
+    <li>
+      The condition of the asset is recorded, with photographs, at hand-over and again at return.
+      Those records are the basis on which any damage charge is assessed.
+    </li>
+    <li>
+      This agreement is governed by the laws of Kenya.
+    </li>
+  </ol>
+
+  <h2>4. Condition at Hand-over</h2>
+  <div class="panel">
+    <p>{{ agreement.condition_out or "To be recorded at hand-over." }}</p>
+  </div>
+
+  <div class="signatures">
+    <div>
+      <div class="sig-line">The Hirer &mdash; {{ hirer.full_name }}</div>
+      <div style="font-size:8.5pt;color:#64748b">Date: ____________________</div>
+    </div>
+    <div>
+      <div class="sig-line">For the Owner &mdash; {{ organization.legal_name or organization.name }}</div>
+      <div style="font-size:8.5pt;color:#64748b">Date: ____________________</div>
+    </div>
+  </div>
+{% endblock %}

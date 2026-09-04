@@ -40,6 +40,8 @@ class FileCategory(str, enum.Enum):
     COMPLIANCE_CERTIFICATE = "compliance_certificate"
     DEMAND_LETTER = "demand_letter"
     RENEWAL_AGREEMENT = "renewal_agreement"
+    # Phase 3
+    GUARANTEE = "guarantee"
 
 
 class UploadStatus(str, enum.Enum):

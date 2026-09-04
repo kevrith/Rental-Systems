@@ -46,6 +46,22 @@ class NotificationType(str, enum.Enum):
     MAINTENANCE_REJECTED = "maintenance_rejected"
     MAINTENANCE_OVERDUE = "maintenance_overdue"
     VENDOR_ASSIGNED = "vendor_assigned"
+    # Phase 3 — tenant screening
+    APPLICATION_RECEIVED = "application_received"
+    APPLICATION_APPROVED = "application_approved"
+    APPLICATION_REJECTED = "application_rejected"
+    GUARANTOR_REQUEST = "guarantor_request"
+    REFERENCE_REQUEST = "reference_request"
+    # Phase 3 — bulk operations
+    RENT_INCREASE = "rent_increase"
+    ANNOUNCEMENT = "announcement"
+    # Phase 3 — vacancy marketing and exports
+    INQUIRY_RECEIVED = "inquiry_received"
+    EXPORT_READY = "export_ready"
+    # Phase 3 — facilities
+    COMPLIANCE_EXPIRY = "compliance_expiry"
+    AMENITY_BOOKING = "amenity_booking"
+    UTILITY_OVERDUE = "utility_overdue"
 
 
 class DeliveryStatus(str, enum.Enum):

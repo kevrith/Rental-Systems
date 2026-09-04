@@ -1,9 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, ClipboardCheck, Gauge, Pencil, UserPlus, Wrench } from 'lucide-react'
+import {
+  Archive,
+  Check,
+  ClipboardCheck,
+  ClipboardList,
+  Copy,
+  Gauge,
+  Pencil,
+  UserPlus,
+  Wrench,
+} from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
-import { activityApi, maintenanceApi, metersApi, unitsApi } from '@/api'
+import { activityApi, applicationsApi, maintenanceApi, metersApi, unitsApi } from '@/api'
+import type { WaitingListEntry } from '@/api/types'
 import { PageHeader } from '@/components/PageHeader'
 import {
   Alert,
@@ -59,6 +70,14 @@ export function UnitDetailPage() {
     queryKey: queryKeys.maintenance({ unit_id: unitId }),
     queryFn: () => maintenanceApi.list({ unit_id: unitId, limit: 5 }),
     enabled: Boolean(unitId),
+  })
+
+  // Applicants only exist while the unit is lettable, so the query follows the
+  // unit's own state rather than running on every visit.
+  const waitingList = useQuery({
+    queryKey: queryKeys.waitingList(unitId!),
+    queryFn: () => applicationsApi.waitingList(unitId!),
+    enabled: Boolean(unitId) && unit.data?.status !== 'occupied',
   })
 
   const history = useQuery({
@@ -207,6 +226,8 @@ export function UnitDetailPage() {
               />
             )}
           </Card>
+
+          {unit.data.status !== 'occupied' && <ApplicationsCard unitId={unitId!} waitingList={waitingList.data ?? []} />}
 
           <Card>
             <CardHeader>
@@ -481,5 +502,80 @@ function Detail({ label, value }: { label: string; value: React.ReactNode }) {
       <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
       <dd className="mt-0.5 text-slate-800">{value}</dd>
     </div>
+  )
+}
+
+/** While a unit is lettable, its detail page doubles as the vacancy desk: the
+ *  link to share, and the queue of people who have answered it (US-064/US-067). */
+function ApplicationsCard({
+  unitId,
+  waitingList,
+}: {
+  unitId: string
+  waitingList: WaitingListEntry[]
+}) {
+  const [copied, setCopied] = useState(false)
+  const applyUrl = `${window.location.origin}/apply/${unitId}`
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Applications</CardTitle>
+        <Link to={`/applications?unit_id=${unitId}`} className="text-sm text-brand-600 hover:text-brand-700">
+          See all
+        </Link>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        <div>
+          <p className="text-sm text-slate-600">
+            Share this link on WhatsApp — anyone can apply without an account.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <Input readOnly value={applyUrl} className="font-mono text-xs" />
+            <Button
+              variant="outline"
+              icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              onClick={async () => {
+                await navigator.clipboard.writeText(applyUrl)
+                setCopied(true)
+                window.setTimeout(() => setCopied(false), 2000)
+              }}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          </div>
+        </div>
+
+        {waitingList.length ? (
+          <ul className="divide-y divide-slate-100">
+            {waitingList.map((entry) => (
+              <li key={entry.application_id} className="flex items-center justify-between gap-3 py-2">
+                <Link to={`/applications/${entry.application_id}`} className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900">
+                    {entry.rank}. {entry.full_name}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {entry.phone_number} · {humanize(entry.status)}
+                  </p>
+                </Link>
+                <Badge
+                  tone={
+                    entry.band === 'green' ? 'success' : entry.band === 'amber' ? 'warn' : 'danger'
+                  }
+                >
+                  {entry.score}/100
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState
+            icon={<ClipboardList className="h-6 w-6" />}
+            title="Nobody has applied yet"
+            description="Applications appear here already scored and ranked."
+          />
+        )}
+      </CardBody>
+    </Card>
   )
 }

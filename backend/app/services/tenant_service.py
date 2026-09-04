@@ -394,6 +394,10 @@ async def create_tenancy(
 
     # The unit's status is a consequence of its tenancy, never set by hand here.
     unit.status = UnitStatus.OCCUPIED
+    # The advert stops being true the moment someone moves in (US-074).
+    from app.services import vacancy_service
+
+    await vacancy_service.close_listing_for_unit(db, unit.id)
     unit.vacancy_date = None
     unit.expected_vacancy_date = None
 

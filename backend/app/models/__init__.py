@@ -1,5 +1,26 @@
 from app.core.database import Base
 from app.models.agency import Disbursement, DisbursementStatus, OwnerProfile
+from app.models.application import (
+    APPLICATION_TRANSITIONS,
+    OPEN_APPLICATION_STATUSES,
+    ApplicationRejectionReason,
+    ApplicationStatus,
+    EmploymentStatus,
+    Guarantor,
+    GuarantorStatus,
+    ReferenceCheck,
+    ReferenceStatus,
+    TenantApplication,
+)
+from app.models.asset import (
+    AgreementStatus,
+    AssetKind,
+    AssetStatus,
+    FuelPolicy,
+    RateBasis,
+    RentalAgreement,
+    RentalAsset,
+)
 from app.models.audit import AuditLog
 from app.models.billing import (
     Invoice,
@@ -11,7 +32,23 @@ from app.models.billing import (
     PaymentStatus,
     Receipt,
 )
+from app.models.bulk import BulkOperation, BulkOperationKind, BulkOperationStatus
 from app.models.etims import EtimsCredential, EtimsStatus, EtimsSubmission
+from app.models.facilities import (
+    Amenity,
+    AmenityBooking,
+    AmenityKind,
+    BayType,
+    BookingStatus,
+    ComplianceItem,
+    ComplianceStatus,
+    ComplianceType,
+    ParkingAllocation,
+    ParkingBay,
+    UtilityAccount,
+    UtilityAccountType,
+    UtilityPaymentStatus,
+)
 from app.models.file import FileCategory, StoredFile, UploadStatus
 from app.models.inspection import InspectionReport, InspectionStatus, InspectionType, RoomCondition
 from app.models.notification import (
@@ -46,6 +83,16 @@ from app.models.property import (
     UnitStatus,
 )
 from app.models.renewal import LeaseRenewal, RenewalStatus
+from app.models.service_charge import (
+    Apportionment,
+    ServiceChargeBudget,
+    ServiceChargeCategory,
+    ServiceChargeExpense,
+    ServiceChargeScheme,
+    SinkingFundEntry,
+    SinkingFundMovement,
+    UseClass,
+)
 from app.models.session import (
     Invitation,
     InvitationStatus,
@@ -64,10 +111,67 @@ from app.models.tenant import (
     Tenant,
 )
 from app.models.user import User, UserRole
+from app.models.vacancy import (
+    DataExport,
+    ExportFormat,
+    ExportKind,
+    Inquiry,
+    LeadStage,
+    ListingStatus,
+    VacancyListing,
+)
 from app.models.vendor import CATEGORY_SPECIALTIES, Vendor, VendorSpecialty
 
 __all__ = [
     "ALLOWED_TRANSITIONS",
+    "APPLICATION_TRANSITIONS",
+    "OPEN_APPLICATION_STATUSES",
+    "AgreementStatus",
+    "Amenity",
+    "AssetKind",
+    "AssetStatus",
+    "FuelPolicy",
+    "RateBasis",
+    "RentalAgreement",
+    "RentalAsset",
+    "AmenityBooking",
+    "AmenityKind",
+    "Apportionment",
+    "BayType",
+    "BookingStatus",
+    "ComplianceItem",
+    "ComplianceStatus",
+    "ComplianceType",
+    "ParkingAllocation",
+    "ParkingBay",
+    "UtilityAccount",
+    "UtilityAccountType",
+    "UtilityPaymentStatus",
+    "ApplicationRejectionReason",
+    "BulkOperation",
+    "BulkOperationKind",
+    "BulkOperationStatus",
+    "ServiceChargeBudget",
+    "ServiceChargeCategory",
+    "ServiceChargeExpense",
+    "ServiceChargeScheme",
+    "SinkingFundEntry",
+    "SinkingFundMovement",
+    "UseClass",
+    "DataExport",
+    "ExportFormat",
+    "ExportKind",
+    "Inquiry",
+    "LeadStage",
+    "ListingStatus",
+    "VacancyListing",
+    "ApplicationStatus",
+    "EmploymentStatus",
+    "Guarantor",
+    "GuarantorStatus",
+    "ReferenceCheck",
+    "ReferenceStatus",
+    "TenantApplication",
     "BILLABLE_STATUSES",
     "CATEGORY_SPECIALTIES",
     "OPEN_STATUSES",

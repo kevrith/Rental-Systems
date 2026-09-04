@@ -5,6 +5,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.property import LateFeeType, PropertyType, UnitStatus
+from app.models.service_charge import UseClass
 
 
 class PropertyBase(BaseModel):
@@ -114,6 +115,9 @@ class UnitBase(BaseModel):
     monthly_rent: Decimal = Field(default=Decimal("0.00"), ge=0)
     deposit_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
     features: list[str] = []
+    # Commercial lettings (US-069); `size_sqm` above is the floor area.
+    use_class: UseClass | None = None
+    car_bays: int = Field(default=0, ge=0, le=500)
 
 
 class UnitCreate(UnitBase):
@@ -136,6 +140,8 @@ class UnitBulkCreate(BaseModel):
     monthly_rent: Decimal = Field(default=Decimal("0.00"), ge=0)
     deposit_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
     features: list[str] = []
+    use_class: UseClass | None = None
+    car_bays: int = Field(default=0, ge=0, le=500)
 
     def unit_numbers(self) -> list[str]:
         numbers = []
@@ -156,6 +162,8 @@ class UnitUpdate(BaseModel):
     monthly_rent: Decimal | None = Field(default=None, ge=0)
     deposit_amount: Decimal | None = Field(default=None, ge=0)
     features: list[str] | None = None
+    use_class: UseClass | None = None
+    car_bays: int | None = Field(default=None, ge=0, le=500)
     photo_file_ids: list[uuid.UUID] | None = Field(default=None, max_length=5)
 
 
@@ -187,6 +195,8 @@ class UnitRead(BaseModel):
     monthly_rent: Decimal
     deposit_amount: Decimal
     features: list[str]
+    use_class: UseClass | None
+    car_bays: int
     status: UnitStatus
     vacancy_date: date | None
     expected_vacancy_date: date | None

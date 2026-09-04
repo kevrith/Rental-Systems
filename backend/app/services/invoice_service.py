@@ -27,7 +27,13 @@ from app.models.notification import NotificationChannel, NotificationType
 from app.models.operations import MeterReading, MeterType
 from app.models.property import Property, Unit
 from app.models.tenant import Tenancy, TenancyStatus, Tenant
-from app.services import file_service, notification_service, pdf_service, reference_service
+from app.services import (
+    file_service,
+    notification_service,
+    pdf_service,
+    reference_service,
+    service_charge_service,
+)
 
 ZERO = Decimal("0.00")
 BILLABLE_STATUSES = [TenancyStatus.ACTIVE, TenancyStatus.EXPIRING_SOON, TenancyStatus.NOTICE_GIVEN]
@@ -136,6 +142,31 @@ async def generate_invoice_for_tenancy(
             )
         )
         total += Decimal(reading.amount)
+
+    # Service charge, apportioned across the building as it stands this month
+    # (US-070). Properties without a scheme simply contribute nothing.
+    unit = await db.get(Unit, tenancy.unit_id)
+    if unit is not None:
+        charge, scheme = await service_charge_service.charge_for_unit(db, tenancy.organization_id, unit)
+        if scheme is not None and charge > ZERO:
+            line_items.append(service_charge_service.line_item_for(charge, period_start, scheme))
+            total += charge
+            await service_charge_service.record_sinking_fund_contribution(db, scheme, charge, period_start)
+
+    # Parking, if this tenancy holds a billable bay (US-079).
+    from app.services import facilities_service
+
+    for bay_number, fee in await facilities_service.parking_charges_for_tenancy(db, tenancy.id):
+        line_items.append(
+            InvoiceLineItem(
+                kind=LineItemKind.OTHER,
+                description=f"Parking bay {bay_number} — {month_label}",
+                quantity=Decimal("1"),
+                unit_amount=fee,
+                amount=fee,
+            )
+        )
+        total += fee
 
     arrears = await outstanding_balance(db, tenancy.id, before=period_start)
     if arrears > 0:

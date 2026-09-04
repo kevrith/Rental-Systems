@@ -3,10 +3,13 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     agency,
     analytics,
+    applications,
     auth,
     billing,
+    bulk,
     dashboard,
     etims,
+    facilities,
     files,
     health,
     inspections,
@@ -16,10 +19,13 @@ from app.api.v1.endpoints import (
     portal,
     properties,
     renewals,
+    rentals,
+    service_charges,
     signatures,
     tasks,
     team,
     tenants,
+    vacancies,
     vault,
     vendors,
 )
@@ -93,3 +99,29 @@ api_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 
 # Phase 3 — maintenance and vendors
 api_router.include_router(vendors.router, prefix="/vendors", tags=["vendors"])
+
+# Phase 3 — tenant screening. The apply/guarantee/reference routes are public:
+# an applicant, a guarantor and a previous landlord all reach them by link.
+api_router.include_router(applications.router, prefix="/applications", tags=["applications"])
+api_router.include_router(applications.apply_router, prefix="/apply", tags=["applications"])
+api_router.include_router(applications.public_router, tags=["applications"])
+
+# Phase 3 — commercial service charges and bulk operations
+api_router.include_router(service_charges.router, prefix="/service-charges", tags=["service-charges"])
+api_router.include_router(bulk.router, prefix="/bulk", tags=["bulk-operations"])
+
+# Phase 3 — vacancy marketing, the lead pipeline and data export.
+# `/listings/{slug}` is public: the whole point of a listing is that it is shared.
+api_router.include_router(vacancies.router, prefix="/vacancies", tags=["vacancies"])
+api_router.include_router(vacancies.public_router, prefix="/listings", tags=["vacancies"])
+
+# Phase 3 — facilities: compliance, parking, amenities and the building's own bills
+api_router.include_router(facilities.compliance_router, prefix="/compliance", tags=["compliance"])
+api_router.include_router(facilities.parking_router, prefix="/parking", tags=["parking"])
+api_router.include_router(facilities.amenities_router, prefix="/amenities", tags=["amenities"])
+api_router.include_router(facilities.utilities_router, prefix="/utilities", tags=["utilities"])
+
+# Phase 3 — vehicle and equipment hire. A car and a generator are the same
+# business, so they share one asset table and one agreement lifecycle.
+api_router.include_router(rentals.assets_router, prefix="/assets", tags=["rentals"])
+api_router.include_router(rentals.agreements_router, prefix="/rental-agreements", tags=["rentals"])

@@ -1,0 +1,76 @@
+{% extends "pdf_base.html" %}
+{% block title %}Compliance Report{% endblock %}
+
+{% block content %}
+  <div class="doc-title">Compliance Report</div>
+
+  <div class="ref-bar">
+    <div><span>Scope</span> <strong>{{ property.name if property else "Whole portfolio" }}</strong></div>
+    <div><span>Items</span> <strong>{{ total }}</strong></div>
+    <div><span>Generated</span> <strong>{{ generated_at|longdate }}</strong></div>
+  </div>
+
+  <div class="panel">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Valid</th>
+          <th>Expiring within 60 days</th>
+          <th>Expired</th>
+          <th>No expiry recorded</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>{{ counts.valid }}</strong></td>
+          <td><strong>{{ counts.expiring_soon }}</strong></td>
+          <td><strong>{{ counts.expired }}</strong></td>
+          <td><strong>{{ counts.missing }}</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  {% for property_name, items in groups %}
+    <h2>{{ property_name }}</h2>
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Reference</th>
+          <th>Expires</th>
+          <th>Status</th>
+          <th>Responsible</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+          <tr>
+            <td>{{ item.name }}</td>
+            <td>{{ item.reference_number or "&mdash;" }}</td>
+            <td>{{ item.expires_on|longdate if item.expires_on else "Not recorded" }}</td>
+            <td>
+              {% if item.status.value == "expired" %}
+                <strong>EXPIRED {{ item.days_until_expiry|abs }} day(s) ago</strong>
+              {% elif item.status.value == "expiring_soon" %}
+                Expires in {{ item.days_until_expiry }} day(s)
+              {% elif item.status.value == "missing" %}
+                No expiry date recorded
+              {% else %}
+                Valid
+              {% endif %}
+            </td>
+            <td>{{ item.responsible_party or "&mdash;" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No compliance items have been recorded yet.</p>
+  {% endfor %}
+
+  <p class="muted">
+    Prepared by {{ organization.legal_name or organization.name }} from its RentFlow records on
+    {{ generated_at|longdate }}. Items showing no expiry date are recorded as held but unverified.
+  </p>
+{% endblock %}

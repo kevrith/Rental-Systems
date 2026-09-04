@@ -92,6 +92,31 @@ celery_app.conf.update(
             "task": "rentflow.flag_overdue_maintenance",
             "schedule": crontab(hour=6, minute=30),
         },
+        # Phase 3: The compliance reminder ladder, first thing.
+        "sweep-compliance-expiry": {
+            "task": "rentflow.sweep_compliance_expiry",
+            "schedule": crontab(hour=6, minute=0),
+        },
+        # Phase 3: The building's own utility bills, weekly on a Monday.
+        "sweep-overdue-utilities": {
+            "task": "rentflow.sweep_overdue_utilities",
+            "schedule": crontab(day_of_week=1, hour=8, minute=0),
+        },
+        # Phase 3: The monthly data export, on the 1st, before the office opens.
+        "monthly-data-export": {
+            "task": "rentflow.monthly_data_export",
+            "schedule": crontab(day_of_month=1, hour=5, minute=0),
+        },
+        # Phase 3: Nudge the office about vacancy leads that have gone cold.
+        "chase-stale-leads": {
+            "task": "rentflow.chase_stale_leads",
+            "schedule": crontab(hour=9, minute=30),
+        },
+        # Phase 3: Close out landlord references that were never answered.
+        "sweep-stale-references": {
+            "task": "rentflow.sweep_stale_references",
+            "schedule": crontab(hour=6, minute=45),
+        },
         # Phase 2: Keep the task monitoring history to its retention window.
         "prune-task-runs": {
             "task": "rentflow.prune_task_runs",

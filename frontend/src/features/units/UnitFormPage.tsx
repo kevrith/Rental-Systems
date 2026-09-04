@@ -21,12 +21,22 @@ import {
   PageLoader,
   Select,
 } from '@/components/ui'
-import { errorMessage, kes } from '@/lib/format'
+import { errorMessage, humanize, kes } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
 
 const UNIT_TYPES = [
   'Bedsitter', 'Single room', 'Studio', '1 bedroom', '2 bedroom', '3 bedroom', '4 bedroom',
   'Maisonette', 'Bungalow', 'Shop', 'Office', 'Godown', 'Stall',
+]
+
+const USE_CLASSES = [
+  'office',
+  'retail',
+  'warehouse',
+  'industrial',
+  'restaurant',
+  'medical',
+  'other',
 ]
 
 const schema = z.object({
@@ -39,6 +49,9 @@ const schema = z.object({
   bathrooms: z.string().optional(),
   monthly_rent: z.string().min(1, 'Enter the monthly rent'),
   deposit_amount: z.string().optional(),
+  // Commercial lettings (US-069)
+  use_class: z.string().optional(),
+  car_bays: z.string().optional(),
 })
 // `z.coerce` makes the parsed output differ from the raw form input, so both
 // sides are named explicitly and threaded through useForm's generics.
@@ -97,6 +110,8 @@ export function UnitFormPage() {
       bathrooms: existing.data.bathrooms?.toString() ?? '',
       monthly_rent: existing.data.monthly_rent,
       deposit_amount: existing.data.deposit_amount,
+      use_class: existing.data.use_class ?? '',
+      car_bays: existing.data.car_bays ? String(existing.data.car_bays) : '',
     })
     setPhotos(existing.data.photos.map((p) => ({ id: p.id, url: p.url, filename: p.filename })))
   }, [existing.data, reset])
@@ -113,6 +128,8 @@ export function UnitFormPage() {
         bathrooms: toNumberOrNull(values.bathrooms),
         monthly_rent: values.monthly_rent,
         deposit_amount: values.deposit_amount || '0',
+        use_class: values.use_class || null,
+        car_bays: Number(values.car_bays) || 0,
         photo_file_ids: photos.map((photo) => photo.id),
       }
       // The property of an existing unit is fixed — moving a unit between
@@ -190,6 +207,24 @@ export function UnitFormPage() {
 
             <Field label="Bathrooms">
               <Input type="number" min="0" max="50" placeholder="1" {...register('bathrooms')} />
+            </Field>
+
+            <Field
+              label="Commercial use"
+              hint="Only for offices, shops and the like — leave blank for residential"
+            >
+              <Select {...register('use_class')}>
+                <option value="">Residential</option>
+                {USE_CLASSES.map((value) => (
+                  <option key={value} value={value}>
+                    {humanize(value)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Parking bays">
+              <Input type="number" min="0" max="500" placeholder="0" {...register('car_bays')} />
             </Field>
           </CardBody>
         </Card>

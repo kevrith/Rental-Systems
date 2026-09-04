@@ -107,6 +107,96 @@ DEFAULT_CLAUSES: list[dict[str, str]] = [
 ]
 
 
+# A commercial lease is not a residential one with the word "office" in it: the
+# covenants that matter are use class, service charge, alterations and insurance,
+# and the quiet-enjoyment framing of a home is simply the wrong document (US-069).
+COMMERCIAL_CLAUSES: list[dict[str, str]] = [
+    {
+        "title": "Permitted use",
+        "body": (
+            "The Tenant shall use the premises only for the permitted use stated above and for "
+            "no other purpose. The Tenant shall not use the premises for any purpose that is "
+            "unlawful, that invalidates the Landlord's insurance, or that causes nuisance or "
+            "annoyance to other occupiers of the building."
+        ),
+    },
+    {
+        "title": "Rent and service charge",
+        "body": (
+            "Rent is payable monthly in advance. In addition, the Tenant shall pay the service "
+            "charge apportioned to the premises, which covers the running of the common parts of "
+            "the building including security, cleaning, the generator and the lift where "
+            "provided. The Landlord shall account for the service charge annually, showing what "
+            "was budgeted, what was charged and what was spent."
+        ),
+    },
+    {
+        "title": "Licences and compliance",
+        "body": (
+            "The Tenant shall at its own cost obtain and maintain every licence, permit and "
+            "approval required to carry on its business at the premises, including the county "
+            "single business permit, and shall comply with all statutory requirements applicable "
+            "to that business."
+        ),
+    },
+    {
+        "title": "Alterations and fit-out",
+        "body": (
+            "The Tenant shall not make any structural alteration to the premises without the "
+            "prior written consent of the Landlord. Non-structural fit-out works may be carried "
+            "out with the Landlord's written approval of the plans, and shall be removed at the "
+            "end of the term if the Landlord so requires, making good any damage."
+        ),
+    },
+    {
+        "title": "Repair",
+        "body": (
+            "The Tenant shall keep the interior of the premises in good and tenantable repair, "
+            "fair wear and tear excepted. The Landlord shall keep the structure, exterior and "
+            "common parts of the building in repair."
+        ),
+    },
+    {
+        "title": "Insurance",
+        "body": (
+            "The Landlord shall insure the building against fire and the usual risks. The Tenant "
+            "shall insure its own stock, fittings and equipment, and shall maintain public "
+            "liability insurance, producing evidence of cover to the Landlord on request."
+        ),
+    },
+    {
+        "title": "Parking",
+        "body": (
+            "The Tenant is allocated the parking bays stated above for the use of its staff and "
+            "visitors. Bays are allocated and may be reallocated by the Landlord acting "
+            "reasonably, and shall not be sub-let or assigned separately from the premises."
+        ),
+    },
+    {
+        "title": "Assignment and subletting",
+        "body": (
+            "The Tenant shall not assign, sublet, charge or part with possession of the whole or "
+            "any part of the premises without the prior written consent of the Landlord, such "
+            "consent not to be unreasonably withheld in the case of a respectable and responsible "
+            "assignee."
+        ),
+    },
+    {
+        "title": "Termination and reinstatement",
+        "body": (
+            "At the end of the term the Tenant shall yield up the premises in the state of repair "
+            "required by this lease, remove its signage and fittings, and make good all damage "
+            "caused by that removal."
+        ),
+    },
+]
+
+
+def clauses_for(unit: Unit) -> list[dict[str, str]]:
+    """Commercial units get the commercial covenants; everything else the standard ones."""
+    return COMMERCIAL_CLAUSES if unit.use_class is not None else DEFAULT_CLAUSES
+
+
 async def get_default_template(db: AsyncSession, organization_id: uuid.UUID) -> LeaseTemplate | None:
     return await db.scalar(
         select(LeaseTemplate).where(
@@ -225,7 +315,8 @@ async def generate_lease_pdf(
             "tenancy": tenancy,
             "unit": unit,
             "property": property_record,
-            "clauses": DEFAULT_CLAUSES,
+            "clauses": clauses_for(unit),
+            "is_commercial": unit.use_class is not None,
             "custom_clauses": [],
             "generated_at": datetime.now(UTC).date(),
         },

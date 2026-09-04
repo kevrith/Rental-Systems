@@ -42,6 +42,13 @@ PUBLIC_PREFIXES: dict[str, str] = {
     "/api/v1/renew": "The tenant's renewal link. Authenticated by a single-use token.",
     "/api/v1/files/local": "Development storage. Authenticated by a signed, expiring URL.",
     "/api/v1/portal/setup": "Tenant portal setup before the account exists.",
+    # Phase 3. Screening and vacancy marketing reach four people who have no
+    # account and never will: a prospective tenant, their guarantor, their
+    # previous landlord, and whoever the listing link was forwarded to.
+    "/api/v1/apply": "The public application form. A vacant unit is a public advert.",
+    "/api/v1/guarantee": "The guarantor's acknowledgement. Authenticated by a single-use token.",
+    "/api/v1/reference": "The previous landlord's answer. Authenticated by a single-use token.",
+    "/api/v1/listings": "The shareable vacancy listing and its enquiry form.",
 }
 
 # Strings that must never appear in any response body.

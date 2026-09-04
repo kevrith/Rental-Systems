@@ -1,0 +1,81 @@
+{% extends "pdf_base.html" %}
+{% block title %}Guarantee — {{ application.reference_code }}{% endblock %}
+
+{% block content %}
+  <div class="doc-title">Deed of Guarantee</div>
+
+  <div class="ref-bar">
+    <div><span>Application</span> <strong>{{ application.reference_code }}</strong></div>
+    <div><span>Guarantor</span> <strong>{{ guarantor.full_name }}</strong></div>
+    <div><span>Date</span> <strong>{{ generated_at|longdate }}</strong></div>
+  </div>
+
+  <p>
+    This Guarantee is given by <strong>{{ guarantor.full_name }}</strong>
+    {% if guarantor.national_id %}(ID No. {{ guarantor.national_id }}){% endif %},
+    of telephone {{ guarantor.phone_number }}, in favour of
+    <strong>{{ organization.legal_name or organization.name }}</strong> ("the Landlord"),
+    in respect of the tenancy applied for by
+    <strong>{{ application.full_name }}</strong> ("the Tenant"), who is the Guarantor's
+    {{ guarantor.relationship_to_applicant|lower }}.
+  </p>
+
+  <h2>The tenancy guaranteed</h2>
+  <div class="panel">
+    <table class="data">
+      <tbody>
+        <tr><td>Property</td><td><strong>{{ property.name }}, {{ property.address }}</strong></td></tr>
+        <tr><td>Unit</td><td><strong>{{ unit.unit_number }}</strong></td></tr>
+        <tr><td>Monthly rent</td><td><strong>KES {{ unit.monthly_rent|kes }}</strong></td></tr>
+        <tr><td>Deposit</td><td>KES {{ unit.deposit_amount|kes }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>The Guarantor's undertaking</h2>
+  <ol>
+    <li>
+      The Guarantor guarantees to the Landlord the due payment of all rent, service charges,
+      utilities and other sums lawfully falling due from the Tenant under the tenancy of the
+      above unit, together with the cost of making good any damage for which the Tenant is
+      liable beyond fair wear and tear.
+    </li>
+    <li>
+      If the Tenant fails to pay any such sum within fourteen (14) days of it falling due, the
+      Guarantor shall pay it on written demand from the Landlord, without the Landlord being
+      required first to pursue the Tenant.
+    </li>
+    <li>
+      This Guarantee continues for the duration of the tenancy and any renewal or statutory
+      continuation of it, and is not discharged by any variation of the rent agreed between the
+      Landlord and the Tenant of which the Guarantor is given notice.
+    </li>
+    <li>
+      The Guarantor's liability is limited to sums that fall due while the Tenant remains in
+      occupation, and ends when the tenancy ends and all sums then outstanding have been paid.
+    </li>
+    <li>
+      This Guarantee is governed by the laws of Kenya.
+    </li>
+  </ol>
+
+  <h2>Guarantor's details</h2>
+  <div class="panel">
+    <table class="data">
+      <tbody>
+        <tr><td>Full name</td><td>{{ guarantor.full_name }}</td></tr>
+        <tr><td>Relationship to the Tenant</td><td>{{ guarantor.relationship_to_applicant }}</td></tr>
+        <tr><td>Telephone</td><td>{{ guarantor.phone_number }}</td></tr>
+        {% if guarantor.national_id %}<tr><td>National ID</td><td>{{ guarantor.national_id }}</td></tr>{% endif %}
+        {% if guarantor.employer_name %}<tr><td>Employer</td><td>{{ guarantor.employer_name }}</td></tr>{% endif %}
+        {% if guarantor.monthly_income %}<tr><td>Stated monthly income</td><td>KES {{ guarantor.monthly_income|kes }}</td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <p class="muted">
+    Signed electronically by the Guarantor following one-time-password verification of the
+    telephone number above. The signature page that follows records the time, IP address and
+    device used.
+  </p>
+{% endblock %}
