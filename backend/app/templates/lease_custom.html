@@ -1,0 +1,29 @@
+{% extends "pdf_base.html" %}
+{% block title %}
+  Lease Agreement{% if tenancy %} — {{ tenancy.reference_code }}{% endif %}
+{% endblock %}
+
+{% block content %}
+  <div class="doc-title">Tenancy / Lease Agreement</div>
+
+  <div class="ref-bar">
+    <div>
+      <span>Agreement No.</span>
+      <strong>{{ tenancy.reference_code if tenancy else "PREVIEW — NOT A LEASE" }}</strong>
+    </div>
+    <div><span>Date</span> <strong>{{ generated_at|longdate }}</strong></div>
+  </div>
+
+  {% if is_preview %}
+    <div class="panel" style="background:#fef3c7;border-color:#fcd34d">
+      <strong>Template preview.</strong> Every name, amount and date below is sample data used to
+      show how the template renders. Nothing here refers to a real tenancy.
+    </div>
+  {% endif %}
+
+  {% if letterhead_text %}
+    <p style="color:#64748b;font-size:9pt">{{ letterhead_text }}</p>
+  {% endif %}
+
+  {{ body|safe }}
+{% endblock %}

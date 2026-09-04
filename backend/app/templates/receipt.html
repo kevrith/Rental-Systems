@@ -1,0 +1,83 @@
+{% extends "pdf_base.html" %}
+{% block title %}Receipt {{ receipt.reference_code }}{% endblock %}
+
+{% block content %}
+  <div class="doc-title">Official Payment Receipt</div>
+
+  <div class="ref-bar">
+    <div><span>Receipt No.</span> <strong>{{ receipt.reference_code }}</strong></div>
+    <div><span>Issued</span> <strong>{{ issued_at }}</strong></div>
+  </div>
+
+  <div class="panel" style="text-align:center;background:#f8fafc">
+    <div style="font-size:9pt;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">Amount received</div>
+    <div class="amount-hero">KES {{ payment.amount|kes }}</div>
+    <div style="margin-top:2mm"><span class="badge badge-paid">Payment confirmed</span></div>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <h3>Received from</h3>
+      <table class="kv">
+        <tr><td class="label">Tenant</td><td class="value">{{ tenant.full_name }}</td></tr>
+        <tr><td class="label">Reference</td><td class="value">{{ tenant.reference_code }}</td></tr>
+        <tr><td class="label">Phone</td><td class="value">{{ tenant.phone_number }}</td></tr>
+      </table>
+    </div>
+    <div class="panel">
+      <h3>For</h3>
+      <table class="kv">
+        <tr><td class="label">Property</td><td class="value">{{ property.name }}</td></tr>
+        <tr><td class="label">Unit</td><td class="value">{{ unit.unit_number }}</td></tr>
+        <tr><td class="label">Tenancy</td><td class="value">{{ tenancy.reference_code }}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Payment details</h3>
+    <table class="kv">
+      <tr><td class="label">Payment reference</td><td class="value">{{ payment.reference_code }}</td></tr>
+      <tr><td class="label">Method</td><td class="value">{{ payment.method.value|replace("_", " ")|title }}</td></tr>
+      {% if payment.mpesa_receipt %}
+        <tr><td class="label">M-Pesa reference</td><td class="value">{{ payment.mpesa_receipt }}</td></tr>
+      {% endif %}
+      <tr><td class="label">Date of payment</td><td class="value">{{ payment.payment_date|longdate }}</td></tr>
+      {% if invoice %}
+        <tr><td class="label">Applied to invoice</td><td class="value">{{ invoice.reference_code }}</td></tr>
+      {% endif %}
+      {% if recorded_by %}
+        <tr><td class="label">Recorded by</td><td class="value">{{ recorded_by }}</td></tr>
+      {% endif %}
+      <tr><td class="label">Balance remaining</td><td class="value">KES {{ receipt.balance_after|kes }}</td></tr>
+    </table>
+  </div>
+  {% if etims %}
+    <div class="panel" style="display:flex;gap:5mm;align-items:center">
+      <img src="{{ etims.qr_data_uri }}" alt="eTIMS verification QR code" style="width:26mm;height:26mm" />
+      <div>
+        <h3 style="margin-top:0">
+          <span class="badge badge-paid">eTIMS verified</span>
+        </h3>
+        <table class="kv">
+          <tr><td class="label">Invoice number</td><td class="value">{{ etims.invoice_number }}</td></tr>
+          {% if etims.control_unit_serial %}
+            <tr><td class="label">Control unit</td><td class="value">{{ etims.control_unit_serial }}</td></tr>
+          {% endif %}
+          {% if etims.signature %}
+            <tr><td class="label">KRA signature</td><td class="value">{{ etims.signature }}</td></tr>
+          {% endif %}
+        </table>
+        <p style="font-size:8pt;color:#64748b;margin-top:2mm">
+          Scan to verify this receipt with the Kenya Revenue Authority.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
+
+{% block footnote %}
+  Verification code: {{ receipt.signature }}<br />
+  This receipt is cryptographically signed by RentFlow Kenya. Any alteration invalidates the code above.
+  Issued {{ generated_at|longdate }}.
+{% endblock %}

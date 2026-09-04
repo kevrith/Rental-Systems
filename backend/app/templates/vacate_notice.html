@@ -1,0 +1,57 @@
+{% extends "pdf_base.html" %}
+{% block title %}Notice to Vacate — {{ tenancy.reference_code }}{% endblock %}
+
+{% block content %}
+  <div class="doc-title">Notice to Vacate</div>
+
+  <div class="ref-bar">
+    <div><span>Tenancy</span> <strong>{{ tenancy.reference_code }}</strong></div>
+    <div><span>Submitted</span> <strong>{{ submitted_at }}</strong></div>
+  </div>
+
+  <p>
+    I, <strong>{{ tenant.full_name }}</strong> (ID {{ tenant.national_id or "—" }}, telephone
+    {{ tenant.phone_number }}), hereby give notice of my intention to vacate the premises described
+    below.
+  </p>
+
+  <table class="kv" style="margin-top:3mm">
+    <tr><td class="label">Property</td><td class="value">{{ property.name }}, {{ property.address }}</td></tr>
+    <tr><td class="label">Unit</td><td class="value">{{ unit.unit_number }}</td></tr>
+    <tr><td class="label">Tenancy start</td><td class="value">{{ tenancy.start_date|longdate }}</td></tr>
+    <tr><td class="label">Intended move-out date</td><td class="value">{{ notice.move_out_date|longdate }}</td></tr>
+    <tr><td class="label">Notice given</td><td class="value">{{ notice.notice_days_given }} days</td></tr>
+    <tr>
+      <td class="label">Required notice</td>
+      <td class="value">
+        {{ tenancy.notice_period_days }} days —
+        {% if notice.meets_notice_period %}requirement met{% else %}SHORT NOTICE{% endif %}
+      </td>
+    </tr>
+  </table>
+
+  {% if notice.reason %}
+    <h2>Reason given</h2>
+    <p>{{ notice.reason }}</p>
+  {% endif %}
+
+  <div class="panel" style="margin-top:5mm">
+    <h3>Next steps</h3>
+    <p style="margin:0">
+      A move-out inspection will be scheduled before the date above. The security deposit of
+      KES {{ tenancy.deposit_amount|kes }} will be refunded less any agreed deductions for damage
+      or outstanding balances, in line with the tenancy agreement.
+    </p>
+  </div>
+
+  <div class="signatures">
+    <div>
+      <div class="sig-line">Tenant — {{ tenant.full_name }}</div>
+      <div style="font-size:8.5pt;color:#64748b">Submitted digitally via the RentFlow tenant portal</div>
+    </div>
+    <div>
+      <div class="sig-line">Received by — {{ organization.name }}</div>
+      <div style="font-size:8.5pt;color:#64748b">Date: ____________________</div>
+    </div>
+  </div>
+{% endblock %}

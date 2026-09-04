@@ -1,0 +1,77 @@
+{% extends "pdf_base.html" %}
+{% block title %}Lease Agreement — {{ tenancy.reference_code }}{% endblock %}
+
+{% block content %}
+  <div class="doc-title">Tenancy / Lease Agreement</div>
+
+  <div class="ref-bar">
+    <div><span>Agreement No.</span> <strong>{{ tenancy.reference_code }}</strong></div>
+    <div><span>Date</span> <strong>{{ generated_at|longdate }}</strong></div>
+  </div>
+
+  <p>
+    THIS AGREEMENT is made on {{ generated_at|longdate }} BETWEEN
+    <strong>{{ landlord.name }}</strong> (hereinafter "the Landlord") of
+    {{ landlord.address or "the address on record" }},
+    AND <strong>{{ tenant.full_name }}</strong> (hereinafter "the Tenant") of National ID
+    {{ tenant.national_id or "—" }}, telephone {{ tenant.phone_number }}.
+  </p>
+
+  <h2>1. The Premises</h2>
+  <table class="kv">
+    <tr><td class="label">Property</td><td class="value">{{ property.name }}</td></tr>
+    <tr><td class="label">Address</td><td class="value">{{ property.address }}{% if property.county %}, {{ property.county }} County{% endif %}</td></tr>
+    <tr><td class="label">Unit</td><td class="value">{{ unit.unit_number }}{% if unit.unit_type %} ({{ unit.unit_type }}){% endif %}</td></tr>
+    {% if unit.bedrooms %}
+      <tr><td class="label">Configuration</td><td class="value">{{ unit.bedrooms }} bedroom(s), {{ unit.bathrooms or 0 }} bathroom(s)</td></tr>
+    {% endif %}
+  </table>
+
+  <h2>2. Term</h2>
+  <table class="kv">
+    <tr><td class="label">Commencement date</td><td class="value">{{ tenancy.start_date|longdate }}</td></tr>
+    <tr>
+      <td class="label">Expiry date</td>
+      <td class="value">{% if tenancy.is_open_ended %}Open-ended (month to month){% else %}{{ tenancy.end_date|longdate }}{% endif %}</td>
+    </tr>
+    <tr><td class="label">Notice period</td><td class="value">{{ tenancy.notice_period_days }} days</td></tr>
+  </table>
+
+  <h2>3. Rent and Deposit</h2>
+  <table class="kv">
+    <tr><td class="label">Monthly rent</td><td class="value">KES {{ tenancy.monthly_rent|kes }}</td></tr>
+    <tr><td class="label">Security deposit</td><td class="value">KES {{ tenancy.deposit_amount|kes }}</td></tr>
+    <tr><td class="label">Rent due on</td><td class="value">Day {{ tenancy.billing_day }} of each month</td></tr>
+    <tr><td class="label">Payment method</td><td class="value">{{ tenancy.payment_method.value|replace("_", " ")|title }}</td></tr>
+  </table>
+
+  <h2>4. Terms and Conditions</h2>
+  {% for clause in clauses %}
+    <div class="clause">
+      <span class="clause-title">4.{{ loop.index }} {{ clause.title }}.</span>
+      {{ clause.body }}
+    </div>
+  {% endfor %}
+
+  {% if custom_clauses %}
+    <h2>5. Additional Terms</h2>
+    {% for clause in custom_clauses %}
+      <div class="clause"><span class="clause-title">5.{{ loop.index }}.</span> {{ clause }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <p style="margin-top:5mm">
+    IN WITNESS WHEREOF the parties have executed this Agreement on the date first written above.
+  </p>
+
+  <div class="signatures">
+    <div>
+      <div class="sig-line">Landlord — {{ landlord.name }}</div>
+      <div style="font-size:8.5pt;color:#64748b">Date: ____________________</div>
+    </div>
+    <div>
+      <div class="sig-line">Tenant — {{ tenant.full_name }}</div>
+      <div style="font-size:8.5pt;color:#64748b">Date: ____________________</div>
+    </div>
+  </div>
+{% endblock %}

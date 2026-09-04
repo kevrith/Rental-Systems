@@ -1,0 +1,724 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  AlertTriangle,
+  Bell,
+  Building2,
+  Laptop,
+  LogOut,
+  ShieldCheck,
+  Trash2,
+  UserRound,
+  Receipt,
+} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { NavLink, Outlet } from 'react-router-dom'
+
+import { notificationsApi, organizationApi } from '@/api'
+import { authApi } from '@/api/auth'
+import { PageHeader } from '@/components/PageHeader'
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  Dialog,
+  Field,
+  Input,
+  PageLoader,
+  Select,
+} from '@/components/ui'
+import { cn } from '@/lib/cn'
+import { dateTime, errorMessage, humanize, relative } from '@/lib/format'
+import { queryKeys } from '@/lib/query-client'
+import { useAuthStore } from '@/store/auth-store'
+
+const TABS = [
+  { to: '/settings/profile', label: 'Profile', icon: <UserRound className="h-4 w-4" /> },
+  { to: '/settings/security', label: 'Security', icon: <ShieldCheck className="h-4 w-4" /> },
+  { to: '/settings/sessions', label: 'Devices', icon: <Laptop className="h-4 w-4" /> },
+  { to: '/settings/notifications', label: 'Notifications', icon: <Bell className="h-4 w-4" /> },
+  { to: '/settings/organization', label: 'Organization', icon: <Building2 className="h-4 w-4" /> },
+  { to: '/settings/etims', label: 'KRA eTIMS', icon: <Receipt className="h-4 w-4" /> },
+]
+
+export function SettingsLayout() {
+  return (
+    <div>
+      <PageHeader title="Settings" />
+      <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-slate-200">
+        {TABS.map((tab) => (
+          <NavLink
+            key={tab.to}
+            to={tab.to}
+            className={({ isActive }) =>
+              cn(
+                '-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium',
+                isActive
+                  ? 'border-brand-600 text-brand-700'
+                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700',
+              )
+            }
+          >
+            {tab.icon}
+            {tab.label}
+          </NavLink>
+        ))}
+      </nav>
+      <div className="max-w-2xl">
+        <Outlet />
+      </div>
+    </div>
+  )
+}
+
+// --------------------------------------------------------------------- profile
+
+export function ProfileSettings() {
+  const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
+  const [fullName, setFullName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [notice, setNotice] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+
+  useEffect(() => {
+    if (user) {
+      setFullName(user.full_name)
+      setPhone(user.phone_number)
+    }
+  }, [user])
+
+  const save = useMutation({
+    mutationFn: () =>
+      authApi.updateProfile({
+        full_name: fullName,
+        phone_number: phone !== user?.phone_number ? phone : undefined,
+      }),
+    onSuccess: async (updated) => {
+      useAuthStore.getState().setUser(updated)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.me })
+      setNotice({
+        tone: 'success',
+        text: updated.is_phone_verified
+          ? 'Profile updated.'
+          : 'Profile updated. We sent a verification code to your new number.',
+      })
+    },
+    onError: (error) => setNotice({ tone: 'danger', text: errorMessage(error) }),
+  })
+
+  const requestDeletion = useMutation({
+    mutationFn: authApi.requestDeletion,
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.me })
+      setDeleteOpen(false)
+      setNotice({ tone: 'success', text: result.message })
+    },
+    onError: (error) => setNotice({ tone: 'danger', text: errorMessage(error) }),
+  })
+
+  const cancelDeletion = useMutation({
+    mutationFn: authApi.cancelDeletion,
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.me })
+      setNotice({ tone: 'success', text: result.message })
+    },
+  })
+
+  if (!user) return <PageLoader />
+
+  return (
+    <div className="space-y-5">
+      {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
+
+      {user.deletion_requested_at && (
+        <Alert
+          tone="danger"
+          icon={<AlertTriangle className="h-4 w-4" />}
+          title="Deletion scheduled"
+        >
+          Your account is scheduled for deletion. It stays recoverable until then.
+          <div className="mt-2">
+            <Button size="sm" variant="secondary" onClick={() => cancelDeletion.mutate()}>
+              Cancel deletion
+            </Button>
+          </div>
+        </Alert>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Your details</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <Field label="Full name">
+            <Input value={fullName} onChange={(event) => setFullName(event.target.value)} />
+          </Field>
+
+          <Field
+            label="Phone number"
+            hint="Changing this needs a fresh SMS verification."
+          >
+            <div className="flex items-center gap-2">
+              <Input value={phone} onChange={(event) => setPhone(event.target.value)} />
+              {user.is_phone_verified ? (
+                <Badge tone="success">Verified</Badge>
+              ) : (
+                <Badge tone="warn">Unverified</Badge>
+              )}
+            </div>
+          </Field>
+
+          <Field label="Email">
+            <div className="flex items-center gap-2">
+              <Input value={user.email} disabled readOnly />
+              {user.is_email_verified ? (
+                <Badge tone="success">Verified</Badge>
+              ) : (
+                <Badge tone="warn">Unverified</Badge>
+              )}
+            </div>
+          </Field>
+
+          <Field label="Role">
+            <Input value={humanize(user.role)} disabled readOnly />
+          </Field>
+
+          <Button loading={save.isPending} onClick={() => save.mutate()}>
+            Save changes
+          </Button>
+        </CardBody>
+      </Card>
+
+      {!user.deletion_requested_at && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-danger-700">Danger zone</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <p className="mb-3 text-sm text-slate-600">
+              Deleting your account starts a 30-day grace period. You can cancel any time before it
+              elapses.
+            </p>
+            <Button
+              variant="ghost"
+              className="text-danger-600"
+              icon={<Trash2 className="h-4 w-4" />}
+              onClick={() => setDeleteOpen(true)}
+            >
+              Request account deletion
+            </Button>
+          </CardBody>
+        </Card>
+      )}
+
+      <Dialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title="Delete your account?"
+        description="This starts a 30-day grace period."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
+              Keep my account
+            </Button>
+            <Button
+              variant="danger"
+              loading={requestDeletion.isPending}
+              onClick={() => requestDeletion.mutate()}
+            >
+              Request deletion
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-slate-600">
+          Nothing is destroyed today. Log in and cancel before the 30 days are up and everything
+          continues as normal. After that, your personal details are removed — financial records are
+          retained as the law requires.
+        </p>
+      </Dialog>
+    </div>
+  )
+}
+
+// -------------------------------------------------------------------- security
+
+export function SecuritySettings() {
+  const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [notice, setNotice] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null)
+
+  const changePassword = useMutation({
+    mutationFn: () => authApi.changePassword({ current_password: current, new_password: next }),
+    onSuccess: (result) => {
+      setCurrent('')
+      setNext('')
+      setConfirm('')
+      setNotice({ tone: 'success', text: result.message })
+    },
+    onError: (error) => setNotice({ tone: 'danger', text: errorMessage(error) }),
+  })
+
+  const savePreferences = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => authApi.updateProfile(payload),
+    onSuccess: async (updated) => {
+      useAuthStore.getState().setUser(updated)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.me })
+      setNotice({ tone: 'success', text: 'Security preferences saved.' })
+    },
+    onError: (error) => setNotice({ tone: 'danger', text: errorMessage(error) }),
+  })
+
+  const mismatch = confirm.length > 0 && next !== confirm
+
+  return (
+    <div className="space-y-5">
+      {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Change password</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <Field label="Current password" required>
+            <Input
+              type="password"
+              autoComplete="current-password"
+              value={current}
+              onChange={(event) => setCurrent(event.target.value)}
+            />
+          </Field>
+          <Field label="New password" required hint="At least 8 characters.">
+            <Input
+              type="password"
+              autoComplete="new-password"
+              value={next}
+              onChange={(event) => setNext(event.target.value)}
+            />
+          </Field>
+          <Field
+            label="Confirm new password"
+            required
+            error={mismatch ? 'Passwords do not match' : undefined}
+          >
+            <Input
+              type="password"
+              autoComplete="new-password"
+              invalid={mismatch}
+              value={confirm}
+              onChange={(event) => setConfirm(event.target.value)}
+            />
+          </Field>
+
+          <Alert tone="info">
+            Changing your password signs you out on every other device.
+          </Alert>
+
+          <Button
+            disabled={!current || next.length < 8 || mismatch}
+            loading={changePassword.isPending}
+            onClick={() => changePassword.mutate()}
+          >
+            Change password
+          </Button>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Two-factor authentication</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <label className="flex items-start gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-brand-600"
+              checked={user?.always_require_2fa ?? false}
+              onChange={(event) =>
+                savePreferences.mutate({ always_require_2fa: event.target.checked })
+              }
+            />
+            <span>
+              Always ask for an SMS code
+              <span className="block text-xs text-slate-500">
+                Even on devices you have marked as trusted.
+              </span>
+            </span>
+          </label>
+
+          <Field
+            label="Auto-logout after inactivity"
+            hint="Your session ends after this long with no activity."
+          >
+            <Select
+              value={String(user?.inactivity_timeout_minutes ?? 30)}
+              onChange={(event) =>
+                savePreferences.mutate({
+                  inactivity_timeout_minutes: Number(event.target.value),
+                })
+              }
+            >
+              <option value="15">15 minutes</option>
+              <option value="30">30 minutes</option>
+              <option value="60">1 hour</option>
+              <option value="240">4 hours</option>
+              <option value="480">8 hours</option>
+            </Select>
+          </Field>
+        </CardBody>
+      </Card>
+    </div>
+  )
+}
+
+// -------------------------------------------------------------------- sessions
+
+export function SessionsSettings() {
+  const queryClient = useQueryClient()
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const sessions = useQuery({ queryKey: queryKeys.sessions, queryFn: authApi.sessions })
+
+  const revoke = useMutation({
+    mutationFn: (id: string) => authApi.revokeSession(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+      setNotice('Session revoked.')
+    },
+  })
+
+  const revokeOthers = useMutation({
+    mutationFn: authApi.revokeOtherSessions,
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+      setNotice(result.message)
+    },
+  })
+
+  if (sessions.isPending) return <PageLoader />
+
+  return (
+    <div className="space-y-5">
+      {notice && <Alert tone="success">{notice}</Alert>}
+
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle>Active sessions</CardTitle>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Every device currently signed in to your account.
+            </p>
+          </div>
+          {(sessions.data?.length ?? 0) > 1 && (
+            <Button
+              variant="outline"
+              size="sm"
+              icon={<LogOut className="h-3.5 w-3.5" />}
+              loading={revokeOthers.isPending}
+              onClick={() => revokeOthers.mutate()}
+            >
+              Sign out everywhere else
+            </Button>
+          )}
+        </CardHeader>
+
+        <ul className="divide-y divide-slate-100">
+          {sessions.data?.map((session) => (
+            <li key={session.id} className="flex items-center justify-between gap-3 px-5 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <Laptop className="h-5 w-5 shrink-0 text-slate-400" />
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-medium text-slate-900">
+                    {session.device_name}
+                    {session.is_current && <Badge tone="success">This device</Badge>}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">
+                    {session.ip_address ?? 'Unknown IP'}
+                    {session.location && ` · ${session.location}`} · active{' '}
+                    {relative(session.last_active_at)}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Signed in {dateTime(session.created_at)}
+                  </p>
+                </div>
+              </div>
+              {!session.is_current && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-danger-600"
+                  loading={revoke.isPending}
+                  onClick={() => revoke.mutate(session.id)}
+                >
+                  Revoke
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </div>
+  )
+}
+
+// --------------------------------------------------------------- notifications
+
+const NOTIFICATION_LABELS: Record<string, string> = {
+  payment_confirmed: 'Payment confirmed',
+  rent_reminder: 'Rent reminders',
+  invoice_issued: 'New invoice issued',
+  receipt_issued: 'Receipt issued',
+  maintenance_update: 'Maintenance updates',
+  maintenance_submitted: 'New maintenance requests',
+  lease_expiry: 'Lease expiry alerts',
+  trial_expiry: 'Trial expiry',
+  unit_status_changed: 'Unit status changes',
+  suspicious_login: 'New sign-in alerts',
+  vacate_notice: 'Notices to vacate',
+  caretaker_daily_summary: 'Daily caretaker summary',
+  welcome: 'Welcome messages',
+  account: 'Account and security',
+}
+
+const LOCKED_TYPES = ['payment_confirmed', 'receipt_issued', 'suspicious_login', 'account']
+
+export function NotificationSettings() {
+  const queryClient = useQueryClient()
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const preferences = useQuery({
+    queryKey: queryKeys.preferences,
+    queryFn: notificationsApi.preferences,
+  })
+
+  const save = useMutation({
+    mutationFn: notificationsApi.setPreferences,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.preferences })
+      setNotice('Preferences saved.')
+    },
+  })
+
+  if (preferences.isPending) return <PageLoader />
+
+  const types = Array.from(new Set(preferences.data?.map((p) => p.notification_type) ?? []))
+  const channels = ['whatsapp', 'sms', 'push']
+
+  const isEnabled = (type: string, channel: string) =>
+    preferences.data?.find((p) => p.notification_type === type && p.channel === channel)?.enabled ??
+    true
+
+  const toggle = (type: string, channel: string, enabled: boolean) =>
+    save.mutate([{ notification_type: type, channel, enabled }])
+
+  return (
+    <div className="space-y-5">
+      {notice && <Alert tone="success">{notice}</Alert>}
+
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle>What we send you</CardTitle>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Money and security alerts cannot be switched off.
+            </p>
+          </div>
+        </CardHeader>
+        <CardBody className="overflow-x-auto p-0">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100">
+                <th className="px-5 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Notification
+                </th>
+                {channels.map((channel) => (
+                  <th
+                    key={channel}
+                    className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  >
+                    {channel === 'sms' ? 'SMS' : humanize(channel)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {types.map((type) => {
+                const locked = LOCKED_TYPES.includes(type)
+                return (
+                  <tr key={type} className="border-b border-slate-50">
+                    <td className="px-5 py-2.5 text-slate-700">
+                      {NOTIFICATION_LABELS[type] ?? humanize(type)}
+                      {locked && (
+                        <span className="ml-2 text-xs text-slate-400">(always on)</span>
+                      )}
+                    </td>
+                    {channels.map((channel) => (
+                      <td key={channel} className="px-3 py-2.5 text-center">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-brand-600 disabled:opacity-40"
+                          disabled={locked}
+                          checked={locked || isEnabled(type, channel)}
+                          onChange={(event) => toggle(type, channel, event.target.checked)}
+                          aria-label={`${type} via ${channel}`}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </CardBody>
+      </Card>
+    </div>
+  )
+}
+
+// -------------------------------------------------------------- organization
+
+export function OrganizationSettings() {
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState<Record<string, string>>({})
+  const [notice, setNotice] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null)
+  const canManage = useAuthStore((state) => state.user?.permissions?.includes('org:manage'))
+
+  const organization = useQuery({
+    queryKey: queryKeys.organization,
+    queryFn: organizationApi.me,
+  })
+
+  useEffect(() => {
+    if (!organization.data) return
+    const data = organization.data as Record<string, unknown>
+    setForm({
+      name: String(data.name ?? ''),
+      legal_name: String(data.legal_name ?? ''),
+      address: String(data.address ?? ''),
+      contact_email: String(data.contact_email ?? ''),
+      contact_phone: String(data.contact_phone ?? ''),
+      kra_pin: String(data.kra_pin ?? ''),
+      default_billing_day: String(data.default_billing_day ?? '1'),
+      default_caretaker_cash_limit: String(data.default_caretaker_cash_limit ?? ''),
+    })
+  }, [organization.data])
+
+  const save = useMutation({
+    mutationFn: () =>
+      organizationApi.update({
+        name: form.name,
+        legal_name: form.legal_name || null,
+        address: form.address || null,
+        contact_email: form.contact_email || null,
+        contact_phone: form.contact_phone || null,
+        kra_pin: form.kra_pin || null,
+        default_billing_day: Number(form.default_billing_day) || 1,
+        default_caretaker_cash_limit: form.default_caretaker_cash_limit
+          ? Number(form.default_caretaker_cash_limit)
+          : null,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.organization })
+      setNotice({ tone: 'success', text: 'Organization settings saved.' })
+    },
+    onError: (error) => setNotice({ tone: 'danger', text: errorMessage(error) }),
+  })
+
+  if (organization.isPending) return <PageLoader />
+
+  const set = (key: string) => (event: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((current) => ({ ...current, [key]: event.target.value }))
+
+  return (
+    <div className="space-y-5">
+      {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Business details</CardTitle>
+          <p className="text-xs text-slate-500">Shown on leases, invoices and receipts</p>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <Field label="Display name">
+            <Input value={form.name ?? ''} onChange={set('name')} disabled={!canManage} />
+          </Field>
+          <Field label="Registered legal name" hint="Used on the lease agreement.">
+            <Input
+              value={form.legal_name ?? ''}
+              onChange={set('legal_name')}
+              disabled={!canManage}
+            />
+          </Field>
+          <Field label="Address">
+            <Input value={form.address ?? ''} onChange={set('address')} disabled={!canManage} />
+          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Contact email">
+              <Input
+                type="email"
+                value={form.contact_email ?? ''}
+                onChange={set('contact_email')}
+                disabled={!canManage}
+              />
+            </Field>
+            <Field label="Contact phone">
+              <Input
+                type="tel"
+                value={form.contact_phone ?? ''}
+                onChange={set('contact_phone')}
+                disabled={!canManage}
+              />
+            </Field>
+          </div>
+          <Field label="KRA PIN" hint="Needed for eTIMS-compliant receipts.">
+            <Input value={form.kra_pin ?? ''} onChange={set('kra_pin')} disabled={!canManage} />
+          </Field>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Defaults</CardTitle>
+        </CardHeader>
+        <CardBody className="grid gap-4 sm:grid-cols-2">
+          <Field label="Default billing day" hint="Used when creating a new tenancy.">
+            <Input
+              type="number"
+              min="1"
+              max="28"
+              value={form.default_billing_day ?? '1'}
+              onChange={set('default_billing_day')}
+              disabled={!canManage}
+            />
+          </Field>
+          <Field
+            label="Default caretaker cash limit (KES)"
+            hint="Cash payments above this alert you."
+          >
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.default_caretaker_cash_limit ?? ''}
+              onChange={set('default_caretaker_cash_limit')}
+              disabled={!canManage}
+            />
+          </Field>
+        </CardBody>
+      </Card>
+
+      {canManage && (
+        <Button loading={save.isPending} onClick={() => save.mutate()}>
+          Save organization settings
+        </Button>
+      )}
+    </div>
+  )
+}

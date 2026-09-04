@@ -1,0 +1,117 @@
+{% extends "pdf_base.html" %}
+{% block title %}Demand for Payment — {{ tenant.reference_code }}{% endblock %}
+
+{% block content %}
+  <div class="doc-title">Formal Demand for Payment of Rent Arrears</div>
+
+  <div class="ref-bar">
+    <div><span>Reference</span> <strong>{{ reference_code }}</strong></div>
+    <div><span>Date</span> <strong>{{ generated_at|longdate }}</strong></div>
+    <div><span>Notice</span> <strong>{{ escalation_label }}</strong></div>
+  </div>
+
+  <table class="kv" style="margin-bottom:5mm">
+    <tr><td class="label">To</td><td class="value">{{ tenant.full_name }}</td></tr>
+    <tr><td class="label">Phone</td><td class="value">{{ tenant.phone_number }}</td></tr>
+    <tr><td class="label">Premises</td>
+        <td class="value">Unit {{ unit.unit_number }}, {{ property.name }}, {{ property.address }}</td></tr>
+    <tr><td class="label">Tenancy</td><td class="value">{{ tenancy.reference_code }}</td></tr>
+  </table>
+
+  <p>Dear {{ tenant.full_name }},</p>
+
+  <p>
+    Our records show that rent and other charges due under your tenancy of the above premises
+    remain unpaid. As at {{ as_at|longdate }} the outstanding balance is:
+  </p>
+
+  <div class="panel" style="text-align:center;background:#fef2f2;border-color:#fecaca">
+    <div style="font-size:9pt;color:#991b1b;text-transform:uppercase;letter-spacing:0.06em">
+      Total now due
+    </div>
+    <div class="amount-hero" style="color:#b91c1c">KES {{ total_owed|kes }}</div>
+    <div style="font-size:9pt;color:#7f1d1d;margin-top:1mm">
+      Oldest invoice {{ days_overdue }} days overdue
+    </div>
+  </div>
+
+  <h2>Invoices outstanding</h2>
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Invoice</th>
+        <th>Period</th>
+        <th>Due</th>
+        <th class="num">Days late</th>
+        <th class="num">Balance (KES)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in invoices %}
+        <tr>
+          <td>{{ row.reference_code }}</td>
+          <td>{{ row.period_start|longdate }}</td>
+          <td>{{ row.due_date|longdate }}</td>
+          <td class="num">{{ row.days_overdue }}</td>
+          <td class="num">{{ row.balance|kes }}</td>
+        </tr>
+      {% endfor %}
+      <tr class="total">
+        <td colspan="4">Total outstanding</td>
+        <td class="num">{{ total_owed|kes }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>What you must do</h2>
+  <p>
+    You are required to pay the full sum of <strong>KES {{ total_owed|kes }}</strong> within
+    <strong>{{ deadline_days }} days</strong> of the date of this letter, that is, on or before
+    <strong>{{ deadline|longdate }}</strong>.
+  </p>
+  {% if payment_instructions %}
+    <p>{{ payment_instructions }}</p>
+  {% endif %}
+  <p>
+    If you are unable to pay the whole amount, contact us immediately on
+    {{ organization.contact_phone or organization.contact_email or "the number above" }} to agree a
+    written payment plan. A plan agreed in writing suspends the steps described below.
+  </p>
+
+  <h2>If payment is not made</h2>
+  <p>
+    Should the arrears remain unpaid after {{ deadline|longdate }}, we shall be entitled to take
+    any or all of the following steps without further notice to you:
+  </p>
+  <div class="clause">
+    <p>
+      (a) terminate the tenancy and require you to give up possession of the premises;<br />
+      (b) refer the debt for recovery, including to a licensed debt collection agent;<br />
+      (c) commence proceedings before the Rent Restriction Tribunal or a court of competent
+      jurisdiction for the arrears, interest, and the costs of recovery;<br />
+      (d) apply the security deposit held against the arrears, which does not discharge any balance
+      remaining.
+    </p>
+  </div>
+
+  <p>
+    This letter is issued without prejudice to any of our rights under the tenancy agreement or at
+    law, all of which are expressly reserved.
+  </p>
+
+  <div class="signatures">
+    <div>
+      <div class="sig-line">
+        For and on behalf of {{ organization.legal_name or organization.name }}
+      </div>
+    </div>
+    <div>
+      <div class="sig-line">Date: {{ generated_at|longdate }}</div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block footnote %}
+  Demand letter {{ reference_code }} issued by {{ organization.legal_name or organization.name }}
+  on {{ generated_at|longdate }}. Retain a copy — it may be produced in any subsequent proceedings.
+{% endblock %}

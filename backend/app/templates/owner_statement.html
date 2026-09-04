@@ -1,0 +1,240 @@
+{% extends "pdf_base.html" %}
+{% block title %}Owner Statement {{ disbursement.reference_code }}{% endblock %}
+
+{% block extra_styles %}
+  <style>
+    .period-hero {
+      background: #f8fafc;
+      border-radius: 2mm;
+      padding: 4mm;
+      text-align: center;
+      margin-bottom: 5mm;
+    }
+    .period-hero .label {
+      font-size: 9pt;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .settlement td.label { color: #475569; }
+    .settlement td.num { text-align: right; }
+    .settlement tr.deduction td { color: #b91c1c; }
+    .settlement tr.total td {
+      font-weight: 700;
+      font-size: 12pt;
+      border-top: 1.5px solid #0f172a;
+      padding-top: 2mm;
+    }
+    .muted { color: #94a3b8; font-style: italic; }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="doc-title">Owner Statement</div>
+
+  <div class="ref-bar">
+    <div><span>Statement No.</span> <strong>{{ disbursement.reference_code }}</strong></div>
+    <div><span>Owner</span> <strong>{{ owner.full_name }} ({{ owner.reference_code }})</strong></div>
+    <div><span>Issued</span> <strong>{{ generated_at|longdate }}</strong></div>
+  </div>
+
+  <div class="period-hero">
+    <div class="label">Statement period</div>
+    <div style="font-size:11pt;font-weight:600">
+      {{ disbursement.period_start|longdate }} — {{ disbursement.period_end|longdate }}
+    </div>
+    <div class="label" style="margin-top:3mm">Net disbursement</div>
+    <div class="amount-hero">KES {{ disbursement.net_amount|kes }}</div>
+    <div style="margin-top:2mm">
+      <span class="badge {{ 'badge-paid' if disbursement.status.value == 'completed' else 'badge-due' }}">
+        {{ disbursement.status.value|replace("_", " ")|title }}
+      </span>
+    </div>
+  </div>
+
+  <h2>Rent collected by unit</h2>
+  {% if units %}
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Property</th>
+          <th>Unit</th>
+          <th>Tenant</th>
+          <th class="num">Payments</th>
+          <th class="num">Gross rent (KES)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in units %}
+          <tr>
+            <td>{{ row.property_name }}</td>
+            <td>{{ row.unit_number }}</td>
+            <td>{{ row.tenant_name or "—" }}</td>
+            <td class="num">{{ row.payment_count }}</td>
+            <td class="num">{{ row.gross_rent|kes }}</td>
+          </tr>
+        {% endfor %}
+        <tr class="total">
+          <td colspan="4">Total gross rent collected</td>
+          <td class="num">{{ disbursement.gross_rent|kes }}</td>
+        </tr>
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No rent was collected on your units during this period.</p>
+  {% endif %}
+
+  <h2>Deductions</h2>
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Detail</th>
+        <th class="num">Amount (KES)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Management fee</td>
+        <td>{{ owner.management_fee_percent }}% of gross rent collected</td>
+        <td class="num">{{ disbursement.management_fee|kes }}</td>
+      </tr>
+      {% for item in maintenance %}
+        <tr>
+          <td>Maintenance</td>
+          <td>
+            {{ item.title }}
+            <div style="font-size:8pt;color:#64748b">
+              {{ item.property_name }}{% if item.unit_number %} · Unit {{ item.unit_number }}{% endif %}
+              {% if item.completed_at %} · completed {{ item.completed_at|longdate }}{% endif %}
+            </div>
+          </td>
+          <td class="num">{{ item.cost|kes }}</td>
+        </tr>
+      {% endfor %}
+      {% if not maintenance %}
+        <tr>
+          <td>Maintenance</td>
+          <td class="muted">No maintenance costs in this period</td>
+          <td class="num">0.00</td>
+        </tr>
+      {% endif %}
+      {% if disbursement.other_deductions and disbursement.other_deductions > 0 %}
+        <tr>
+          <td>Other deductions</td>
+          <td>{{ disbursement.notes or "As agreed" }}</td>
+          <td class="num">{{ disbursement.other_deductions|kes }}</td>
+        </tr>
+      {% endif %}
+      <tr class="total">
+        <td colspan="2">Total deductions</td>
+        <td class="num">{{ total_deductions|kes }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Settlement</h2>
+  <div class="panel">
+    <table class="settlement">
+      <tr>
+        <td class="label">Gross rent collected</td>
+        <td class="num">{{ disbursement.gross_rent|kes }}</td>
+      </tr>
+      <tr class="deduction">
+        <td class="label">Less management fee</td>
+        <td class="num">({{ disbursement.management_fee|kes }})</td>
+      </tr>
+      <tr class="deduction">
+        <td class="label">Less maintenance costs</td>
+        <td class="num">({{ disbursement.maintenance_costs|kes }})</td>
+      </tr>
+      {% if disbursement.other_deductions and disbursement.other_deductions > 0 %}
+        <tr class="deduction">
+          <td class="label">Less other deductions</td>
+          <td class="num">({{ disbursement.other_deductions|kes }})</td>
+        </tr>
+      {% endif %}
+      <tr class="total">
+        <td>Net disbursed to you</td>
+        <td class="num">KES {{ disbursement.net_amount|kes }}</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <h3>Payout details</h3>
+      <table class="kv">
+        <tr>
+          <td class="label">Method</td>
+          <td class="value">
+            {{ disbursement.payment_method|replace("_", " ")|title if disbursement.payment_method else "Pending" }}
+          </td>
+        </tr>
+        <tr>
+          <td class="label">Reference</td>
+          <td class="value">{{ disbursement.payment_reference or "—" }}</td>
+        </tr>
+        <tr>
+          <td class="label">Paid on</td>
+          <td class="value">{{ disbursement.paid_at|longdate if disbursement.paid_at else "—" }}</td>
+        </tr>
+        <tr>
+          <td class="label">Paid to</td>
+          <td class="value">{{ payout_destination }}</td>
+        </tr>
+      </table>
+    </div>
+    <div class="panel">
+      <h3>Year to date ({{ ytd.year }})</h3>
+      <table class="kv">
+        <tr><td class="label">Gross rent</td><td class="value">KES {{ ytd.gross_rent|kes }}</td></tr>
+        <tr><td class="label">Management fees</td><td class="value">KES {{ ytd.management_fee|kes }}</td></tr>
+        <tr><td class="label">Maintenance</td><td class="value">KES {{ ytd.maintenance_costs|kes }}</td></tr>
+        <tr><td class="label">Net disbursed</td><td class="value">KES {{ ytd.net_amount|kes }}</td></tr>
+        <tr><td class="label">Statements</td><td class="value">{{ ytd.count }}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h2>Outstanding arrears</h2>
+  {% if arrears %}
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Property</th>
+          <th>Unit</th>
+          <th>Tenant</th>
+          <th class="num">Owed (KES)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in arrears %}
+          <tr>
+            <td>{{ row.property_name }}</td>
+            <td>{{ row.unit_number }}</td>
+            <td>{{ row.tenant_name or "—" }}</td>
+            <td class="num">{{ row.balance|kes }}</td>
+          </tr>
+        {% endfor %}
+        <tr class="total">
+          <td colspan="3">Total outstanding</td>
+          <td class="num">{{ total_arrears|kes }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size:8.5pt;color:#64748b;margin-top:2mm">
+      Arrears are amounts tenants still owe. They are not included in the settlement above and
+      will appear on a future statement once collected.
+    </p>
+  {% else %}
+    <p class="muted">All rent is up to date on your units — no arrears outstanding.</p>
+  {% endif %}
+{% endblock %}
+
+{% block footnote %}
+  Statement {{ disbursement.reference_code }} prepared by
+  {{ organization.legal_name or organization.name }} on behalf of {{ owner.full_name }}.
+  Generated by RentFlow Kenya on {{ generated_at|longdate }}. Queries about this statement should
+  be directed to {{ organization.contact_phone or organization.contact_email or "your agency" }}.
+{% endblock %}

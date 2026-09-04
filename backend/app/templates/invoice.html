@@ -1,0 +1,77 @@
+{% extends "pdf_base.html" %}
+{% block title %}Invoice {{ invoice.reference_code }}{% endblock %}
+
+{% block content %}
+  <div class="doc-title">Rent Invoice</div>
+
+  <div class="ref-bar">
+    <div><span>Invoice No.</span> <strong>{{ invoice.reference_code }}</strong></div>
+    <div><span>Issued</span> <strong>{{ invoice.issue_date|longdate }}</strong></div>
+    <div><span>Due</span> <strong>{{ invoice.due_date|longdate }}</strong></div>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <h3>Billed to</h3>
+      <table class="kv">
+        <tr><td class="label">Tenant</td><td class="value">{{ tenant.full_name }}</td></tr>
+        <tr><td class="label">Phone</td><td class="value">{{ tenant.phone_number }}</td></tr>
+        <tr><td class="label">Reference</td><td class="value">{{ tenant.reference_code }}</td></tr>
+      </table>
+    </div>
+    <div class="panel">
+      <h3>For</h3>
+      <table class="kv">
+        <tr><td class="label">Property</td><td class="value">{{ property.name }}</td></tr>
+        <tr><td class="label">Unit</td><td class="value">{{ unit.unit_number }}</td></tr>
+        <tr>
+          <td class="label">Period</td>
+          <td class="value">{{ invoice.period_start|longdate }} – {{ invoice.period_end|longdate }}</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <table class="data" style="margin-top:4mm">
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th class="num">Qty</th>
+        <th class="num">Rate (KES)</th>
+        <th class="num">Amount (KES)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in line_items %}
+        <tr>
+          <td>{{ item.description }}</td>
+          <td class="num">{{ "%g"|format(item.quantity|float) }}</td>
+          <td class="num">{{ item.unit_amount|kes }}</td>
+          <td class="num">{{ item.amount|kes }}</td>
+        </tr>
+      {% endfor %}
+      <tr class="total">
+        <td colspan="3">Total due</td>
+        <td class="num">{{ invoice.total|kes }}</td>
+      </tr>
+      {% if invoice.amount_paid and invoice.amount_paid > 0 %}
+        <tr>
+          <td colspan="3">Paid to date</td>
+          <td class="num">({{ invoice.amount_paid|kes }})</td>
+        </tr>
+        <tr class="total">
+          <td colspan="3">Balance</td>
+          <td class="num">{{ balance|kes }}</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  <div class="panel" style="margin-top:5mm">
+    <h3>How to pay</h3>
+    <p style="margin:0">
+      Pay by M-Pesa from the RentFlow tenant portal, or hand cash to your caretaker and ask for a
+      receipt. Quote invoice <strong>{{ invoice.reference_code }}</strong> on any payment.
+    </p>
+  </div>
+{% endblock %}

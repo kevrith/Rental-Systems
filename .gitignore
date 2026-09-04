@@ -1,0 +1,57 @@
+# --- Environment & secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Python / Backend ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.env/
+
+# --- Runtime artifacts / uploaded data ---
+backend/var/
+celerybeat-schedule
+celerybeat.pid
+*.log
+
+# --- Node / Frontend ---
+node_modules/
+dist/
+dist-ssr/
+dev-dist/
+*.local
+.vite/
+
+# --- Docker ---
+*.pid
+
+# --- Editors / OS ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.claude/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# --- Logs ---
+*.log
+npm-debug.log*
+logs/
+
+# --- Uploads / local storage stub ---
+/backend/storage/

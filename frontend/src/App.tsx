@@ -1,0 +1,335 @@
+import { lazy, Suspense } from 'react'
+import { Navigate, Route, Routes } from 'react-router-dom'
+
+import { AppShell } from '@/components/layout/AppShell'
+import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { AcceptInvitePage, PortalSetupPage } from '@/features/auth/AcceptInvitePage'
+import { LoginPage } from '@/features/auth/LoginPage'
+import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from '@/features/auth/PasswordPages'
+import { RegisterPage } from '@/features/auth/RegisterPage'
+import { PortalShell } from '@/features/portal/PortalShell'
+import { HomeRedirect } from '@/pages/HomeRedirect'
+import { NotFoundPage } from '@/pages/NotFoundPage'
+import { PageLoader } from '@/components/ui'
+
+/*
+ * Every screen past the front door is code-split (US-059).
+ *
+ * The whole app used to ship as one 1.26MB bundle, so a caretaker on 3G
+ * downloaded the analytics charts and the lease editor before they could see
+ * the login form. Each route below is fetched the first time it is opened and
+ * cached by the service worker after that; the auth pages, the shells and the
+ * dashboard stay eager because they are the first paint.
+ */
+const AgencyDashboardPage = lazy(() =>
+  import('@/features/agency/AgencyDashboardPage').then((m) => ({ default: m.AgencyDashboardPage })),
+)
+const AnalyticsPage = lazy(() =>
+  import('@/features/analytics/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })),
+)
+const ArrearsPage = lazy(() =>
+  import('@/features/arrears/ArrearsPage').then((m) => ({ default: m.ArrearsPage })),
+)
+const BulkUnitsPage = lazy(() =>
+  import('@/features/units/UnitFormPage').then((m) => ({ default: m.BulkUnitsPage })),
+)
+const CaretakerHomePage = lazy(() =>
+  import('@/features/caretaker/CaretakerHomePage').then((m) => ({ default: m.CaretakerHomePage })),
+)
+const CaretakerPerformancePage = lazy(() =>
+  import('@/features/automation/CaretakerPerformancePage').then((m) => ({
+    default: m.CaretakerPerformancePage,
+  })),
+)
+const DashboardPage = lazy(() =>
+  import('@/features/dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+)
+const DisbursementsPage = lazy(() =>
+  import('@/features/agency/DisbursementsPage').then((m) => ({ default: m.DisbursementsPage })),
+)
+const EtimsSettingsPage = lazy(() =>
+  import('@/features/analytics/EtimsSettingsPage').then((m) => ({ default: m.EtimsSettingsPage })),
+)
+const InspectionCapturePage = lazy(() =>
+  import('@/features/inspections/InspectionCapturePage').then((m) => ({ default: m.InspectionCapturePage })),
+)
+const InspectionDetailPage = lazy(() =>
+  import('@/features/inspections/InspectionDetailPage').then((m) => ({ default: m.InspectionDetailPage })),
+)
+const InspectionsPage = lazy(() =>
+  import('@/features/inspections/InspectionsPage').then((m) => ({ default: m.InspectionsPage })),
+)
+const InvoiceDetailPage = lazy(() =>
+  import('@/features/invoices/InvoicesPage').then((m) => ({ default: m.InvoiceDetailPage })),
+)
+const InvoicesPage = lazy(() =>
+  import('@/features/invoices/InvoicesPage').then((m) => ({ default: m.InvoicesPage })),
+)
+const LeaseTemplatesPage = lazy(() =>
+  import('@/features/lease-templates/LeaseTemplatesPage').then((m) => ({ default: m.LeaseTemplatesPage })),
+)
+const MaintenanceAnalyticsPage = lazy(() =>
+  import('@/features/maintenance/MaintenanceAnalyticsPage').then((m) => ({
+    default: m.MaintenanceAnalyticsPage,
+  })),
+)
+const MaintenanceDetailPage = lazy(() =>
+  import('@/features/maintenance/MaintenanceDetailPage').then((m) => ({
+    default: m.MaintenanceDetailPage,
+  })),
+)
+const MaintenanceFormPage = lazy(() =>
+  import('@/features/maintenance/MaintenancePage').then((m) => ({ default: m.MaintenanceFormPage })),
+)
+const MaintenancePage = lazy(() =>
+  import('@/features/maintenance/MaintenancePage').then((m) => ({ default: m.MaintenancePage })),
+)
+const VendorsPage = lazy(() =>
+  import('@/features/vendors/VendorsPage').then((m) => ({ default: m.VendorsPage })),
+)
+const VendorDetailPage = lazy(() =>
+  import('@/features/vendors/VendorDetailPage').then((m) => ({ default: m.VendorDetailPage })),
+)
+const MeterReadingsPage = lazy(() =>
+  import('@/features/meters/MeterReadingsPage').then((m) => ({ default: m.MeterReadingsPage })),
+)
+const NotificationSettings = lazy(() =>
+  import('@/features/settings/SettingsPage').then((m) => ({ default: m.NotificationSettings })),
+)
+const NotificationsPage = lazy(() =>
+  import('@/features/notifications/NotificationsPage').then((m) => ({ default: m.NotificationsPage })),
+)
+const OrganizationSettings = lazy(() =>
+  import('@/features/settings/SettingsPage').then((m) => ({ default: m.OrganizationSettings })),
+)
+const OwnerPortalPage = lazy(() =>
+  import('@/features/agency/OwnerPortalPage').then((m) => ({ default: m.OwnerPortalPage })),
+)
+const OwnerProfileDetailPage = lazy(() =>
+  import('@/features/agency/OwnerProfileDetailPage').then((m) => ({ default: m.OwnerProfileDetailPage })),
+)
+const OwnerProfileFormPage = lazy(() =>
+  import('@/features/agency/OwnerProfileFormPage').then((m) => ({ default: m.OwnerProfileFormPage })),
+)
+const OwnerProfilesPage = lazy(() =>
+  import('@/features/agency/OwnerProfilesPage').then((m) => ({ default: m.OwnerProfilesPage })),
+)
+const PaymentDetailPage = lazy(() =>
+  import('@/features/payments/PaymentDetailPage').then((m) => ({ default: m.PaymentDetailPage })),
+)
+const PaymentsPage = lazy(() =>
+  import('@/features/payments/PaymentsPage').then((m) => ({ default: m.PaymentsPage })),
+)
+const PortalDocumentsPage = lazy(() =>
+  import('@/features/portal/PortalPages').then((m) => ({ default: m.PortalDocumentsPage })),
+)
+const PortalHomePage = lazy(() =>
+  import('@/features/portal/PortalHomePage').then((m) => ({ default: m.PortalHomePage })),
+)
+const PortalMaintenancePage = lazy(() =>
+  import('@/features/portal/PortalPages').then((m) => ({ default: m.PortalMaintenancePage })),
+)
+const PortalPaymentsPage = lazy(() =>
+  import('@/features/portal/PortalPages').then((m) => ({ default: m.PortalPaymentsPage })),
+)
+const ProfileSettings = lazy(() =>
+  import('@/features/settings/SettingsPage').then((m) => ({ default: m.ProfileSettings })),
+)
+const PropertiesPage = lazy(() =>
+  import('@/features/properties/PropertiesPage').then((m) => ({ default: m.PropertiesPage })),
+)
+const PropertyDetailPage = lazy(() =>
+  import('@/features/properties/PropertyDetailPage').then((m) => ({ default: m.PropertyDetailPage })),
+)
+const PropertyFormPage = lazy(() =>
+  import('@/features/properties/PropertyFormPage').then((m) => ({ default: m.PropertyFormPage })),
+)
+const PropertyVaultPage = lazy(() =>
+  import('@/features/vault/VaultPages').then((m) => ({ default: m.PropertyVaultPage })),
+)
+const RecordMeterReadingPage = lazy(() =>
+  import('@/features/meters/MeterReadingsPage').then((m) => ({ default: m.RecordMeterReadingPage })),
+)
+const RecordPaymentPage = lazy(() =>
+  import('@/features/payments/RecordPaymentPage').then((m) => ({ default: m.RecordPaymentPage })),
+)
+const RenewalPage = lazy(() =>
+  import('@/features/automation/RenewalPage').then((m) => ({ default: m.RenewalPage })),
+)
+const SecuritySettings = lazy(() =>
+  import('@/features/settings/SettingsPage').then((m) => ({ default: m.SecuritySettings })),
+)
+const SessionsSettings = lazy(() =>
+  import('@/features/settings/SettingsPage').then((m) => ({ default: m.SessionsSettings })),
+)
+const SettingsLayout = lazy(() =>
+  import('@/features/settings/SettingsPage').then((m) => ({ default: m.SettingsLayout })),
+)
+const TaskMonitorPage = lazy(() =>
+  import('@/features/automation/TaskMonitorPage').then((m) => ({ default: m.TaskMonitorPage })),
+)
+const TeamPage = lazy(() => import('@/features/team/TeamPage').then((m) => ({ default: m.TeamPage })))
+const TenanciesPage = lazy(() =>
+  import('@/features/tenancies/TenanciesPage').then((m) => ({ default: m.TenanciesPage })),
+)
+const TenancyDetailPage = lazy(() =>
+  import('@/features/tenancies/TenancyDetailPage').then((m) => ({ default: m.TenancyDetailPage })),
+)
+const TenancyWizardPage = lazy(() =>
+  import('@/features/tenancies/TenancyWizardPage').then((m) => ({ default: m.TenancyWizardPage })),
+)
+const TenantDetailPage = lazy(() =>
+  import('@/features/tenants/TenantDetailPage').then((m) => ({ default: m.TenantDetailPage })),
+)
+const TenantFormPage = lazy(() =>
+  import('@/features/tenants/TenantFormPage').then((m) => ({ default: m.TenantFormPage })),
+)
+const TenantVaultPage = lazy(() =>
+  import('@/features/vault/VaultPages').then((m) => ({ default: m.TenantVaultPage })),
+)
+const TenantsPage = lazy(() =>
+  import('@/features/tenants/TenantsPage').then((m) => ({ default: m.TenantsPage })),
+)
+const UnitDetailPage = lazy(() =>
+  import('@/features/units/UnitDetailPage').then((m) => ({ default: m.UnitDetailPage })),
+)
+const UnitFormPage = lazy(() =>
+  import('@/features/units/UnitFormPage').then((m) => ({ default: m.UnitFormPage })),
+)
+const UnitsPage = lazy(() => import('@/features/units/UnitsPage').then((m) => ({ default: m.UnitsPage })))
+
+const STAFF_ROLES = [
+  'owner',
+  'agency_admin',
+  'property_manager',
+  'caretaker',
+  'accountant',
+  'owner_portal_user',
+  'system_admin',
+]
+
+/** Shown while a route's chunk is fetched. Deliberately the same loader the
+ *  screens themselves use, so a slow network looks like a slow query. */
+function RouteFallback() {
+  return <PageLoader />
+}
+
+function App() {
+  return (
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
+        {/* Public */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/accept-invite" element={<AcceptInvitePage />} />
+        <Route path="/portal/setup" element={<PortalSetupPage />} />
+        {/* The renewal link is the tenant's whole authentication — no account. */}
+        <Route path="/renew/:token" element={<RenewalPage />} />
+
+        {/* Tenant portal */}
+        <Route element={<ProtectedRoute allowRoles={['tenant']} />}>
+          <Route element={<PortalShell />}>
+            <Route path="/portal" element={<PortalHomePage />} />
+            <Route path="/portal/payments" element={<PortalPaymentsPage />} />
+            <Route path="/portal/documents" element={<PortalDocumentsPage />} />
+            <Route path="/portal/maintenance" element={<PortalMaintenancePage />} />
+          </Route>
+        </Route>
+
+        {/* Staff app */}
+        <Route element={<ProtectedRoute allowRoles={STAFF_ROLES} />}>
+          <Route element={<AppShell />}>
+            <Route path="/" element={<HomeRedirect />} />
+            <Route path="/dashboard" element={<HomeRedirect />} />
+            <Route path="/overview" element={<DashboardPage />} />
+            <Route path="/today" element={<CaretakerHomePage />} />
+
+            <Route path="/properties" element={<PropertiesPage />} />
+            <Route path="/properties/new" element={<PropertyFormPage />} />
+            <Route path="/properties/:propertyId" element={<PropertyDetailPage />} />
+            <Route path="/properties/:propertyId/edit" element={<PropertyFormPage />} />
+            <Route path="/properties/:propertyId/documents" element={<PropertyVaultPage />} />
+
+            <Route path="/units" element={<UnitsPage />} />
+            <Route path="/units/new" element={<UnitFormPage />} />
+            <Route path="/units/bulk" element={<BulkUnitsPage />} />
+            <Route path="/units/:unitId" element={<UnitDetailPage />} />
+            <Route path="/units/:unitId/edit" element={<UnitFormPage />} />
+
+            <Route path="/tenants" element={<TenantsPage />} />
+            <Route path="/tenants/new" element={<TenantFormPage />} />
+            <Route path="/tenants/:tenantId" element={<TenantDetailPage />} />
+            <Route path="/tenants/:tenantId/edit" element={<TenantFormPage />} />
+            <Route path="/tenants/:tenantId/documents" element={<TenantVaultPage />} />
+
+            <Route path="/tenancies" element={<TenanciesPage />} />
+            <Route path="/tenancies/new" element={<TenancyWizardPage />} />
+            <Route path="/tenancies/:tenancyId" element={<TenancyDetailPage />} />
+            <Route path="/lease-templates" element={<LeaseTemplatesPage />} />
+
+            <Route path="/payments" element={<PaymentsPage />} />
+            <Route path="/payments/new" element={<RecordPaymentPage />} />
+            <Route path="/payments/:paymentId" element={<PaymentDetailPage />} />
+
+            <Route path="/invoices" element={<InvoicesPage />} />
+            <Route path="/invoices/:invoiceId" element={<InvoiceDetailPage />} />
+
+            <Route path="/arrears" element={<ArrearsPage />} />
+            <Route path="/finances" element={<DashboardPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
+
+            <Route path="/maintenance" element={<MaintenancePage />} />
+            <Route path="/maintenance/new" element={<MaintenanceFormPage />} />
+            <Route path="/maintenance/analytics" element={<MaintenanceAnalyticsPage />} />
+            <Route path="/maintenance/:requestId" element={<MaintenanceDetailPage />} />
+
+            {/* Phase 3 — vendor registry */}
+            <Route path="/vendors" element={<VendorsPage />} />
+            <Route path="/vendors/:vendorId" element={<VendorDetailPage />} />
+
+            <Route path="/inspections" element={<InspectionsPage />} />
+            <Route path="/inspections/new" element={<InspectionCapturePage />} />
+            <Route path="/inspections/:inspectionId" element={<InspectionDetailPage />} />
+            <Route path="/inspections/:inspectionId/capture" element={<InspectionCapturePage />} />
+
+            <Route path="/meter-readings" element={<MeterReadingsPage />} />
+            <Route path="/meter-readings/new" element={<RecordMeterReadingPage />} />
+
+            {/* Agency mode (Phase 2) */}
+            <Route path="/agency" element={<AgencyDashboardPage />} />
+            <Route path="/agency/owners" element={<OwnerProfilesPage />} />
+            <Route path="/agency/owners/new" element={<OwnerProfileFormPage />} />
+            <Route path="/agency/owners/:ownerId" element={<OwnerProfileDetailPage />} />
+            <Route path="/agency/owners/:ownerId/edit" element={<OwnerProfileFormPage />} />
+            <Route path="/agency/disbursements" element={<DisbursementsPage />} />
+
+            {/* Mode 3 — read-only owner portal */}
+            <Route path="/owner-portal" element={<OwnerPortalPage />} />
+
+            <Route path="/team" element={<TeamPage />} />
+            <Route path="/team/performance" element={<CaretakerPerformancePage />} />
+            <Route path="/automation" element={<TaskMonitorPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
+
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route index element={<Navigate to="/settings/profile" replace />} />
+              <Route path="profile" element={<ProfileSettings />} />
+              <Route path="security" element={<SecuritySettings />} />
+              <Route path="sessions" element={<SessionsSettings />} />
+              <Route path="notifications" element={<NotificationSettings />} />
+              <Route path="organization" element={<OrganizationSettings />} />
+              <Route path="etims" element={<EtimsSettingsPage />} />
+            </Route>
+          </Route>
+        </Route>
+
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </Suspense>
+  )
+}
+
+export default App

@@ -1,0 +1,107 @@
+{% extends "pdf_base.html" %}
+{% block title %}Lease Renewal — {{ renewal.reference_code }}{% endblock %}
+
+{% block content %}
+  <div class="doc-title">Lease Renewal Agreement</div>
+
+  <div class="ref-bar">
+    <div><span>Renewal No.</span> <strong>{{ renewal.reference_code }}</strong></div>
+    <div><span>Original tenancy</span> <strong>{{ tenancy.reference_code }}</strong></div>
+    <div><span>Date</span> <strong>{{ generated_at|longdate }}</strong></div>
+  </div>
+
+  <p>
+    This Agreement renews the tenancy of <strong>{{ tenant.full_name }}</strong> in respect of
+    Unit {{ unit.unit_number }}, {{ property.name }}, {{ property.address }}, granted by
+    <strong>{{ organization.legal_name or organization.name }}</strong>, on the terms below. All
+    other terms of the original tenancy agreement dated
+    {{ tenancy.start_date|longdate }} continue unchanged.
+  </p>
+
+  <h2>Renewed terms</h2>
+  <div class="panel">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Term</th>
+          <th>Current</th>
+          <th>From {{ renewal.new_start_date|longdate }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Monthly rent</td>
+          <td>KES {{ renewal.current_rent|kes }}</td>
+          <td><strong>KES {{ renewal.proposed_rent|kes }}</strong></td>
+        </tr>
+        <tr>
+          <td>Rent adjustment</td>
+          <td>—</td>
+          <td>
+            {% if renewal.rent_increase_percent and renewal.rent_increase_percent > 0 %}
+              +{{ renewal.rent_increase_percent }}%
+            {% else %}
+              No change
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td>Term</td>
+          <td>Expires {{ tenancy.end_date|longdate }}</td>
+          <td>
+            {{ renewal.term_months }} months, to {{ renewal.new_end_date|longdate }}
+          </td>
+        </tr>
+        <tr>
+          <td>Deposit held</td>
+          <td colspan="2">KES {{ tenancy.deposit_amount|kes }} (carried forward, no top-up required)</td>
+        </tr>
+        <tr>
+          <td>Rent due</td>
+          <td colspan="2">
+            On or before day {{ tenancy.billing_day }} of each month
+          </td>
+        </tr>
+        <tr>
+          <td>Notice period</td>
+          <td colspan="2">{{ tenancy.notice_period_days }} days, by either party</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  {% if renewal.rent_increase_percent and renewal.rent_increase_percent > 0 %}
+    <p style="font-size:9pt;color:#64748b">
+      The rent adjustment above takes effect on {{ renewal.new_start_date|longdate }}. Rent for
+      periods before that date remains at the current rate.
+    </p>
+  {% endif %}
+
+  <h2>Accepting or declining</h2>
+  <p>
+    Please respond by <strong>{{ renewal.respond_by|longdate }}</strong>. Accepting this renewal
+    continues your tenancy on the terms above with no break in occupation. Declining it ends the
+    tenancy on {{ tenancy.end_date|longdate }}, and the usual move-out inspection and deposit
+    settlement will follow.
+  </p>
+  <p>
+    If we have not heard from you by {{ renewal.respond_by|longdate }}, we will contact you and
+    your caretaker to agree what happens next.
+  </p>
+
+  <div class="signatures">
+    <div>
+      <div class="sig-line">{{ tenant.full_name }} — Tenant</div>
+    </div>
+    <div>
+      <div class="sig-line">
+        For {{ organization.legal_name or organization.name }} — Landlord
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block footnote %}
+  Renewal {{ renewal.reference_code }} for tenancy {{ tenancy.reference_code }}, generated on
+  {{ generated_at|longdate }}. This document has effect only once accepted by the tenant.
+{% endblock %}
