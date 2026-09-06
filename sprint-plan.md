@@ -1936,25 +1936,66 @@ Acceptance Criteria:
 - Milestone celebrations: confetti on first 100 payments processed, 50th tenant, first eTIMS receipt
 
 ### 🔧 Technical Tasks
-- [ ] Build onboarding wizard state machine and UI
-- [ ] Build contextual help system (tooltip + side panel)
-- [ ] Build knowledge base CMS (admin editable)
-- [ ] Build in-app search for help content
-- [ ] Build health score calculation service (weekly Celery task)
-- [ ] Build customer health dashboard (internal admin view)
-- [ ] Build at-risk alert notification system
-- [ ] Build referral tracking system
-- [ ] Build NPS survey trigger service (post-milestone)
-- [ ] Build feature voting board
-- [ ] Build in-app changelog system
-- [ ] Build milestone detection and celebration service
+- [x] Build onboarding wizard state machine and UI
+- [x] Build contextual help system (side panel, global header trigger — not per-field tooltips)
+- [x] Build knowledge base CMS (admin editable) — `/internal/content`, platform-staff only
+- [x] Build in-app search for help content
+- [x] Build health score calculation service (weekly Celery task, `rentflow.compute_health_scores`)
+- [x] Build customer health dashboard (internal admin view) — `/internal/health`
+- [x] Build at-risk alert notification system
+- [x] Build referral tracking system (credit is a ledger — see note below)
+- [x] Build NPS survey trigger service (post-milestone)
+- [x] Build feature voting board
+- [x] Build in-app changelog system
+- [x] Build milestone detection and celebration service
+
+**Sprint 20 built:** RentFlow had no cross-tenant identity at all before this —
+every endpoint resolved one organisation. `User.is_platform_staff` plus a new
+`require_platform_staff` dependency (`app/api/deps.py`) is the whole
+mechanism: it reuses the existing JWT login, so RentFlow's own team is just a
+normal user with one extra flag, gating a new `/internal/*` router that
+deliberately reads across every organisation — health scores, alerts, and now
+the knowledge-base/changelog CMS the previous paragraph's checkboxes needed
+(built after the first pass shipped with the backend CRUD but no UI to drive
+it — caught in browser testing, not by any gate). Health, help, referrals,
+NPS, milestones and support requests are per-organisation tables joining
+`PHASE_4_ORG_SCOPED_TABLES`; help articles, the feature board and the
+changelog are platform-wide, the same treatment `task_runs` already gets, so
+they carry no `organization_id` and sit outside RLS on purpose.
+
+Referral credit (`Organization.credit_months`) is a ledger, not an applied
+invoice discount — RentFlow has no billing engine yet for its own
+subscription fee, so there was nothing to hook a real "upgrade" event onto.
+The internal `PATCH /internal/organizations/{id}/plan` endpoint this sprint
+added is the first way RentFlow staff can change a plan at all, even by hand;
+it's what triggers the credit grant.
+
+A real, pre-existing bug surfaced by testing this against the actual migrated
+dev database (not just the test suite, which builds its schema straight from
+the ORM models and never touches Alembic): SQLAlchemy's `Enum` type binds a
+`(str, Enum)` member by its Python **name**, not its `.value`, with no
+`values_callable` configured anywhere in this codebase. Every migration's
+hand-written `postgresql.ENUM(...)` labels have to be the uppercase member
+names to match — Sprint 19's `webhook_delivery_status` migration used
+lowercase `.value`s instead, which would have thrown "invalid input value for
+enum" the first time anything touched a real migrated webhook delivery row.
+Fixed alongside this sprint's own migration, which had the identical bug
+before this was caught.
+
+24 backend tests in `tests/test_customer_success.py`, plus
+`tests/test_phase4.py` — the cross-cutting Phase 4 suite `test_phase3.py`'s
+pattern implies but Sprint 19 never actually added, now covering both
+sprints' tables and tasks.
 
 ### 📦 Sprint 20 Deliverables
 - ✅ Interactive setup wizard guiding new customers to first value
-- ✅ Contextual help system on all major pages
-- ✅ Customer health scoring with at-risk alerts
-- ✅ Referral program with automatic credit application
-- ✅ NPS surveys, feature voting, and in-app changelog
+- ✅ Contextual help: global search panel + contact-support form, backed by an
+  admin-editable knowledge base — not yet a per-field "?" hint on every page
+- ✅ Customer health scoring with at-risk alerts, and the internal dashboard
+  to see it (RentFlow's first cross-tenant surface)
+- ✅ Referral program with automatic credit ledger (not yet wired to a real
+  invoice — no billing engine exists for that yet)
+- ✅ NPS surveys, feature voting, and in-app changelog (with its own admin UI)
 
 ---
 

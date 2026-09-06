@@ -30,11 +30,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt, encrypt, mask
 from app.models.billing import Invoice, Payment, Receipt
+from app.models.customer_success import MilestoneKey
 from app.models.etims import EtimsCredential, EtimsStatus, EtimsSubmission
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.organization import Organization
 from app.models.tenant import Tenancy, Tenant
-from app.services import notification_service
+from app.services import milestone_service, notification_service
 
 logger = logging.getLogger("rentflow.etims")
 
@@ -272,6 +273,8 @@ async def submit(db: AsyncSession, submission: EtimsSubmission) -> EtimsSubmissi
 
     credential.last_verified_at = submission.submitted_at
     credential.last_error = None
+
+    await milestone_service.check_and_queue(db, submission.organization_id, MilestoneKey.FIRST_ETIMS_RECEIPT)
 
     await db.commit()
     await db.refresh(submission)

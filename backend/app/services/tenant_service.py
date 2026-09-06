@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OrgContext, accessible_property_ids, assert_in_org
 from app.models.billing import Invoice, InvoiceStatus
+from app.models.customer_success import MilestoneKey
 from app.models.developer import WebhookEvent
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.property import Property, Unit, UnitStatus
@@ -31,6 +32,7 @@ from app.schemas.tenant import (
 from app.services import (
     audit_service,
     lease_service,
+    milestone_service,
     notification_service,
     reference_service,
     webhook_service,
@@ -147,6 +149,14 @@ async def create_tenant(
             "phone_number": record.phone_number,
         },
     )
+
+    tenant_count = await db.scalar(
+        select(func.count(Tenant.id)).where(Tenant.organization_id == context.organization_id)
+    )
+    if (tenant_count or 0) >= 50:
+        await milestone_service.check_and_queue(db, context.organization_id, MilestoneKey.TENANTS_50)
+        await db.commit()
+
     return record
 
 

@@ -77,6 +77,11 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # enterprise plan gets a bespoke ceiling.
     api_rate_limit_per_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # Referral credit (Sprint 20, US-092). Months of free subscription owed to
+    # this organisation for referrals that converted. There is no billing engine
+    # yet to draw this down against an invoice — it is a ledger waiting for one.
+    credit_months: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+
     users: Mapped[list["User"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
 
     @property

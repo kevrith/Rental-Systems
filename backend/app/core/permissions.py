@@ -67,6 +67,9 @@ class Permission(str, enum.Enum):
     API_KEY_MANAGE = "api_key:manage"
     WEBHOOK_MANAGE = "webhook:manage"
 
+    # Customer success (Sprint 20)
+    ONBOARDING_MANAGE = "onboarding:manage"
+
 
 _FULL_OPERATOR_PERMISSIONS: set[Permission] = {
     Permission.USER_INVITE,
@@ -105,6 +108,7 @@ _FULL_OPERATOR_PERMISSIONS: set[Permission] = {
     Permission.FILE_VIEW,
     Permission.API_KEY_MANAGE,
     Permission.WEBHOOK_MANAGE,
+    Permission.ONBOARDING_MANAGE,
 }
 
 ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {

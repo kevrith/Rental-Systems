@@ -105,6 +105,10 @@ class Settings(BaseSettings):
     WEBHOOK_MAX_PER_ORG: int = 10
     WEBHOOK_DELIVERY_TIMEOUT_SECONDS: int = 15
 
+    # Customer success (Sprint 20)
+    SUPPORT_EMAIL: str = "support@rentflow.co.ke"
+    CUSTOMER_HEALTH_AT_RISK_THRESHOLD: int = 50
+
     @property
     def sync_database_url(self) -> str:
         return self.DATABASE_URL_SYNC or self.DATABASE_URL.replace(

@@ -56,6 +56,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     is_phone_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    # RentFlow's own staff, not a tenant role — grants access to the cross-organization
+    # customer-success surface in app.api.v1.endpoints.internal (Sprint 20).
+    is_platform_staff: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     profile_photo_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)

@@ -25,7 +25,7 @@ from app.schemas.auth import (
     RegisterRequest,
     TokenResponse,
 )
-from app.services import notification_service, otp_service, session_service
+from app.services import notification_service, otp_service, referral_service, session_service
 from app.services.notifications import get_email_notifier, get_sms_notifier, normalize_phone
 
 LOGIN_OTP_PURPOSE = "login"
@@ -211,6 +211,8 @@ async def register_organization(
         channels=[NotificationChannel.WHATSAPP],
         organization_id=organization.id,
     )
+
+    await referral_service.link_signup(db, email=payload.email, organization_id=organization.id)
 
     await db.commit()
     await db.refresh(organization)

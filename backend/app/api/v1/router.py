@@ -7,6 +7,7 @@ from app.api.v1.endpoints import (
     auth,
     billing,
     bulk,
+    customer_success,
     dashboard,
     developer,
     etims,
@@ -15,6 +16,7 @@ from app.api.v1.endpoints import (
     files,
     health,
     inspections,
+    internal,
     notifications,
     operations,
     organizations,
@@ -133,3 +135,9 @@ api_router.include_router(rentals.agreements_router, prefix="/rental-agreements"
 api_router.include_router(developer.router, prefix="/developer/api-keys", tags=["developer"])
 api_router.include_router(developer.webhooks_router, prefix="/developer/webhooks", tags=["developer"])
 api_router.include_router(external.router, prefix="/external", tags=["external-api"])
+
+# Phase 4 — onboarding, help, referrals, NPS, milestones, feature board and
+# changelog (Sprint 20), plus the cross-organization view for RentFlow's own
+# customer-success team.
+api_router.include_router(customer_success.router, prefix="/customer-success", tags=["customer-success"])
+api_router.include_router(internal.router, prefix="/internal", tags=["internal"])

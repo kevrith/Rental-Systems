@@ -7,7 +7,7 @@ celery_app = Celery(
     "rentflow",
     broker=settings.celery_broker,
     backend=settings.celery_backend,
-    include=["app.tasks.scheduled", "app.tasks.webhooks"],
+    include=["app.tasks.scheduled", "app.tasks.webhooks", "app.tasks.customer_success"],
 )
 
 celery_app.conf.update(
@@ -127,6 +127,11 @@ celery_app.conf.update(
         "retry-etims-submissions": {
             "task": "rentflow.retry_etims_submissions",
             "schedule": crontab(minute="*/15"),
+        },
+        # Sprint 20: weekly customer health scoring, Monday before the office opens.
+        "compute-health-scores": {
+            "task": "rentflow.compute_health_scores",
+            "schedule": crontab(day_of_week=1, hour=5, minute=30),
         },
     },
 )

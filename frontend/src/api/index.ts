@@ -101,6 +101,17 @@ import type {
   WebhookDelivery,
   WebhookEndpoint,
   WebhookEndpointCreated,
+  ChangelogEntry,
+  FeatureRequest,
+  HelpArticle,
+  Milestone,
+  NpsPending,
+  OnboardingProgress,
+  OrganizationHealthScorePoint,
+  OrganizationHealthSummary,
+  Referral,
+  ReferralSummary,
+  SupportRequest,
 } from './types'
 
 const get = async <T>(url: string, params?: unknown): Promise<T> =>
@@ -821,4 +832,72 @@ export const webhooksApi = {
   archive: (id: string) => post<WebhookEndpoint>(`/developer/webhooks/${id}/archive`),
   secret: (id: string) => get<{ secret: string }>(`/developer/webhooks/${id}/secret`),
   deliveries: (id: string) => get<WebhookDelivery[]>(`/developer/webhooks/${id}/deliveries`),
+}
+
+// ------------------------------------------------------------ customer success
+
+export const customerSuccessApi = {
+  onboarding: () => get<OnboardingProgress>('/customer-success/onboarding'),
+  markOnboardingStep: (step: string) =>
+    patch<OnboardingProgress>('/customer-success/onboarding', { step }),
+  dismissOnboarding: () => post<OnboardingProgress>('/customer-success/onboarding/dismiss'),
+
+  searchHelp: (q?: string) => get<HelpArticle[]>('/customer-success/help/articles', q ? { q } : undefined),
+  helpArticle: (slug: string) => get<HelpArticle>(`/customer-success/help/articles/${slug}`),
+
+  createSupportRequest: (body: { subject: string; message: string }) =>
+    post<SupportRequest>('/customer-success/support', body),
+
+  referralSummary: () => get<ReferralSummary>('/customer-success/referral'),
+  createReferral: (body: { referred_email: string }) =>
+    post<Referral>('/customer-success/referral', body),
+
+  pendingNps: () => get<NpsPending | null>('/customer-success/nps/pending'),
+  respondToNps: (id: string, body: { score: number; comment?: string }) =>
+    post<NpsPending>(`/customer-success/nps/${id}/respond`, body),
+
+  pendingMilestones: () => get<Milestone[]>('/customer-success/milestones/pending'),
+  acknowledgeMilestone: (key: string) =>
+    post<void>(`/customer-success/milestones/${key}/acknowledge`),
+
+  featureBoard: () => get<FeatureRequest[]>('/customer-success/feature-board'),
+  createFeatureRequest: (body: { title: string; description: string }) =>
+    post<{ id: string }>('/customer-success/feature-board', body),
+  voteFeatureRequest: (id: string) =>
+    post<{ voted: boolean }>(`/customer-success/feature-board/${id}/vote`),
+
+  changelog: () => get<ChangelogEntry[]>('/customer-success/changelog'),
+  changelogUnseenCount: () => get<{ count: number }>('/customer-success/changelog/unseen-count'),
+}
+
+// ------------------------------------------------------------------- internal
+
+export const internalApi = {
+  organizations: () => get<OrganizationHealthSummary[]>('/internal/organizations'),
+  organizationHealthHistory: (organizationId: string) =>
+    get<OrganizationHealthScorePoint[]>(`/internal/organizations/${organizationId}/health-history`),
+  acknowledgeAlert: (id: string) => post<void>(`/internal/alerts/${id}/acknowledge`),
+  updateOrganizationPlan: (organizationId: string, plan: string) =>
+    patch<{ organization_id: string; plan: string }>(`/internal/organizations/${organizationId}/plan`, {
+      plan,
+    }),
+
+  helpArticles: () => get<HelpArticle[]>('/internal/help-articles'),
+  createHelpArticle: (body: {
+    slug: string
+    title: string
+    body: string
+    category: string
+    is_published: boolean
+  }) => post<HelpArticle>('/internal/help-articles', body),
+  updateHelpArticle: (
+    id: string,
+    body: { slug: string; title: string; body: string; category: string; is_published: boolean },
+  ) => patch<HelpArticle>(`/internal/help-articles/${id}`, body),
+
+  changelogEntries: () => get<ChangelogEntry[]>('/internal/changelog-entries'),
+  createChangelogEntry: (body: { title: string; body: string; is_published: boolean }) =>
+    post<ChangelogEntry>('/internal/changelog-entries', body),
+  updateChangelogEntry: (id: string, body: { title: string; body: string; is_published: boolean }) =>
+    patch<ChangelogEntry>(`/internal/changelog-entries/${id}`, body),
 }

@@ -10,16 +10,17 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OrgContext, assert_in_org
+from app.models.customer_success import NpsTrigger
 from app.models.developer import WebhookEvent
 from app.models.inspection import InspectionReport, InspectionStatus, InspectionType
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.property import Unit
 from app.models.tenant import Tenancy, Tenant
-from app.services import audit_service, notification_service, reference_service, webhook_service
+from app.services import audit_service, notification_service, nps_service, reference_service, webhook_service
 
 DEFAULT_ROOMS = {
     "bedsitter": ["Main Room", "Bathroom", "Kitchen Area"],
@@ -191,6 +192,18 @@ async def submit_inspection(
             "submitted_at": report.submitted_at.isoformat() if report.submitted_at else None,
         },
     )
+
+    inspection_count = await db.scalar(
+        select(func.count(InspectionReport.id)).where(
+            InspectionReport.organization_id == context.organization_id,
+            InspectionReport.status == InspectionStatus.SUBMITTED,
+        )
+    )
+    if inspection_count == 1:
+        await nps_service.queue_if_eligible(
+            db, context.organization_id, context.user.id, NpsTrigger.FIRST_INSPECTION
+        )
+
     return report
 
 

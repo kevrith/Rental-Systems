@@ -17,10 +17,13 @@ import { useAuthStore } from '@/store/auth-store'
 export function ProtectedRoute({
   requirePermission,
   allowRoles,
+  requirePlatformStaff = false,
   redirectTo = '/login',
 }: {
   requirePermission?: string
   allowRoles?: string[]
+  /** RentFlow's own team, not a tenant role — see `app.api.deps.require_platform_staff`. */
+  requirePlatformStaff?: boolean
   redirectTo?: string
 }) {
   const location = useLocation()
@@ -60,6 +63,10 @@ export function ProtectedRoute({
   }
 
   if (requirePermission && current && !current.permissions?.includes(requirePermission)) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  if (requirePlatformStaff && current && !current.is_platform_staff) {
     return <Navigate to="/dashboard" replace />
   }
 

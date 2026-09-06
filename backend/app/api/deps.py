@@ -136,6 +136,16 @@ def require_write(*permissions: Permission):
     return dependency
 
 
+async def require_platform_staff(current_user: User = Depends(get_current_user)) -> User:
+    """Gate for `app.api.v1.endpoints.internal` — RentFlow's own team, not a
+    tenant role. Deliberately independent of `OrgContext`: these routes read
+    across every organisation, so there is no single tenant to resolve.
+    """
+    if not current_user.is_platform_staff:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="RentFlow staff access required")
+    return current_user
+
+
 def assert_in_org(entity: T | None, context: OrgContext, *, label: str = "resource") -> T:
     """Confirm a loaded row belongs to the caller's organization.
 

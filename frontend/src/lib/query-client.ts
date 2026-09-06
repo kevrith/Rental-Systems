@@ -141,9 +141,24 @@ export const queryKeys = {
   disbursements: (filters?: unknown) => ['agency', 'disbursements', filters ?? {}] as const,
   ownerPortalSummary: ['agency', 'owner-portal'] as const,
 
-  // Developer platform (Phase 4)
+  // Developer platform (Phase 4, Sprint 19)
   apiKeys: ['developer', 'api-keys'] as const,
   apiKeyUsage: (id: string) => ['developer', 'api-keys', id, 'usage'] as const,
   webhookEndpoints: ['developer', 'webhooks'] as const,
   webhookDeliveries: (id: string) => ['developer', 'webhooks', id, 'deliveries'] as const,
+
+  // Customer success (Phase 4, Sprint 20)
+  onboarding: ['customer-success', 'onboarding'] as const,
+  helpSearch: (q?: string) => ['customer-success', 'help', q ?? ''] as const,
+  helpArticle: (slug: string) => ['customer-success', 'help', 'article', slug] as const,
+  referralSummary: ['customer-success', 'referral'] as const,
+  pendingNps: ['customer-success', 'nps', 'pending'] as const,
+  pendingMilestones: ['customer-success', 'milestones', 'pending'] as const,
+  featureBoard: ['customer-success', 'feature-board'] as const,
+  changelog: ['customer-success', 'changelog'] as const,
+  changelogUnseenCount: ['customer-success', 'changelog', 'unseen'] as const,
+  internalOrganizations: ['internal', 'organizations'] as const,
+  internalOrganizationHealth: (id: string) => ['internal', 'organizations', id, 'health'] as const,
+  internalHelpArticles: ['internal', 'help-articles'] as const,
+  internalChangelogEntries: ['internal', 'changelog-entries'] as const,
 }

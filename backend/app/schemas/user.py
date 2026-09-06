@@ -18,6 +18,7 @@ class UserRead(BaseModel):
     is_active: bool
     is_email_verified: bool
     is_phone_verified: bool
+    is_platform_staff: bool = False
     profile_photo_url: str | None = None
     always_require_2fa: bool = False
     inactivity_timeout_minutes: int = 30

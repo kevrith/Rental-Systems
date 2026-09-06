@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from fastapi import HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -23,6 +23,7 @@ from app.models.billing import (
     PaymentMethod,
     PaymentStatus,
 )
+from app.models.customer_success import MilestoneKey, NpsTrigger
 from app.models.developer import WebhookEvent
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.property import CaretakerAssignment, Property, Unit
@@ -31,8 +32,10 @@ from app.models.user import User, UserRole
 from app.services import (
     audit_service,
     invoice_service,
+    milestone_service,
     mpesa_service,
     notification_service,
+    nps_service,
     receipt_service,
     reference_service,
     webhook_service,
@@ -208,6 +211,26 @@ async def _confirm(db: AsyncSession, payment: Payment, confirmed_at: datetime) -
             "paid_at": payment.paid_at.isoformat() if payment.paid_at else None,
         },
     )
+
+    confirmed_count = await db.scalar(
+        select(func.count(Payment.id)).where(
+            Payment.organization_id == payment.organization_id, Payment.status == PaymentStatus.CONFIRMED
+        )
+    )
+    if (confirmed_count or 0) >= 100:
+        await milestone_service.check_and_queue(db, payment.organization_id, MilestoneKey.PAYMENTS_100)
+    if confirmed_count == 1:
+        owners = await db.scalars(
+            select(User).where(
+                User.organization_id == payment.organization_id,
+                User.role.in_([UserRole.OWNER, UserRole.AGENCY_ADMIN]),
+                User.is_active.is_(True),
+            )
+        )
+        for owner in owners:
+            await nps_service.queue_if_eligible(
+                db, payment.organization_id, owner.id, NpsTrigger.FIRST_PAYMENT
+            )
 
 
 async def _allocate(db: AsyncSession, payment: Payment) -> None:

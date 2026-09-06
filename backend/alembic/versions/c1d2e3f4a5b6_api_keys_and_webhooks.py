@@ -96,14 +96,18 @@ def upgrade() -> None:
     # --- webhook_deliveries ---
     # `create_type=True` (the default) makes `create_table` below emit the
     # `CREATE TYPE` itself — calling `.create()` here too would double-create it.
-    delivery_status = postgresql.ENUM("pending", "success", "failed", name="webhook_delivery_status")
+    # Labels match the Python enum's *names*, not its values — SQLAlchemy's
+    # `Enum` type binds a `(str, Enum)` member via `.name` by default (see
+    # `WebhookDeliveryStatus`), so the stored Postgres labels must be
+    # `PENDING`/`SUCCESS`/`FAILED`, not their lowercase `.value`s.
+    delivery_status = postgresql.ENUM("PENDING", "SUCCESS", "FAILED", name="webhook_delivery_status")
 
     op.create_table(
         "webhook_deliveries",
         sa.Column("webhook_endpoint_id", sa.UUID(), nullable=False),
         sa.Column("event_type", sa.String(64), nullable=False),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.Column("status", delivery_status, nullable=False, server_default="pending"),
+        sa.Column("status", delivery_status, nullable=False, server_default="PENDING"),
         sa.Column("attempt_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("response_status_code", sa.Integer(), nullable=True),
         sa.Column("response_body", sa.String(1000), nullable=True),

@@ -93,6 +93,18 @@ PHASE_4_ORG_SCOPED_TABLES: Sequence[str] = (
     "api_keys",
     "webhook_endpoints",
     "webhook_deliveries",
+    # Sprint 20: onboarding, customer health, referrals, support and milestones
+    # all belong to one organisation. `help_articles`, `feature_requests`,
+    # `feature_votes` and `changelog_entries` are deliberately absent — like
+    # `task_runs`, they are the same content for every tenant, not scoped to one.
+    "onboarding_progress",
+    "organization_health_scores",
+    "customer_success_alerts",
+    "referral_codes",
+    "referrals",
+    "support_requests",
+    "nps_survey_prompts",
+    "milestone_events",
 )
 
 ORG_SCOPED_TABLES: Sequence[str] = (

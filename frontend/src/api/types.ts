@@ -2061,3 +2061,104 @@ export interface WebhookDelivery {
   next_retry_at: string | null
   created_at: string
 }
+
+// ---------------------------------------------------------- customer success
+
+export interface OnboardingProgress {
+  added_property: boolean
+  added_units: boolean
+  invited_caretaker: boolean
+  added_tenant: boolean
+  setup_payment: boolean
+  dismissed_at: string | null
+  completed_at: string | null
+}
+
+export interface HelpArticle {
+  id: string
+  slug: string
+  title: string
+  body: string
+  category: string
+  is_published: boolean
+  created_at: string
+}
+
+export interface SupportRequest {
+  id: string
+  subject: string
+  message: string
+  status: 'open' | 'resolved'
+  created_at: string
+}
+
+export interface Referral {
+  id: string
+  referred_email: string
+  status: 'pending' | 'signed_up' | 'converted'
+  credit_granted_at: string | null
+  created_at: string
+}
+
+export interface ReferralSummary {
+  code: string
+  referral_link: string
+  credit_months: number
+  referrals: Referral[]
+}
+
+export type NpsTrigger = 'first_payment' | 'first_inspection' | 'first_month'
+
+export interface NpsPending {
+  id: string
+  trigger_event: NpsTrigger
+}
+
+export type MilestoneKey = 'payments_100' | 'tenants_50' | 'first_etims_receipt'
+
+export interface Milestone {
+  id: string
+  milestone_key: MilestoneKey
+  reached_at: string
+  acknowledged_at: string | null
+}
+
+export interface FeatureRequest {
+  id: string
+  title: string
+  description: string
+  status: 'open' | 'planned' | 'shipped' | 'declined'
+  vote_count: number
+  voted_by_me: boolean
+  created_at: string
+}
+
+export interface ChangelogEntry {
+  id: string
+  title: string
+  body: string
+  published_at: string
+}
+
+export type HealthTrend = 'improving' | 'declining' | 'stable'
+
+export interface OrganizationHealthSummary {
+  organization_id: string
+  organization_name: string
+  latest_score: number | null
+  trend: HealthTrend | null
+  week_of: string | null
+  is_at_risk: boolean
+}
+
+export interface OrganizationHealthScorePoint {
+  week_of: string
+  score: number
+  login_score: number
+  payment_score: number
+  adoption_score: number
+  caretaker_score: number
+  portal_score: number
+  support_score: number
+  trend: HealthTrend
+}

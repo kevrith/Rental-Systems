@@ -13,9 +13,13 @@ import {
   DoorOpen,
   CreditCard,
   Eye,
+  FileEdit,
   FileSignature,
   FileText,
   Gauge,
+  Gift,
+  HeartPulse,
+  HelpCircle,
   Layers,
   LayoutDashboard,
   LogOut,
@@ -23,6 +27,7 @@ import {
   Receipt,
   Settings,
   ShieldCheck,
+  ThumbsUp,
   Timer,
   TrendingUp,
   UserSquare2,
@@ -39,6 +44,11 @@ import { authApi } from '@/api/auth'
 import { SyncIndicator } from '@/components/SyncIndicator'
 import { Badge, Button } from '@/components/ui'
 import { InstallPrompt } from '@/components/InstallPrompt'
+import { ChangelogWidget } from '@/features/success/ChangelogWidget'
+import { HelpPanel } from '@/features/success/HelpPanel'
+import { MilestoneCelebration } from '@/features/success/MilestoneCelebration'
+import { NpsPopup } from '@/features/success/NpsPopup'
+import { OnboardingWizard } from '@/features/success/OnboardingWizard'
 import { useInactivityLogout } from '@/hooks/use-inactivity-logout'
 import { cn } from '@/lib/cn'
 import { initials } from '@/lib/format'
@@ -256,10 +266,27 @@ const NAV_SECTIONS: { heading: string; items: NavItem[] }[] = [
         icon: <Code2 className="h-4 w-4" />,
         permission: 'api_key:manage',
       },
+      {
+        to: '/referrals',
+        label: 'Referrals',
+        icon: <Gift className="h-4 w-4" />,
+        permission: 'org:manage',
+      },
+      { to: '/feedback', label: 'Feature requests', icon: <ThumbsUp className="h-4 w-4" /> },
       { to: '/settings', label: 'Settings', icon: <Settings className="h-4 w-4" /> },
     ],
   },
 ]
+
+// RentFlow's own team, not a tenant role — shown only to `is_platform_staff`
+// accounts, filtered separately from the permission/mode/role checks above.
+const STAFF_ONLY_SECTION: { heading: string; items: NavItem[] } = {
+  heading: 'RentFlow staff',
+  items: [
+    { to: '/internal/health', label: 'Customer health', icon: <HeartPulse className="h-4 w-4" /> },
+    { to: '/internal/content', label: 'Content', icon: <FileEdit className="h-4 w-4" /> },
+  ],
+}
 
 export function AppShell() {
   const location = useLocation()
@@ -267,6 +294,7 @@ export function AppShell() {
   const user = useAuthStore((state) => state.user)
   const setOrganization = useAuthStore((state) => state.setOrganization)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   useInactivityLogout()
 
@@ -306,16 +334,18 @@ export function AppShell() {
   // every operational screen belongs to the agency, not to them.
   const isPortalOwner = user?.role === 'owner_portal_user'
 
-  const visibleSections = NAV_SECTIONS.map((section) => ({
-    ...section,
-    items: section.items.filter((item) => {
-      if (item.permission && !user?.permissions?.includes(item.permission)) return false
-      if (item.mode && org?.operating_mode !== item.mode) return false
-      if (item.roles && !item.roles.includes(user?.role ?? '')) return false
-      if (isPortalOwner && item.to !== '/owner-portal' && item.to !== '/settings') return false
-      return true
-    }),
-  })).filter((section) => section.items.length > 0)
+  const visibleSections = [...NAV_SECTIONS, ...(user?.is_platform_staff ? [STAFF_ONLY_SECTION] : [])]
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => {
+        if (item.permission && !user?.permissions?.includes(item.permission)) return false
+        if (item.mode && org?.operating_mode !== item.mode) return false
+        if (item.roles && !item.roles.includes(user?.role ?? '')) return false
+        if (isPortalOwner && item.to !== '/owner-portal' && item.to !== '/settings') return false
+        return true
+      }),
+    }))
+    .filter((section) => section.items.length > 0)
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -378,6 +408,17 @@ export function AppShell() {
 
           <SyncIndicator compact />
 
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+            aria-label="Help"
+          >
+            <HelpCircle className="h-5 w-5" />
+          </button>
+
+          <ChangelogWidget />
+
           <Link
             to="/notifications"
             className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100"
@@ -399,6 +440,10 @@ export function AppShell() {
         </main>
       </div>
 
+      <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <OnboardingWizard />
+      <NpsPopup />
+      <MilestoneCelebration />
       <InstallPrompt />
     </div>
   )

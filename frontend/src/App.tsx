@@ -54,6 +54,18 @@ const AssetDetailPage = lazy(() =>
 const CompliancePage = lazy(() =>
   import('@/features/facilities/CompliancePage').then((m) => ({ default: m.CompliancePage })),
 )
+const CustomerHealthPage = lazy(() =>
+  import('@/features/success/CustomerHealthPage').then((m) => ({ default: m.CustomerHealthPage })),
+)
+const ReferralPage = lazy(() =>
+  import('@/features/success/ReferralPage').then((m) => ({ default: m.ReferralPage })),
+)
+const FeatureBoardPage = lazy(() =>
+  import('@/features/success/FeatureBoardPage').then((m) => ({ default: m.FeatureBoardPage })),
+)
+const InternalContentPage = lazy(() =>
+  import('@/features/success/InternalContentPage').then((m) => ({ default: m.InternalContentPage })),
+)
 const FacilitiesPage = lazy(() =>
   import('@/features/facilities/FacilitiesPage').then((m) => ({ default: m.FacilitiesPage })),
 )
@@ -399,6 +411,14 @@ function App() {
             <Route path="/automation" element={<TaskMonitorPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/developer" element={<DeveloperPage />} />
+
+            {/* Sprint 20 — customer success */}
+            <Route path="/referrals" element={<ReferralPage />} />
+            <Route path="/feedback" element={<FeatureBoardPage />} />
+            <Route element={<ProtectedRoute requirePlatformStaff />}>
+              <Route path="/internal/health" element={<CustomerHealthPage />} />
+              <Route path="/internal/content" element={<InternalContentPage />} />
+            </Route>
 
             <Route path="/settings" element={<SettingsLayout />}>
               <Route index element={<Navigate to="/settings/profile" replace />} />

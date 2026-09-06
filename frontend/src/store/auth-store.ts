@@ -11,6 +11,7 @@ export interface AuthUser {
   is_active: boolean
   is_email_verified: boolean
   is_phone_verified: boolean
+  is_platform_staff?: boolean
   profile_photo_url?: string | null
   always_require_2fa?: boolean
   inactivity_timeout_minutes?: number

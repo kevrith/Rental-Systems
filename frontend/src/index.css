@@ -92,3 +92,25 @@ body {
     display: none !important;
   }
 }
+
+/* Onboarding-wizard completion (US-089) — a brief, dependency-free celebration
+   rather than pulling in a confetti library for one moment in the product. */
+@keyframes rf-confetti-fall {
+  from {
+    transform: translateY(-10px) rotate(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(220px) rotate(540deg);
+    opacity: 0;
+  }
+}
+
+.rf-confetti-piece {
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  animation: rf-confetti-fall 1.4s ease-in forwards;
+}
