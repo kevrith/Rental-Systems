@@ -98,6 +98,9 @@ const DashboardPage = lazy(() =>
 const DisbursementsPage = lazy(() =>
   import('@/features/agency/DisbursementsPage').then((m) => ({ default: m.DisbursementsPage })),
 )
+const DeveloperPage = lazy(() =>
+  import('@/features/developer/DeveloperPage').then((m) => ({ default: m.DeveloperPage })),
+)
 const EtimsSettingsPage = lazy(() =>
   import('@/features/analytics/EtimsSettingsPage').then((m) => ({ default: m.EtimsSettingsPage })),
 )
@@ -395,6 +398,7 @@ function App() {
             <Route path="/team/performance" element={<CaretakerPerformancePage />} />
             <Route path="/automation" element={<TaskMonitorPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/developer" element={<DeveloperPage />} />
 
             <Route path="/settings" element={<SettingsLayout />}>
               <Route index element={<Navigate to="/settings/profile" replace />} />

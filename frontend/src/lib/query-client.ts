@@ -140,4 +140,10 @@ export const queryKeys = {
   ownerProfile: (id: string) => ['agency', 'owner-profile', id] as const,
   disbursements: (filters?: unknown) => ['agency', 'disbursements', filters ?? {}] as const,
   ownerPortalSummary: ['agency', 'owner-portal'] as const,
+
+  // Developer platform (Phase 4)
+  apiKeys: ['developer', 'api-keys'] as const,
+  apiKeyUsage: (id: string) => ['developer', 'api-keys', id, 'usage'] as const,
+  webhookEndpoints: ['developer', 'webhooks'] as const,
+  webhookDeliveries: (id: string) => ['developer', 'webhooks', id, 'deliveries'] as const,
 }

@@ -7,7 +7,7 @@ celery_app = Celery(
     "rentflow",
     broker=settings.celery_broker,
     backend=settings.celery_backend,
-    include=["app.tasks.scheduled"],
+    include=["app.tasks.scheduled", "app.tasks.webhooks"],
 )
 
 celery_app.conf.update(

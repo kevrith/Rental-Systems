@@ -63,6 +63,10 @@ class Permission(str, enum.Enum):
     FILE_UPLOAD = "file:upload"
     FILE_VIEW = "file:view"
 
+    # Developer platform (Sprint 19)
+    API_KEY_MANAGE = "api_key:manage"
+    WEBHOOK_MANAGE = "webhook:manage"
+
 
 _FULL_OPERATOR_PERMISSIONS: set[Permission] = {
     Permission.USER_INVITE,
@@ -99,6 +103,8 @@ _FULL_OPERATOR_PERMISSIONS: set[Permission] = {
     Permission.AUDIT_VIEW,
     Permission.FILE_UPLOAD,
     Permission.FILE_VIEW,
+    Permission.API_KEY_MANAGE,
+    Permission.WEBHOOK_MANAGE,
 }
 
 ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {

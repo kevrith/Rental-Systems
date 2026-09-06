@@ -88,11 +88,19 @@ PHASE_3_ORG_SCOPED_TABLES: Sequence[str] = (
     "rental_agreements",
 )
 
+# Phase 4 tables, added by the Sprint 19 migration.
+PHASE_4_ORG_SCOPED_TABLES: Sequence[str] = (
+    "api_keys",
+    "webhook_endpoints",
+    "webhook_deliveries",
+)
+
 ORG_SCOPED_TABLES: Sequence[str] = (
     *PHASE_1_ORG_SCOPED_TABLES,
     *PHASE_2_ORG_SCOPED_TABLES,
     *ETIMS_ORG_SCOPED_TABLES,
     *PHASE_3_ORG_SCOPED_TABLES,
+    *PHASE_4_ORG_SCOPED_TABLES,
 )
 
 SETTING = "app.current_org_id"

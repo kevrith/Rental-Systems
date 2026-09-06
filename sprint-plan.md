@@ -84,7 +84,7 @@ Each sprint contains:
 - [ ] Configure Nginx with SSL (Let's Encrypt)
 - [ ] Set up Cloudflare R2 bucket for file storage
 - [ ] Configure staging and production environments
-- [ ] Set up automated database backups
+- [ ] Set up automated database backups (scripts, systemd timers and restore drill in `infra/backup/` and tested against the dev database — needs a host to install on and an R2 bucket to ship to)
 
 **Database Architecture**
 - [x] Design and document complete Entity Relationship Diagram (ERD)
@@ -1866,23 +1866,23 @@ Acceptance Criteria:
 - Hosted at docs.rentflow.co.ke
 
 ### 🔧 Technical Tasks
-- [ ] Build public API versioning layer (v1 prefix)
-- [ ] Build API authentication middleware (API key validation)
-- [ ] Build API rate limiting with Redis
-- [ ] Build API key management service and UI
-- [ ] Build webhook subscription model and configuration UI
-- [ ] Build webhook delivery service with retry logic
-- [ ] Build webhook delivery log and monitoring UI
-- [ ] Configure FastAPI Swagger UI with authentication
-- [ ] Build sandbox environment with seeded test data
-- [ ] Write API documentation and quick-start guide
-- [ ] API integration test suite
+- [x] Build public API versioning layer (v1 prefix)
+- [x] Build API authentication middleware (API key validation)
+- [x] Build API rate limiting with Redis
+- [x] Build API key management service and UI
+- [x] Build webhook subscription model and configuration UI
+- [x] Build webhook delivery service with retry logic
+- [x] Build webhook delivery log and monitoring UI
+- [x] Configure FastAPI Swagger UI with authentication (built into FastAPI at `/docs`; gated the same way as every other endpoint)
+- [ ] Build sandbox environment with seeded test data — needs hosting, not just code
+- [x] Write API documentation and quick-start guide (`docs/public-api.md`)
+- [x] API integration test suite (`tests/test_developer_platform.py`, 16 tests)
 
 ### 📦 Sprint 19 Deliverables
-- ✅ Public REST API live at api.rentflow.co.ke
+- ✅ Public REST API — versioned, scoped, rate-limited, cursor-paginated. Live on any running instance at `/api/v1/external/*`; `api.rentflow.co.ke` itself waits on the DNS/hosting from Sprint 0
 - ✅ API key management for enterprise customers
-- ✅ Webhook system with delivery monitoring
-- ✅ Interactive Swagger documentation portal
+- ✅ Webhook system with delivery monitoring (HMAC-signed, 3 attempts with backoff)
+- ✅ Interactive Swagger documentation portal — `/docs` and `/redoc` on the running instance; a separately branded `docs.rentflow.co.ke` needs the same hosting as above
 
 ---
 

@@ -8,7 +8,9 @@ from app.api.v1.endpoints import (
     billing,
     bulk,
     dashboard,
+    developer,
     etims,
+    external,
     facilities,
     files,
     health,
@@ -125,3 +127,9 @@ api_router.include_router(facilities.utilities_router, prefix="/utilities", tags
 # business, so they share one asset table and one agreement lifecycle.
 api_router.include_router(rentals.assets_router, prefix="/assets", tags=["rentals"])
 api_router.include_router(rentals.agreements_router, prefix="/rental-agreements", tags=["rentals"])
+
+# Phase 4 — developer platform: API keys and webhooks, managed by a logged-in
+# user, and the public API those credentials unlock.
+api_router.include_router(developer.router, prefix="/developer/api-keys", tags=["developer"])
+api_router.include_router(developer.webhooks_router, prefix="/developer/webhooks", tags=["developer"])
+api_router.include_router(external.router, prefix="/external", tags=["external-api"])

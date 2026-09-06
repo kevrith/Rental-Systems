@@ -4,6 +4,9 @@ import { apiClient } from '@/lib/api-client'
 import type {
   ActivityEntry,
   AgencyDashboard,
+  ApiKey,
+  ApiKeyCreated,
+  ApiKeyUsage,
   ArrearsReport,
   CaretakerTaskList,
   Disbursement,
@@ -95,6 +98,9 @@ import type {
   Unit,
   UnitDetail,
   VacateNotice,
+  WebhookDelivery,
+  WebhookEndpoint,
+  WebhookEndpointCreated,
 } from './types'
 
 const get = async <T>(url: string, params?: unknown): Promise<T> =>
@@ -797,4 +803,22 @@ export const agencyApi = {
 
   /** What an owner-portal user sees — their own properties only. */
   ownerPortal: () => get<OwnerPortalSummary>('/agency/owner-portal/summary'),
+}
+
+export const apiKeysApi = {
+  list: () => get<ApiKey[]>('/developer/api-keys'),
+  create: (body: { name: string; scopes: string[]; expires_at?: string | null }) =>
+    post<ApiKeyCreated>('/developer/api-keys', body),
+  usage: (id: string) => get<ApiKeyUsage>(`/developer/api-keys/${id}/usage`),
+  revoke: (id: string) => post<ApiKey>(`/developer/api-keys/${id}/revoke`),
+}
+
+export const webhooksApi = {
+  list: () => get<WebhookEndpoint[]>('/developer/webhooks'),
+  create: (body: { url: string; description?: string | null; event_types: string[] }) =>
+    post<WebhookEndpointCreated>('/developer/webhooks', body),
+  update: (id: string, body: unknown) => patch<WebhookEndpoint>(`/developer/webhooks/${id}`, body),
+  archive: (id: string) => post<WebhookEndpoint>(`/developer/webhooks/${id}/archive`),
+  secret: (id: string) => get<{ secret: string }>(`/developer/webhooks/${id}/secret`),
+  deliveries: (id: string) => get<WebhookDelivery[]>(`/developer/webhooks/${id}/deliveries`),
 }

@@ -23,6 +23,7 @@ from app.models.billing import (
     PaymentMethod,
     PaymentStatus,
 )
+from app.models.developer import WebhookEvent
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.property import CaretakerAssignment, Property, Unit
 from app.models.tenant import Tenancy, Tenant
@@ -34,6 +35,7 @@ from app.services import (
     notification_service,
     receipt_service,
     reference_service,
+    webhook_service,
 )
 from app.services.notifications import normalize_phone
 from app.services.pdf_service import format_kes
@@ -193,6 +195,19 @@ async def _confirm(db: AsyncSession, payment: Payment, confirmed_at: datetime) -
 
     await receipt_service.deliver(db, receipt, payment)
     await _notify_payment_confirmed(db, payment, balance)
+    await webhook_service.dispatch(
+        db,
+        payment.organization_id,
+        WebhookEvent.PAYMENT_RECEIVED,
+        {
+            "id": str(payment.id),
+            "reference_code": payment.reference_code,
+            "tenancy_id": str(payment.tenancy_id),
+            "amount": str(payment.amount),
+            "method": payment.method.value,
+            "paid_at": payment.paid_at.isoformat() if payment.paid_at else None,
+        },
+    )
 
 
 async def _allocate(db: AsyncSession, payment: Payment) -> None:

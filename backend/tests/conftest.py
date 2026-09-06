@@ -101,6 +101,7 @@ def fake_redis(monkeypatch: pytest.MonkeyPatch) -> fakeredis.FakeAsyncRedis:
         "app.services.otp_service",
         "app.services.auth_service",
         "app.services.mpesa_service",
+        "app.services.api_key_service",
     ):
         monkeypatch.setattr(f"{module}.redis_client", client, raising=False)
     return client

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OrgContext, accessible_property_ids, assert_in_org
 from app.models.agency import OwnerProfile
+from app.models.developer import WebhookEvent
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.operations import (
     ALLOWED_TRANSITIONS,
@@ -42,7 +43,7 @@ from app.schemas.maintenance import (
     MaintenanceInfoRequest,
     MaintenanceReject,
 )
-from app.services import audit_service, notification_service, vendor_service
+from app.services import audit_service, notification_service, vendor_service, webhook_service
 
 ZERO = Decimal("0.00")
 
@@ -80,7 +81,7 @@ async def _load(db: AsyncSession, context: OrgContext, request_id: uuid.UUID) ->
     return record
 
 
-def _transition(
+async def _transition(
     db: AsyncSession,
     context: OrgContext,
     record: MaintenanceRequest,
@@ -103,6 +104,18 @@ def _transition(
         actor=context.user,
         summary=f"{record.reference_code}: {summary}",
         request=request,
+    )
+    await webhook_service.dispatch(
+        db,
+        context.organization_id,
+        WebhookEvent.MAINTENANCE_STATUS_CHANGED,
+        {
+            "id": str(record.id),
+            "reference_code": record.reference_code,
+            "previous_status": previous.value,
+            "status": target.value,
+            "unit_id": str(record.unit_id),
+        },
     )
     return previous
 
@@ -164,7 +177,7 @@ async def start_review(
     db: AsyncSession, context: OrgContext, request_id: uuid.UUID, http_request: Request | None = None
 ) -> MaintenanceRequest:
     record = await _load(db, context, request_id)
-    _transition(
+    await _transition(
         db,
         context,
         record,
@@ -252,7 +265,7 @@ async def approve(
     record = await _load(db, context, request_id)
     now = datetime.now(UTC)
 
-    _transition(
+    await _transition(
         db,
         context,
         record,
@@ -310,7 +323,7 @@ async def reject(
     http_request: Request | None = None,
 ) -> MaintenanceRequest:
     record = await _load(db, context, request_id)
-    _transition(
+    await _transition(
         db,
         context,
         record,
@@ -376,7 +389,7 @@ async def _assign(
         )
 
     previous_vendor_id = record.vendor_id
-    _transition(
+    await _transition(
         db,
         context,
         record,
@@ -440,7 +453,7 @@ async def start_work(
     db: AsyncSession, context: OrgContext, request_id: uuid.UUID, http_request: Request | None = None
 ) -> MaintenanceRequest:
     record = await _load(db, context, request_id)
-    _transition(
+    await _transition(
         db,
         context,
         record,
@@ -476,7 +489,7 @@ async def complete(
     the registry's "best plumber" ordering can never drift from the job history.
     """
     record = await _load(db, context, request_id)
-    _transition(
+    await _transition(
         db,
         context,
         record,
@@ -551,7 +564,7 @@ async def close(
             detail="Record the actual cost before closing this job",
         )
 
-    _transition(
+    await _transition(
         db,
         context,
         record,
@@ -598,7 +611,7 @@ async def cancel(
     http_request: Request | None = None,
 ) -> MaintenanceRequest:
     record = await _load(db, context, request_id)
-    _transition(
+    await _transition(
         db,
         context,
         record,

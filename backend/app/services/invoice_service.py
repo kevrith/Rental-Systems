@@ -22,6 +22,7 @@ from app.models.billing import (
     InvoiceStatus,
     LineItemKind,
 )
+from app.models.developer import WebhookEvent
 from app.models.file import FileCategory, StoredFile
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.operations import MeterReading, MeterType
@@ -33,6 +34,7 @@ from app.services import (
     pdf_service,
     reference_service,
     service_charge_service,
+    webhook_service,
 )
 
 ZERO = Decimal("0.00")
@@ -203,6 +205,20 @@ async def generate_invoice_for_tenancy(
 
     if notify:
         await _notify_tenant(db, invoice, tenancy)
+
+    await webhook_service.dispatch(
+        db,
+        invoice.organization_id,
+        WebhookEvent.INVOICE_GENERATED,
+        {
+            "id": str(invoice.id),
+            "reference_code": invoice.reference_code,
+            "tenancy_id": str(invoice.tenancy_id),
+            "period_start": invoice.period_start.isoformat(),
+            "due_date": invoice.due_date.isoformat(),
+            "total": str(invoice.total),
+        },
+    )
 
     return invoice
 

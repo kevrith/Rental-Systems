@@ -15,11 +15,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.base import OrgScopedMixin
+from app.models.developer import WebhookEvent
 from app.models.file import FileCategory, StoredFile
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.signature import DigitalSignature, SignatureStatus
 from app.models.tenant import Tenancy
-from app.services import audit_service, notification_service, otp_service
+from app.services import audit_service, notification_service, otp_service, webhook_service
 from app.services.notifications import get_sms_notifier
 from app.services.storage_service import store_bytes
 
@@ -199,6 +200,19 @@ async def verify_otp_and_sign(
 
     await db.commit()
     await db.refresh(sig)
+    await webhook_service.dispatch(
+        db,
+        sig.organization_id,
+        WebhookEvent.LEASE_SIGNED,
+        {
+            "id": str(sig.id),
+            "document_id": str(sig.document_id),
+            "tenancy_id": str(sig.tenancy_id) if sig.tenancy_id else None,
+            "signer_name": sig.signer_name,
+            "signer_role": sig.signer_role,
+            "signed_at": sig.signed_at.isoformat() if sig.signed_at else None,
+        },
+    )
     return sig
 
 

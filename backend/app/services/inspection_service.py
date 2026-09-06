@@ -14,11 +14,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OrgContext, assert_in_org
+from app.models.developer import WebhookEvent
 from app.models.inspection import InspectionReport, InspectionStatus, InspectionType
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.property import Unit
 from app.models.tenant import Tenancy, Tenant
-from app.services import audit_service, notification_service, reference_service
+from app.services import audit_service, notification_service, reference_service, webhook_service
 
 DEFAULT_ROOMS = {
     "bedsitter": ["Main Room", "Bathroom", "Kitchen Area"],
@@ -177,6 +178,19 @@ async def submit_inspection(
 
     await db.commit()
     await db.refresh(report)
+    await webhook_service.dispatch(
+        db,
+        context.organization_id,
+        WebhookEvent.INSPECTION_COMPLETED,
+        {
+            "id": str(report.id),
+            "reference_code": report.reference_code,
+            "inspection_type": report.inspection_type.value,
+            "unit_id": str(report.unit_id),
+            "tenancy_id": str(report.tenancy_id) if report.tenancy_id else None,
+            "submitted_at": report.submitted_at.isoformat() if report.submitted_at else None,
+        },
+    )
     return report
 
 

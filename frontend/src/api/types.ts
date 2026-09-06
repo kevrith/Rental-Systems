@@ -2000,3 +2000,64 @@ export interface FleetOverview {
     warnings: string[]
   }[]
 }
+
+// --------------------------------------------------------- developer platform
+
+export type ApiKeyScope = 'properties:read' | 'units:read' | 'tenants:read' | 'payments:read' | 'invoices:read'
+
+export interface ApiKey {
+  id: string
+  name: string
+  key_prefix: string
+  scopes: ApiKeyScope[]
+  expires_at: string | null
+  last_used_at: string | null
+  revoked_at: string | null
+  created_at: string
+}
+
+export interface ApiKeyCreated extends ApiKey {
+  api_key: string
+}
+
+export interface ApiKeyUsage {
+  requests_today: number
+  requests_last_7_days: number
+  endpoints_hit: Record<string, number>
+}
+
+export type WebhookEvent =
+  | 'payment.received'
+  | 'tenant.created'
+  | 'lease.signed'
+  | 'inspection.completed'
+  | 'maintenance.status_changed'
+  | 'invoice.generated'
+
+export interface WebhookEndpoint {
+  id: string
+  url: string
+  description: string | null
+  event_types: WebhookEvent[]
+  is_active: boolean
+  consecutive_failures: number
+  last_triggered_at: string | null
+  last_success_at: string | null
+  created_at: string
+}
+
+export interface WebhookEndpointCreated extends WebhookEndpoint {
+  secret: string
+}
+
+export interface WebhookDelivery {
+  id: string
+  event_type: string
+  status: 'pending' | 'success' | 'failed'
+  attempt_count: number
+  response_status_code: number | null
+  response_body: string | null
+  delivered_at: string | null
+  next_retry_at: string | null
+  created_at: string
+}

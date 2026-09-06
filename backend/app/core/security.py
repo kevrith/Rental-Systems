@@ -81,6 +81,25 @@ def generate_url_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def generate_api_key() -> tuple[str, str, str]:
+    """A public API key (US-086): `(full_key, prefix, hash)`.
+
+    Only `hash` is stored — like a refresh token, the raw value is shown to the
+    caller exactly once. `prefix` is stored alongside it in the clear so a
+    lookup can find the candidate row without hashing every key in the table,
+    and so the owner can tell keys apart in a list without ever seeing the
+    secret again.
+    """
+    secret = secrets.token_urlsafe(32)
+    prefix = f"rf_live_{secrets.token_hex(4)}"
+    full_key = f"{prefix}_{secret}"
+    return full_key, prefix, hash_token(full_key)
+
+
+def generate_webhook_secret() -> str:
+    return secrets.token_urlsafe(32)
+
+
 def sign_payload(*parts: str) -> str:
     """Short HMAC used to make generated receipts tamper-evident (US-023)."""
     message = "|".join(parts).encode("utf-8")

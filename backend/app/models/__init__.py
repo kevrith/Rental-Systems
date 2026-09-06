@@ -33,6 +33,14 @@ from app.models.billing import (
     Receipt,
 )
 from app.models.bulk import BulkOperation, BulkOperationKind, BulkOperationStatus
+from app.models.developer import (
+    ApiKey,
+    ApiKeyScope,
+    WebhookDelivery,
+    WebhookDeliveryStatus,
+    WebhookEndpoint,
+    WebhookEvent,
+)
 from app.models.etims import EtimsCredential, EtimsStatus, EtimsSubmission
 from app.models.facilities import (
     Amenity,
@@ -127,6 +135,12 @@ __all__ = [
     "APPLICATION_TRANSITIONS",
     "OPEN_APPLICATION_STATUSES",
     "AgreementStatus",
+    "ApiKey",
+    "ApiKeyScope",
+    "WebhookDelivery",
+    "WebhookDeliveryStatus",
+    "WebhookEndpoint",
+    "WebhookEvent",
     "Amenity",
     "AssetKind",
     "AssetStatus",

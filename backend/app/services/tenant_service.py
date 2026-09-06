@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OrgContext, accessible_property_ids, assert_in_org
 from app.models.billing import Invoice, InvoiceStatus
+from app.models.developer import WebhookEvent
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.property import Property, Unit, UnitStatus
 from app.models.tenant import Tenancy, TenancyStatus, Tenant
@@ -27,7 +28,13 @@ from app.schemas.tenant import (
     TenantCreate,
     TenantUpdate,
 )
-from app.services import audit_service, lease_service, notification_service, reference_service
+from app.services import (
+    audit_service,
+    lease_service,
+    notification_service,
+    reference_service,
+    webhook_service,
+)
 from app.services.notifications import normalize_phone
 
 EXPIRING_SOON_DAYS = 60
@@ -129,6 +136,17 @@ async def create_tenant(
     )
     await db.commit()
     await db.refresh(record)
+    await webhook_service.dispatch(
+        db,
+        context.organization_id,
+        WebhookEvent.TENANT_CREATED,
+        {
+            "id": str(record.id),
+            "reference_code": record.reference_code,
+            "full_name": record.full_name,
+            "phone_number": record.phone_number,
+        },
+    )
     return record
 
 

@@ -73,6 +73,10 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Highest trial reminder already sent (7, 3 or 1) so Celery Beat never repeats one.
     trial_reminder_sent_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # Public API (Sprint 19). None means "use the platform default" — only an
+    # enterprise plan gets a bespoke ceiling.
+    api_rate_limit_per_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     users: Mapped[list["User"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
 
     @property

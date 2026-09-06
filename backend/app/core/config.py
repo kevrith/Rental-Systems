@@ -96,6 +96,15 @@ class Settings(BaseSettings):
     VAPID_PRIVATE_KEY: str | None = None
     VAPID_SUBJECT: str = "mailto:support@rentflow.co.ke"
 
+    # Public API (Sprint 19) — per-key hourly ceiling unless an organization
+    # overrides it (Organization.api_rate_limit_per_hour).
+    API_KEY_DEFAULT_RATE_LIMIT_PER_HOUR: int = 1000
+    API_MAX_PAGE_SIZE: int = 200
+
+    # Outbound webhooks (Sprint 19)
+    WEBHOOK_MAX_PER_ORG: int = 10
+    WEBHOOK_DELIVERY_TIMEOUT_SECONDS: int = 15
+
     @property
     def sync_database_url(self) -> str:
         return self.DATABASE_URL_SYNC or self.DATABASE_URL.replace(
