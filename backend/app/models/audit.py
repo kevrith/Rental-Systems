@@ -36,3 +36,12 @@ class AuditLog(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     gps_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     gps_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Hash chain (Sprint 26A) — see `app/services/audit_chain_service.py`. Left
+    # null at insert time; a scheduled task fills both columns in shortly
+    # after, in append order, chaining each row's HMAC onto the previous
+    # row's. `record()` itself stays synchronous and untouched by this — every
+    # one of its ~130 call sites keeps working exactly as before, and rows
+    # only ever get chained going forward, never rewritten.
+    prev_hash: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    entry_hash: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)

@@ -25,7 +25,7 @@ from app.models.notification import NotificationChannel, NotificationType
 from app.models.property import Property, Unit
 from app.models.tenant import Tenancy, Tenant
 from app.models.vacancy import DataExport, ExportFormat, ExportKind
-from app.services import audit_service, file_service, notification_service
+from app.services import audit_service, file_service, notification_service, tenant_pii
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +54,15 @@ async def _tenant_rows(db: AsyncSession, context: OrgContext, **_) -> list[dict]
     rows = await db.scalars(
         select(Tenant).where(Tenant.organization_id == context.organization_id).order_by(Tenant.full_name)
     )
+    tenants = list(rows)
+    national_ids = {t.id: await tenant_pii.decrypt_national_id(db, t) for t in tenants}
     return [
         {
             "Reference": tenant.reference_code,
             "Full name": tenant.full_name,
             "Phone": tenant.phone_number,
             "Email": tenant.email,
-            "National ID": tenant.national_id,
+            "National ID": national_ids[tenant.id],
             "Employer": tenant.employer_name,
             "Occupation": tenant.occupation,
             "Monthly income": tenant.monthly_income,
@@ -69,7 +71,7 @@ async def _tenant_rows(db: AsyncSession, context: OrgContext, **_) -> list[dict]
             "Archived": tenant.is_archived,
             "Added on": tenant.created_at,
         }
-        for tenant in rows
+        for tenant in tenants
     ]
 
 
@@ -279,6 +281,39 @@ def to_excel(rows: list[dict], sheet_name: str) -> bytes:
     return buffer.getvalue()
 
 
+def to_parquet(rows: list[dict]) -> bytes:
+    """Columnar, for a customer's own warehouse/BI tooling — not `_cell`'s CSV/Excel
+    display normalisation, which turns `None` into `""` (fine for a spreadsheet cell,
+    wrong for a typed column: a warehouse needs a real null, not an empty string that
+    breaks a numeric column's type). Decimals become floats and UUIDs become strings
+    because Arrow has no native type for either; real `date`/`datetime` values are
+    left alone so Arrow infers a proper timestamp column instead of a string a BI
+    tool would have to re-parse.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    if not rows:
+        return b""
+
+    def cell(value: Any) -> Any:
+        if isinstance(value, Decimal):
+            return float(value)
+        if isinstance(value, uuid.UUID):
+            return str(value)
+        if isinstance(value, datetime | date):
+            return value
+        if hasattr(value, "value"):  # enum
+            return value.value
+        return value
+
+    normalized = [{key: cell(value) for key, value in row.items()} for row in rows]
+    table = pa.Table.from_pylist(normalized)
+    buffer = io.BytesIO()
+    pq.write_table(table, buffer, compression="snappy")
+    return buffer.getvalue()
+
+
 async def build(
     db: AsyncSession,
     context: OrgContext,
@@ -294,6 +329,8 @@ async def build(
 
     if export_format == ExportFormat.CSV:
         return to_csv(rows), f"rentflow-{kind.value}-{stamp}.csv", len(rows)
+    if export_format == ExportFormat.PARQUET:
+        return to_parquet(rows), f"rentflow-{kind.value}-{stamp}.parquet", len(rows)
     return (
         to_excel(rows, kind.value.title()),
         f"rentflow-{kind.value}-{stamp}.xlsx",
@@ -431,5 +468,73 @@ async def run_scheduled_exports(db: AsyncSession) -> int:
         except Exception:  # noqa: BLE001 — one organisation must not stop the rest
             logger.exception("Scheduled export failed for organisation %s", organization.id)
             await db.rollback()
+
+    return built
+
+
+async def run_bi_exports(db: AsyncSession) -> int:
+    """Scheduled Parquet drops for an organisation's own analytics team (Sprint
+    26A, item 14) — opt-in (`Organization.bi_export_enabled`), so this cost is
+    never paid by an organisation with no data team to hand a Parquet file to.
+
+    Every `ExportKind` is dropped, not just tenancies — a warehouse team wants
+    the same tables a spreadsheet export gives a person, not a curated subset.
+    Delivered the same way every other generated document is: filed in
+    `StoredFile` and reachable through the organisation's own `/exports`
+    listing, behind a signed URL. A customer's warehouse-native destination
+    (a BigQuery/Snowflake credential this deployment does not hold) is a
+    documented, separate extension point — see `docs/procurement/bi-export.md`
+    — not something this environment can configure or test end-to-end.
+    """
+    from app.models.organization import Organization
+    from app.models.user import User, UserRole
+
+    organizations = list(
+        await db.scalars(
+            select(Organization).where(
+                Organization.is_active.is_(True), Organization.bi_export_enabled.is_(True)
+            )
+        )
+    )
+
+    built = 0
+    for organization in organizations:
+        owner = await db.scalar(
+            select(User)
+            .where(
+                User.organization_id == organization.id,
+                User.role.in_([UserRole.OWNER, UserRole.AGENCY_ADMIN]),
+                User.is_active.is_(True),
+            )
+            .order_by(User.created_at)
+        )
+        if owner is None:
+            continue
+
+        context = OrgContext(user=owner, organization=organization)
+        exported_kinds: list[str] = []
+        try:
+            for kind in ExportKind:
+                await build_and_store(db, organization.id, kind, ExportFormat.PARQUET, context=context)
+                exported_kinds.append(kind.value)
+                built += 1
+        except Exception:  # noqa: BLE001 — one organisation, or one dataset, must not stop the rest
+            logger.exception("Scheduled BI export failed for organisation %s", organization.id)
+            await db.rollback()
+            continue
+
+        if exported_kinds:
+            await notification_service.send(
+                db,
+                recipient=notification_service.Recipient.for_user(owner),
+                notification_type=NotificationType.EXPORT_READY,
+                title="Your warehouse export is ready",
+                body=f"{len(exported_kinds)} dataset(s) exported as Parquet: {', '.join(exported_kinds)}.",
+                channels=[NotificationChannel.IN_APP, NotificationChannel.EMAIL],
+                link_path="/settings/exports",
+                entity_type="organization",
+                entity_id=organization.id,
+            )
+            await db.commit()
 
     return built

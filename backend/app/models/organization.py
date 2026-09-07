@@ -167,6 +167,15 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Boolean, default=False, server_default=text("false"), nullable=False
     )
 
+    # Sprint 26A, item 14: scheduled Parquet drops for an enterprise
+    # customer's own analytics/warehouse team. Off by default — most
+    # customers have no data team to hand a Parquet file to, so this is an
+    # explicit opt-in rather than an extra background job every organisation
+    # pays the cost of. See `app/services/export_service.run_bi_exports`.
+    bi_export_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
+
     # `foreign_keys` is explicit because `suspended_by_id` above adds a second
     # foreign key between these two tables, and without it SQLAlchemy cannot
     # tell which one this relationship travels.

@@ -90,6 +90,11 @@ class Permission(str, enum.Enum):
     DATA_REQUEST_MANAGE = "data_request:manage"
     CO_TENANT_MANAGE = "co_tenant:manage"
 
+    # Configurable approval chains (Sprint 26A, item 13)
+    APPROVAL_VIEW = "approval:view"
+    APPROVAL_ACT = "approval:act"
+    APPROVAL_RULE_MANAGE = "approval_rule:manage"
+
 
 _FULL_OPERATOR_PERMISSIONS: set[Permission] = {
     Permission.USER_INVITE,
@@ -138,6 +143,8 @@ _FULL_OPERATOR_PERMISSIONS: set[Permission] = {
     Permission.VISITOR_LOG_RECORD,
     Permission.DATA_REQUEST_MANAGE,
     Permission.CO_TENANT_MANAGE,
+    Permission.APPROVAL_VIEW,
+    Permission.APPROVAL_ACT,
 }
 
 ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
@@ -145,8 +152,10 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
     # Security hardening (IP whitelist, session policy, audit export) is an
     # organisation-level configuration decision — like ORG_MANAGE, it sits
     # alongside the shared operator set rather than inside it.
-    UserRole.OWNER: _FULL_OPERATOR_PERMISSIONS | {Permission.ORG_MANAGE, Permission.SECURITY_MANAGE},
-    UserRole.AGENCY_ADMIN: _FULL_OPERATOR_PERMISSIONS | {Permission.ORG_MANAGE, Permission.SECURITY_MANAGE},
+    UserRole.OWNER: _FULL_OPERATOR_PERMISSIONS
+    | {Permission.ORG_MANAGE, Permission.SECURITY_MANAGE, Permission.APPROVAL_RULE_MANAGE},
+    UserRole.AGENCY_ADMIN: _FULL_OPERATOR_PERMISSIONS
+    | {Permission.ORG_MANAGE, Permission.SECURITY_MANAGE, Permission.APPROVAL_RULE_MANAGE},
     # A property manager runs day-to-day operations but cannot reconfigure the org.
     UserRole.PROPERTY_MANAGER: _FULL_OPERATOR_PERMISSIONS,
     # A caretaker works on their assigned properties only (enforced separately by
@@ -190,6 +199,8 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.REPORT_VIEW,
         Permission.REPORT_MANAGE,
         Permission.FRAUD_VIEW,
+        Permission.APPROVAL_VIEW,
+        Permission.APPROVAL_ACT,
     },
     # Read-only transparency portal for owners inside an agency account (Phase 2).
     UserRole.OWNER_PORTAL_USER: {

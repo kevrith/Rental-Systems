@@ -2,10 +2,18 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# deb.debian.org resolves to IPv6 first on many networks; where IPv6 has no real
-# route the fetch stalls until it times out, per package. Forcing IPv4 turns a
-# ~40 minute build into a couple of minutes.
-RUN printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99force-ipv4
+# deb.debian.org and pypi.org both resolve to IPv6 first on many networks;
+# where IPv6 has no real route each fetch stalls until it times out, per
+# package — sometimes a full package succeeds and the next one on the same
+# host fails, which is what makes this look like a flaky package rather than
+# a routing problem (seen directly: this exact build failed for one line of
+# requirements.txt while every other line above it succeeded).
+# `Acquire::ForceIPv4` only ever covered apt; `gai.conf`'s precedence rule
+# covers every tool that resolves through glibc — apt, pip, and anything
+# else — which is the fix this needed all along, apt was just the first
+# symptom anyone hit.
+RUN printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99force-ipv4 \
+    && printf 'precedence ::ffff:0:0/96 100\n' >> /etc/gai.conf
 
 # WeasyPrint renders the lease, invoice and receipt PDFs and needs the pango /
 # cairo stack at runtime; fonts-dejavu-core is the typeface the templates ask

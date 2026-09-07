@@ -26,6 +26,7 @@ import {
   LogOut,
   Menu,
   Receipt,
+  Search,
   Settings,
   ShieldAlert,
   ShieldCheck,
@@ -46,7 +47,9 @@ import { notificationsApi, organizationApi } from '@/api'
 import { authApi } from '@/api/auth'
 import { SyncIndicator } from '@/components/SyncIndicator'
 import { Badge, Button } from '@/components/ui'
+import { CommandPalette } from '@/components/CommandPalette'
 import { InstallPrompt } from '@/components/InstallPrompt'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { ChangelogWidget } from '@/features/success/ChangelogWidget'
 import { HelpPanel } from '@/features/success/HelpPanel'
 import { MilestoneCelebration } from '@/features/success/MilestoneCelebration'
@@ -57,6 +60,7 @@ import { cn } from '@/lib/cn'
 import { initials } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
 import { useAuthStore, type AuthOrganization } from '@/store/auth-store'
+import { useCommandPaletteStore } from '@/store/command-palette-store'
 
 interface NavItem {
   to: string
@@ -172,6 +176,12 @@ const NAV_SECTIONS: { heading: string; items: NavItem[] }[] = [
         label: 'Fraud alerts',
         icon: <ShieldAlert className="h-4 w-4" />,
         permission: 'fraud:view',
+      },
+      {
+        to: '/approvals',
+        label: 'Approvals',
+        icon: <ClipboardCheck className="h-4 w-4" />,
+        permission: 'approval:view',
       },
     ],
   },
@@ -369,9 +379,9 @@ export function AppShell() {
     .filter((section) => section.items.length > 0)
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
       {/* Desktop sidebar */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white lg:flex">
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white lg:flex dark:border-slate-800 dark:bg-slate-900">
         <Brand />
         <NavList sections={visibleSections} />
         <UserFooter onLogout={handleLogout} />
@@ -381,18 +391,18 @@ export function AppShell() {
       {mobileNavOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div
-            className="absolute inset-0 bg-slate-900/40"
+            className="absolute inset-0 bg-slate-900/40 dark:bg-black/60"
             onClick={() => setMobileNavOpen(false)}
             aria-hidden
           />
-          <aside className="relative flex h-full w-72 flex-col bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <aside className="relative flex h-full w-72 flex-col bg-white shadow-xl dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
               <Brand compact />
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(false)}
                 aria-label="Close navigation"
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -404,22 +414,22 @@ export function AppShell() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
             aria-label="Open navigation"
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden"
+            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden dark:text-slate-400 dark:hover:bg-slate-800"
           >
             <Menu className="h-5 w-5" />
           </button>
 
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-slate-900">
+            <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
               {org?.name ?? 'RentFlow'}
             </p>
             {org?.is_trial && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {org.is_trial_expired
                   ? 'Trial ended'
                   : `Trial · ${org.trial_days_remaining ?? 0} day(s) left`}
@@ -427,22 +437,43 @@ export function AppShell() {
             )}
           </div>
 
+          <button
+            type="button"
+            onClick={() => useCommandPaletteStore.getState().setOpen(true)}
+            className="hidden items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-400 hover:bg-slate-50 sm:flex dark:border-slate-700 dark:hover:bg-slate-800"
+            aria-label="Search"
+          >
+            <Search className="h-3.5 w-3.5" />
+            Search
+            <kbd className="rounded border border-slate-200 px-1 text-[10px] dark:border-slate-700">⌘K</kbd>
+          </button>
+          <button
+            type="button"
+            onClick={() => useCommandPaletteStore.getState().setOpen(true)}
+            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 sm:hidden dark:text-slate-400 dark:hover:bg-slate-800"
+            aria-label="Search"
+          >
+            <Search className="h-5 w-5" />
+          </button>
+
           <SyncIndicator compact />
 
           <button
             type="button"
             onClick={() => setHelpOpen(true)}
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
             aria-label="Help"
           >
             <HelpCircle className="h-5 w-5" />
           </button>
 
+          <ThemeToggle />
+
           <ChangelogWidget />
 
           <Link
             to="/notifications"
-            className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+            className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
             aria-label="Notifications"
           >
             <Bell className="h-5 w-5" />
@@ -466,17 +497,18 @@ export function AppShell() {
       <NpsPopup />
       <MilestoneCelebration />
       <InstallPrompt />
+      <CommandPalette />
     </div>
   )
 }
 
 function Brand({ compact = false }: { compact?: boolean }) {
   return (
-    <div className={cn('flex items-center gap-2', !compact && 'border-b border-slate-100 px-5 py-4')}>
+    <div className={cn('flex items-center gap-2', !compact && 'border-b border-slate-100 px-5 py-4 dark:border-slate-800')}>
       <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
         <Building2 className="h-4 w-4" />
       </span>
-      <span className="font-semibold text-slate-900">RentFlow</span>
+      <span className="font-semibold text-slate-900 dark:text-slate-100">RentFlow</span>
     </div>
   )
 }
@@ -486,7 +518,7 @@ function NavList({ sections }: { sections: { heading: string; items: NavItem[] }
     <nav className="flex-1 overflow-y-auto px-3 py-4">
       {sections.map((section) => (
         <div key={section.heading} className="mb-5">
-          <p className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
             {section.heading}
           </p>
           <ul className="space-y-0.5">
@@ -498,8 +530,8 @@ function NavList({ sections }: { sections: { heading: string; items: NavItem[] }
                     cn(
                       'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors',
                       isActive
-                        ? 'bg-brand-50 font-medium text-brand-700'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                        ? 'bg-brand-50 font-medium text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
                     )
                   }
                 >
@@ -519,19 +551,19 @@ function UserFooter({ onLogout }: { onLogout: () => void }) {
   const user = useAuthStore((state) => state.user)
 
   return (
-    <div className="border-t border-slate-100 p-3">
+    <div className="border-t border-slate-100 p-3 dark:border-slate-800">
       <Link
         to="/settings/profile"
-        className="flex items-center gap-2.5 rounded-lg p-2 hover:bg-slate-100"
+        className="flex items-center gap-2.5 rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
       >
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">
           {initials(user?.full_name)}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-slate-900">
+          <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">
             {user?.full_name}
           </span>
-          <span className="block truncate text-xs capitalize text-slate-500">
+          <span className="block truncate text-xs capitalize text-slate-500 dark:text-slate-400">
             {user?.role?.replace(/_/g, ' ')}
           </span>
         </span>
@@ -539,7 +571,7 @@ function UserFooter({ onLogout }: { onLogout: () => void }) {
       <button
         type="button"
         onClick={onLogout}
-        className="mt-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-slate-600 hover:bg-slate-100 hover:text-danger-700"
+        className="mt-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-slate-600 hover:bg-slate-100 hover:text-danger-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-danger-400"
       >
         <LogOut className="h-4 w-4" />
         Log out

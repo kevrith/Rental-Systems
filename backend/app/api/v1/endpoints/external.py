@@ -26,6 +26,7 @@ from app.models.developer import ApiKeyScope
 from app.models.property import Property, Unit
 from app.models.tenant import Tenant
 from app.schemas.pagination import decode_cursor, encode_cursor
+from app.services import tenant_pii
 
 router = APIRouter()
 
@@ -114,13 +115,16 @@ def _unit_row(row: Unit) -> dict[str, Any]:
 
 
 def _tenant_row(row: Tenant) -> dict[str, Any]:
+    # `national_id` here is whatever `row.national_id` currently holds — the
+    # masked last-4 hint by default (list view, below), or the fully
+    # decrypted value if a caller set it first (the single-tenant endpoint).
     return {
         "id": row.id,
         "reference_code": row.reference_code,
         "full_name": row.full_name,
         "phone_number": row.phone_number,
         "email": row.email,
-        "national_id": row.national_id,
+        "national_id": getattr(row, "national_id", None) or tenant_pii.masked_national_id(row),
         "is_archived": row.is_archived,
         "created_at": row.created_at,
     }
@@ -277,6 +281,7 @@ async def get_tenant(
         return JSONResponse(
             status_code=404, content={"status": "error", "data": None, "errors": ["Tenant not found"]}
         )
+    row.national_id = await tenant_pii.decrypt_national_id(db, row)
     return _ok(_select_fields(_tenant_row(row), fields))
 
 

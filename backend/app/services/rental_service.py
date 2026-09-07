@@ -31,7 +31,7 @@ from app.models.asset import (
     RentalAsset,
 )
 from app.models.tenant import Tenant
-from app.services import audit_service, reference_service
+from app.services import audit_service, reference_service, tenant_pii
 
 logger = logging.getLogger(__name__)
 
@@ -425,6 +425,8 @@ async def _render_agreement(db: AsyncSession, agreement: RentalAgreement, asset:
     organization = await db.get(Organization, agreement.organization_id)
     if not (hirer and organization):
         return None
+
+    hirer.national_id = await tenant_pii.decrypt_national_id(db, hirer)
 
     try:
         pdf_bytes = pdf_service.render_pdf(

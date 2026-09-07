@@ -19,6 +19,7 @@ weasyprint==63.1
 segno==1.6.1
 # Excel import/export for bulk onboarding and data migration (US-072, US-076, US-077).
 openpyxl==3.1.5
+pyarrow==18.1.0
 boto3==1.35.92
 pywebpush==2.0.0
 resend==2.10.0
@@ -30,3 +31,15 @@ clamd==1.0.2
 webauthn==2.6.0
 # Error tracking (Sprint 26). Inert without SENTRY_DSN.
 sentry-sdk[fastapi,celery,sqlalchemy]==2.20.0
+# Distributed tracing (Sprint 26). Inert without OTEL_EXPORTER_OTLP_ENDPOINT.
+opentelemetry-api==1.33.1
+opentelemetry-sdk==1.33.1
+opentelemetry-exporter-otlp-proto-http==1.33.1
+opentelemetry-instrumentation==0.54b1
+opentelemetry-instrumentation-fastapi==0.54b1
+opentelemetry-instrumentation-sqlalchemy==0.54b1
+opentelemetry-instrumentation-celery==0.54b1
+opentelemetry-instrumentation-httpx==0.54b1
+# Prometheus metrics at /metrics (Sprint 26).
+prometheus-client==0.21.1
+prometheus-fastapi-instrumentator==7.1.0

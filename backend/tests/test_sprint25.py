@@ -529,7 +529,9 @@ async def test_erasure_redacts_pii_but_keeps_financial_records(owner: Actor, cli
 
     row = await db.get(Tenant, uuid.UUID(tenant["id"]))
     assert row.full_name == "Erased tenant"
-    assert row.national_id is None
+    assert row.national_id_encrypted is None
+    assert row.national_id_blind_index is None
+    assert row.national_id_last4 is None
     assert row.erased_at is not None
     assert row.is_archived is True
 

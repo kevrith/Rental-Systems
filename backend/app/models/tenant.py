@@ -49,7 +49,30 @@ class Tenant(OrgScopedMixin, ArchivableMixin, UUIDPrimaryKeyMixin, TimestampMixi
     full_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     phone_number: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
-    national_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+
+    # National ID is field-level encrypted per-organization (Sprint 26A) rather
+    # than mapped as plaintext — see `app/services/tenant_pii.py`'s
+    # `set_national_id`/`decrypt_national_id`/`masked_national_id`, which are
+    # the only code meant to touch these three columns directly.
+    # `_blind_index` is a deterministic HMAC (`app/core/crypto.blind_index`)
+    # so exact-match duplicate detection still works without decrypting
+    # anything; `_last4` is a plaintext display/search hint, same idea as
+    # `crypto.mask()`. The original plaintext `national_id` column is dropped
+    # in a later, explicitly separate migration once every environment has
+    # been backfilled — see `backend/scripts/backfill_national_id_encryption.py`.
+    national_id_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    national_id_blind_index: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    national_id_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
+
+    if TYPE_CHECKING:
+        # Transient, unmapped — never persisted, never read from the db.
+        # `tenant_pii.py`'s callers stash a decrypted (single-record reveal)
+        # or masked (list view) national ID here for exactly the duration of
+        # one request or one PDF render; a fresh load never has it set. This
+        # block only exists so mypy accepts the assignment — it is skipped at
+        # runtime and does not reach SQLAlchemy's declarative class scan, so
+        # it cannot be mistaken for a mapped column.
+        national_id: str | None
 
     # KYC documents (stored_files ids)
     id_photo_front_id: Mapped[uuid.UUID | None] = mapped_column(

@@ -36,7 +36,13 @@ from app.schemas.application import (
     ApplicationReject,
     ApplicationUpdate,
 )
-from app.services import audit_service, notification_service, reference_service, screening_service
+from app.services import (
+    audit_service,
+    notification_service,
+    reference_service,
+    screening_service,
+    tenant_pii,
+)
 from app.services.notifications import normalize_phone
 
 ZERO = Decimal("0.00")
@@ -532,7 +538,6 @@ async def _tenant_from_application(db: AsyncSession, application: TenantApplicat
         full_name=application.full_name,
         phone_number=application.phone_number,
         email=application.email,
-        national_id=application.national_id,
         id_photo_front_id=application.id_document_id,
         passport_photo_id=application.passport_photo_id,
         employer_name=application.employer_name,
@@ -543,6 +548,7 @@ async def _tenant_from_application(db: AsyncSession, application: TenantApplicat
             f"(screening score {application.score}/100)."
         ),
     )
+    await tenant_pii.set_national_id(db, tenant, application.national_id)
     db.add(tenant)
     await db.flush()
     return tenant

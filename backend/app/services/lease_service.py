@@ -17,7 +17,7 @@ from app.models.file import FileCategory, StoredFile
 from app.models.organization import Organization
 from app.models.property import Property, Unit
 from app.models.tenant import LeaseTemplate, Tenancy, TenancyCoTenant, Tenant
-from app.services import file_service, pdf_service, storage_service
+from app.services import file_service, pdf_service, storage_service, tenant_pii
 
 DEFAULT_CLAUSES: list[dict[str, str]] = [
     {
@@ -231,7 +231,12 @@ def build_variables(
         "co_tenant_names": co_tenant_names,
         "tenant_phone": tenant.phone_number,
         "tenant_email": tenant.email or "",
-        "tenant_id_number": tenant.national_id or "",
+        # `national_id` is encrypted at rest and only set on `tenant` (a
+        # transient, unmapped attribute) by a caller that has already
+        # decrypted it — `generate_lease_pdf`, below. A `Tenant` passed here
+        # without going through that step (e.g. a direct unit test of this
+        # function) simply gets an empty string rather than an AttributeError.
+        "tenant_id_number": getattr(tenant, "national_id", None) or "",
         "tenant_reference": tenant.reference_code,
         "property_name": property_record.name,
         "property_address": property_record.address,
@@ -290,6 +295,11 @@ async def generate_lease_pdf(
     co_tenant_rows = await db.scalars(select(TenancyCoTenant).where(TenancyCoTenant.tenancy_id == tenancy.id))
     co_tenants = [await db.get(Tenant, row.tenant_id) for row in co_tenant_rows]
     co_tenant_names = ", ".join(co.full_name for co in co_tenants if co is not None)
+
+    # A generated lease is a single, deliberate reveal of one tenant's national
+    # ID — decrypted onto the (unmapped, transient) `national_id` attribute so
+    # both branches below can read `tenant.national_id` exactly as before.
+    tenant.national_id = await tenant_pii.decrypt_national_id(db, tenant)
 
     if template is not None:
         variables = build_variables(

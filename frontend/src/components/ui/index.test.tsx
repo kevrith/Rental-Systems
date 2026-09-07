@@ -72,6 +72,44 @@ describe('Field', () => {
 
     expect(screen.getByText('*')).toBeInTheDocument()
   })
+
+  it('associates the label with its control, so getByLabel and a screen reader both find it', () => {
+    render(
+      <Field label="Monthly rent">
+        <Input />
+      </Field>,
+    )
+
+    // Proves the wiring is real, not just visual adjacency: getByLabel only
+    // succeeds via a programmatic association (htmlFor/id, or wrapping).
+    expect(screen.getByLabelText('Monthly rent')).toBeInstanceOf(HTMLInputElement)
+  })
+
+  it('points the control at its error message via aria-describedby', () => {
+    render(
+      <Field label="Monthly rent" error="Must be greater than zero">
+        <Input />
+      </Field>,
+    )
+
+    const input = screen.getByLabelText('Monthly rent')
+    const describedBy = input.getAttribute('aria-describedby')
+    expect(describedBy).toBeTruthy()
+    expect(document.getElementById(describedBy!)).toHaveTextContent('Must be greater than zero')
+  })
+
+  it('leaves a child it cannot safely clone onto alone, rather than crashing', () => {
+    // Multiple children (no single element to attach an id to) must degrade
+    // to the pre-existing behaviour, not throw.
+    expect(() =>
+      render(
+        <Field label="Choose one">
+          <Input />
+          <Input />
+        </Field>,
+      ),
+    ).not.toThrow()
+  })
 })
 
 describe('Alert', () => {

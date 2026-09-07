@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 
 import { propertiesApi, tenantsApi } from '@/api'
 import { PageHeader } from '@/components/PageHeader'
+import { SavedViewsBar } from '@/components/SavedViewsBar'
 import {
   Badge,
   Card,
@@ -116,6 +117,18 @@ export function TenantsPage() {
             </option>
           ))}
         </Select>
+      </div>
+
+      <div className="mb-4">
+        <SavedViewsBar
+          entityType="tenants"
+          filters={{ search, status, propertyId }}
+          onApply={(applied) => {
+            setSearch(applied.search ?? '')
+            setStatus(applied.status ?? '')
+            setPropertyId(applied.propertyId ?? '')
+          }}
+        />
       </div>
 
       <Card>

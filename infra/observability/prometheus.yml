@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: rentflow-api
+    metrics_path: /metrics
+    static_configs:
+      # "backend" is the service name from the root docker-compose.yml. This
+      # only resolves when the two compose files are brought up together as
+      # one merged project:
+      #   docker compose -f docker-compose.yml -f infra/observability/docker-compose.yml up
+      # Running the backend on the host instead (uvicorn directly, outside
+      # Docker) needs host.docker.internal in its place, plus this service's
+      # `extra_hosts: ["host.docker.internal:host-gateway"]` on Linux — see
+      # this directory's README.
+      - targets: ["backend:8000"]
+    # Set to the same value as backend/.env's METRICS_TOKEN once one is
+    # configured. Commented out here because the default local setup leaves
+    # METRICS_TOKEN blank, and an Authorization header against an endpoint
+    # that isn't checking one is harmless but confusing to find in a diff.
+    # authorization:
+    #   credentials: "your-metrics-token-here"

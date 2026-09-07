@@ -770,6 +770,7 @@ export function OrganizationSettings() {
       bank_branch: String(data.bank_branch ?? ''),
       cash_dual_approval_threshold: String(data.cash_dual_approval_threshold ?? ''),
       max_concurrent_sessions: String(data.max_concurrent_sessions ?? ''),
+      bi_export_enabled: data.bi_export_enabled ? 'true' : '',
     })
     setRoleTimeouts(
       Object.fromEntries(
@@ -816,6 +817,7 @@ export function OrganizationSettings() {
         max_concurrent_sessions: form.max_concurrent_sessions
           ? Number(form.max_concurrent_sessions)
           : null,
+        bi_export_enabled: form.bi_export_enabled === 'true',
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.organization })
@@ -1088,6 +1090,37 @@ export function OrganizationSettings() {
                 onChange={set('max_concurrent_sessions')}
               />
             </Field>
+          </CardBody>
+        </Card>
+      )}
+
+      {canManage && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Warehouse export</CardTitle>
+            <p className="text-xs text-slate-500">For a data team pulling into their own BI tooling.</p>
+          </CardHeader>
+          <CardBody>
+            <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 accent-brand-600"
+                checked={form.bi_export_enabled === 'true'}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    bi_export_enabled: event.target.checked ? 'true' : '',
+                  }))
+                }
+              />
+              <span>
+                Weekly Parquet export
+                <span className="block text-xs text-slate-500 dark:text-slate-400">
+                  Every dataset (tenants, tenancies, payments, properties, units, invoices) dropped as
+                  Parquet each week, for a data team to pull into their own warehouse. Off by default.
+                </span>
+              </span>
+            </label>
           </CardBody>
         </Card>
       )}

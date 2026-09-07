@@ -144,7 +144,7 @@ export function DashboardPage() {
                   <CardHeader>
                     <div>
                       <CardTitle>Income — last 6 months</CardTitle>
-                      <p className="mt-0.5 text-sm text-slate-500">Invoiced against collected</p>
+                      <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">Invoiced against collected</p>
                     </div>
                   </CardHeader>
                   <CardBody>
@@ -219,10 +219,10 @@ export function DashboardPage() {
                           className="flex items-center justify-between gap-3 px-5 py-3"
                         >
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-slate-900">
+                            <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
                               {defaulter.tenant_name}
                             </p>
-                            <p className="truncate text-xs text-slate-500">
+                            <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                               {defaulter.property_name} · Unit {defaulter.unit_number}
                             </p>
                           </div>
@@ -230,7 +230,7 @@ export function DashboardPage() {
                             <p className="text-sm font-semibold text-danger-700">
                               {kes(defaulter.amount_owed)}
                             </p>
-                            <p className="text-xs text-slate-400">
+                            <p className="text-xs text-slate-400 dark:text-slate-500">
                               {defaulter.days_overdue} days overdue
                             </p>
                           </div>
@@ -264,10 +264,10 @@ export function DashboardPage() {
                           className="flex items-center justify-between gap-3 px-5 py-3"
                         >
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-slate-900">
+                            <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
                               {payment.tenant_name}
                             </p>
-                            <p className="truncate text-xs text-slate-500">
+                            <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                               Unit {payment.unit_number} · {payment.method.replace('_', ' ')} ·{' '}
                               {dateTime(payment.paid_at)}
                             </p>
@@ -340,11 +340,11 @@ function AttentionRow({
         <Link
           key={item.label}
           to={item.to}
-          className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:border-brand-300"
+          className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:border-brand-300 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-brand-600"
         >
           <span className={item.tone}>{item.icon}</span>
-          <span className="font-semibold text-slate-900">{item.value}</span>
-          <span className="text-slate-600">{item.label}</span>
+          <span className="font-semibold text-slate-900 dark:text-slate-100">{item.value}</span>
+          <span className="text-slate-600 dark:text-slate-400">{item.label}</span>
         </Link>
       ))}
     </div>
@@ -371,7 +371,7 @@ function OccupancyChart({
   ].filter((entry) => entry.value > 0)
 
   if (data.length === 0) {
-    return <p className="py-12 text-center text-sm text-slate-500">No units yet.</p>
+    return <p className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">No units yet.</p>
   }
 
   return (
@@ -435,7 +435,7 @@ function QuickActions() {
 
   return (
     <div className="mt-6">
-      <p className="mb-2 text-sm font-medium text-slate-700">Quick actions</p>
+      <p className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">Quick actions</p>
       <div className="flex flex-wrap gap-2">
         {actions.map((action) => (
           <Link key={action.to} to={action.to} className={linkButtonClass('outline')}>

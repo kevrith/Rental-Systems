@@ -25,6 +25,13 @@ from app.models.application import (
     ReferenceStatus,
     TenantApplication,
 )
+from app.models.approval import (
+    ApprovalAction,
+    ApprovalActionType,
+    ApprovalRequest,
+    ApprovalRequestStatus,
+    ApprovalRule,
+)
 from app.models.asset import (
     AgreementStatus,
     AssetKind,
@@ -87,8 +94,11 @@ from app.models.integrations import (
     PortalName,
     PortalSyncStatus,
 )
+from app.models.legal_hold import LegalHold
 from app.models.notification import (
     DeliveryStatus,
+    EmailSuppression,
+    EmailSuppressionReason,
     Notification,
     NotificationChannel,
     NotificationPreference,
@@ -134,6 +144,7 @@ from app.models.reporting import (
     ReportExportFormat,
     ReportSchedule,
 )
+from app.models.saved_view import SavedView
 from app.models.security import (
     BREACH_NOTIFICATION_WINDOW_HOURS,
     NOTIFIABLE_SEVERITIES,
@@ -212,6 +223,11 @@ __all__ = [
     "ApplicationRejectionReason",
     "ApplicationStatus",
     "Apportionment",
+    "ApprovalAction",
+    "ApprovalActionType",
+    "ApprovalRequest",
+    "ApprovalRequestStatus",
+    "ApprovalRule",
     "AssetKind",
     "AssetStatus",
     "AuditLog",
@@ -240,6 +256,8 @@ __all__ = [
     "DigitalSignature",
     "Disbursement",
     "DisbursementStatus",
+    "EmailSuppression",
+    "EmailSuppressionReason",
     "EmploymentStatus",
     "EtimsCredential",
     "EtimsStatus",
@@ -271,6 +289,7 @@ __all__ = [
     "LeaseSuggestionCategory",
     "LeaseSuggestionStatus",
     "LeaseTemplate",
+    "LegalHold",
     "LineItemKind",
     "ListingStatus",
     "MaintenanceCategory",
@@ -317,6 +336,7 @@ __all__ = [
     "ReportExportFormat",
     "ReportSchedule",
     "RoomCondition",
+    "SavedView",
     "ScanStatus",
     "SecurityBreach",
     "SecurityEvent",

@@ -36,6 +36,7 @@ public_router = APIRouter()
 MEDIA_TYPES = {
     ExportFormat.CSV: "text/csv",
     ExportFormat.EXCEL: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ExportFormat.PARQUET: "application/vnd.apache.parquet",
 }
 
 

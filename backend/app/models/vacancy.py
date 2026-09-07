@@ -152,6 +152,9 @@ class Inquiry(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class ExportFormat(str, enum.Enum):
     CSV = "csv"
     EXCEL = "excel"
+    # Sprint 26A, item 14 — columnar, for a customer's own warehouse/BI tooling
+    # rather than a person opening it directly.
+    PARQUET = "parquet"
 
 
 class ExportKind(str, enum.Enum):

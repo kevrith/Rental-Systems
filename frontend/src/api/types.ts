@@ -2649,3 +2649,71 @@ export interface ManagementAgreement {
   terminated_at: string | null
   created_at: string
 }
+
+export interface SearchResult {
+  type: string
+  id: string
+  title: string
+  subtitle: string
+  url: string
+}
+
+export interface AuditChainVerification {
+  total: number
+  verified: number
+  unchained: number
+  intact: boolean
+  broken_at_id: string | null
+  broken_at_created_at: string | null
+}
+
+export interface SavedView {
+  id: string
+  entity_type: string
+  name: string
+  filters: Record<string, unknown>
+  is_shared: boolean
+  is_default: boolean
+  user_id: string
+  created_at: string
+}
+
+export interface ApprovalRule {
+  id: string
+  entity_type: string
+  name: string
+  threshold: string | null
+  required_approver_roles: string[]
+  required_approvals: number
+  is_active: boolean
+  created_at: string
+}
+
+export type ApprovalRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
+
+export interface ApprovalAction {
+  id: string
+  actor_name: string | null
+  action: 'approve' | 'reject'
+  note: string | null
+  created_at: string
+}
+
+export interface ApprovalRequest {
+  id: string
+  entity_type: string
+  entity_id: string
+  requested_by_name: string | null
+  trigger_value: string | null
+  note: string | null
+  required_approvals: number
+  required_approver_roles: string[]
+  status: ApprovalRequestStatus
+  resolved_at: string | null
+  context: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface ApprovalRequestDetail extends ApprovalRequest {
+  actions: ApprovalAction[]
+}

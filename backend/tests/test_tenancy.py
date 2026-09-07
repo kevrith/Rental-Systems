@@ -68,7 +68,9 @@ async def test_tenant_is_searchable_by_phone_and_id(owner: Actor) -> None:
     by_phone = await owner.get("/api/v1/tenants", params={"search": tenant["phone_number"][-6:]})
     assert len(by_phone.json()) == 1
 
-    by_id = await owner.get("/api/v1/tenants", params={"search": tenant["national_id"]})
+    # National ID is encrypted at rest (Sprint 26A) and can only be matched by
+    # its plaintext last-4 hint, not a full-value substring search.
+    by_id = await owner.get("/api/v1/tenants", params={"search": tenant["national_id"][-4:]})
     assert len(by_id.json()) == 1
 
 

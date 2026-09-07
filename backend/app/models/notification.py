@@ -84,6 +84,10 @@ class DeliveryStatus(str, enum.Enum):
     DELIVERED = "delivered"
     FAILED = "failed"
     SKIPPED = "skipped"
+    # Sprint 26A, from Resend's delivery-event webhook — distinct from FAILED
+    # because both drive email_suppression_service rather than just logging.
+    BOUNCED = "bounced"
+    COMPLAINED = "complained"
 
 
 # Both `notifications` and `notification_preferences` use these two enums. Sharing
@@ -158,3 +162,30 @@ class PushSubscription(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base
     auth_key: Mapped[str] = mapped_column(String(255), nullable=False)
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class EmailSuppressionReason(str, enum.Enum):
+    BOUNCED = "bounced"
+    COMPLAINED = "complained"
+    MANUAL = "manual"
+
+
+class EmailSuppression(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """An address RentFlow will not email again (Sprint 26A).
+
+    Platform-level, not organisation-scoped — see PHASE_10_ORG_SCOPED_TABLES
+    in `app.core.rls` for why: every organisation's email goes out through the
+    same Resend sending domain, so a hard bounce or spam complaint against one
+    landlord's tenant has to suppress that address for every other landlord
+    too, or the shared domain's reputation (and everyone's deliverability)
+    pays for it. `email_service.suppress`/`is_suppressed` are the only code
+    meant to touch this table.
+    """
+
+    __tablename__ = "email_suppressions"
+
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    reason: Mapped[EmailSuppressionReason] = mapped_column(
+        Enum(EmailSuppressionReason, name="email_suppression_reason"), nullable=False
+    )
+    detail: Mapped[str | None] = mapped_column(String(512), nullable=True)

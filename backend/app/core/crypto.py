@@ -26,6 +26,7 @@ landlord to re-enter them.
 
 import base64
 import hashlib
+import hmac
 import logging
 import uuid
 from typing import TYPE_CHECKING
@@ -70,6 +71,41 @@ def mask(value: str | None, *, keep: int = 4) -> str | None:
     if len(value) <= keep:
         return "•" * len(value)
     return "•" * (len(value) - keep) + value[-keep:]
+
+
+_BLIND_INDEX_INFO = b"rentflow-blind-index-v1"
+
+
+def blind_index(organization_id: "uuid.UUID", value: str) -> str:
+    """A deterministic, one-way fingerprint of `value`, scoped to one organization.
+
+    Used where a field is encrypted (so `==` against ciphertext is meaningless)
+    but exact-match lookup still has to work — duplicate-tenant detection by
+    national ID is the first caller. This is intentionally *not* wrapped by the
+    per-organization data key from `encrypt_for_org`: that key rotates, and a
+    blind index has to keep producing the same fingerprint for the same value
+    across a rotation or every existing row becomes unfindable. The organization
+    id is folded into the HMAC key instead, which is enough to stop one
+    organization's index values from being compared against another's, without
+    tying the index to a key that is ever expected to change.
+
+    Normalizes whitespace and case first, since a national ID re-typed with
+    different spacing or casing should still hit the same index entry.
+    """
+    normalized = " ".join(value.split()).upper()
+    key_material = (
+        settings.SECRET_KEY.encode("utf-8") + str(organization_id).encode("utf-8") + _BLIND_INDEX_INFO
+    )
+    key = hashlib.sha256(key_material).digest()
+    return hmac.new(key, normalized.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def last_n(value: str | None, *, keep: int = 4) -> str | None:
+    """The trailing `keep` characters of `value`, for display/search hints on an encrypted field."""
+    if not value:
+        return None
+    normalized = " ".join(value.split())
+    return normalized[-keep:] if len(normalized) > keep else normalized
 
 
 # --------------------------------------------------- per-organization keys

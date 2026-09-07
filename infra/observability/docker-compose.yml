@@ -1,0 +1,45 @@
+
+services:
+  # OTLP receiver + trace store + UI in one process. Fine for a single droplet
+  # and for local development; a real multi-node deployment would point
+  # OTEL_EXPORTER_OTLP_ENDPOINT at a managed collector instead and drop this
+  # service, which is exactly why tracing is configured against a generic OTLP
+  # endpoint rather than against Jaeger specifically.
+  jaeger:
+    image: jaegertracing/all-in-one:1.62
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # UI
+      - "4318:4318" # OTLP/HTTP receiver — this is OTEL_EXPORTER_OTLP_ENDPOINT
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana-oss:11.3.1
+    environment:
+      # Local convenience only — see the README in this directory for
+      # production. Never a real password in a committed file.
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  grafana_data:

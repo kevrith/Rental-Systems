@@ -23,3 +23,12 @@ class FraudAlertRead(BaseModel):
 
 class ResolveFraudAlertRequest(BaseModel):
     status: Literal[FraudAlertStatus.SUPPRESSED, FraudAlertStatus.RESOLVED]
+
+
+class AuditChainVerification(BaseModel):
+    total: int
+    verified: int
+    unchained: int
+    intact: bool
+    broken_at_id: uuid.UUID | None = None
+    broken_at_created_at: str | None = None

@@ -7,14 +7,17 @@
  */
 import { Loader2, X } from 'lucide-react'
 import {
+  cloneElement,
   createContext,
   forwardRef,
+  isValidElement,
   useContext,
   useEffect,
   useId,
   type ButtonHTMLAttributes,
   type HTMLAttributes,
   type InputHTMLAttributes,
+  type LabelHTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
@@ -29,12 +32,14 @@ type ButtonSize = 'sm' | 'md' | 'lg' | 'icon'
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-brand-600 text-white hover:bg-brand-700 focus-visible:outline-brand-600',
-  secondary: 'bg-slate-100 text-slate-800 hover:bg-slate-200 focus-visible:outline-slate-400',
-  ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-slate-400',
+  secondary:
+    'bg-slate-100 text-slate-800 hover:bg-slate-200 focus-visible:outline-slate-400 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700',
+  ghost:
+    'text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-slate-400 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100',
   danger: 'bg-danger-600 text-white hover:bg-danger-700 focus-visible:outline-danger-600',
   success: 'bg-money-600 text-white hover:bg-money-700 focus-visible:outline-money-600',
   outline:
-    'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus-visible:outline-slate-400',
+    'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus-visible:outline-slate-400 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800',
 }
 
 const BUTTON_SIZES: Record<ButtonSize, string> = {
@@ -138,7 +143,10 @@ export const linkButtonClass = (variant: ButtonVariant = 'primary', size: Button
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn('rounded-card border border-slate-200 bg-white shadow-sm', className)}
+      className={cn(
+        'rounded-card border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900',
+        className,
+      )}
       {...props}
     />
   )
@@ -148,7 +156,7 @@ export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElemen
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4',
+        'flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800',
         className,
       )}
       {...props}
@@ -157,11 +165,13 @@ export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElemen
 }
 
 export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn('text-base font-semibold text-slate-900', className)} {...props} />
+  return (
+    <h2 className={cn('text-base font-semibold text-slate-900 dark:text-slate-100', className)} {...props} />
+  )
 }
 
 export function CardDescription({ className, ...props }: HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn('text-sm text-slate-500', className)} {...props} />
+  return <p className={cn('text-sm text-slate-500 dark:text-slate-400', className)} {...props} />
 }
 
 export function CardBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
@@ -173,12 +183,12 @@ export function CardBody({ className, ...props }: HTMLAttributes<HTMLDivElement>
 export type BadgeTone = 'neutral' | 'brand' | 'success' | 'warn' | 'danger' | 'info'
 
 const BADGE_TONES: Record<BadgeTone, string> = {
-  neutral: 'bg-slate-100 text-slate-700',
-  brand: 'bg-brand-50 text-brand-700',
-  success: 'bg-money-50 text-money-700',
-  warn: 'bg-warn-50 text-warn-700',
-  danger: 'bg-danger-50 text-danger-700',
-  info: 'bg-sky-50 text-sky-700',
+  neutral: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  brand: 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300',
+  success: 'bg-money-50 text-money-700 dark:bg-money-700/25 dark:text-money-300',
+  warn: 'bg-warn-50 text-warn-700 dark:bg-warn-700/25 dark:text-warn-300',
+  danger: 'bg-danger-50 text-danger-700 dark:bg-danger-700/25 dark:text-danger-300',
+  info: 'bg-sky-50 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
 }
 
 export function Badge({
@@ -251,32 +261,39 @@ export const PRIORITY_TONE: Record<string, BadgeTone> = {
 
 // ------------------------------------------------------------------ form fields
 
-export function Label({ className, ...props }: HTMLAttributes<HTMLLabelElement>) {
+export function Label({ className, ...props }: LabelHTMLAttributes<HTMLLabelElement>) {
   return (
-    <label className={cn('block text-sm font-medium text-slate-700', className)} {...props} />
+    <label
+      className={cn('block text-sm font-medium text-slate-700 dark:text-slate-300', className)}
+      {...props}
+    />
   )
 }
 
 const FIELD_BASE =
   'w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 ' +
-  'focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-slate-50 disabled:text-slate-500'
+  'focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-slate-50 disabled:text-slate-500 ' +
+  'dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-500'
 
-export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }>(
-  function Input({ className, invalid, ...props }, ref) {
-    return (
-      <input
-        ref={ref}
-        aria-invalid={invalid || undefined}
-        className={cn(
-          FIELD_BASE,
-          invalid ? 'border-danger-500 focus:border-danger-500' : 'border-slate-300 focus:border-brand-500',
-          className,
-        )}
-        {...props}
-      />
-    )
-  },
-)
+export const Input = forwardRef<
+  HTMLInputElement,
+  InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }
+>(function Input({ className, invalid, ...props }, ref) {
+  return (
+    <input
+      ref={ref}
+      aria-invalid={invalid || undefined}
+      className={cn(
+        FIELD_BASE,
+        invalid
+          ? 'border-danger-500 focus:border-danger-500'
+          : 'border-slate-300 focus:border-brand-500 dark:border-slate-600',
+        className,
+      )}
+      {...props}
+    />
+  )
+})
 
 export const Textarea = forwardRef<
   HTMLTextAreaElement,
@@ -289,7 +306,7 @@ export const Textarea = forwardRef<
       className={cn(
         FIELD_BASE,
         'min-h-24 resize-y',
-        invalid ? 'border-danger-500' : 'border-slate-300 focus:border-brand-500',
+        invalid ? 'border-danger-500' : 'border-slate-300 focus:border-brand-500 dark:border-slate-600',
         className,
       )}
       {...props}
@@ -309,7 +326,7 @@ export const Select = forwardRef<
         FIELD_BASE,
         'appearance-none bg-[length:1rem] bg-[right_0.6rem_center] bg-no-repeat pr-9',
         "bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2364748b'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E\")]",
-        invalid ? 'border-danger-500' : 'border-slate-300 focus:border-brand-500',
+        invalid ? 'border-danger-500' : 'border-slate-300 focus:border-brand-500 dark:border-slate-600',
         className,
       )}
       {...props}
@@ -332,19 +349,39 @@ export function Field({
   children: ReactNode
   className?: string
 }) {
+  // Generated once per Field instance and wired onto both the label
+  // (`htmlFor`) and the control (`id`), so a screen reader announces the
+  // label when the control receives focus — previously they were only
+  // adjacent in the DOM, never programmatically associated, which is what
+  // `getByLabel` (and a screen reader's own label lookup) both depend on.
+  const generatedId = useId()
+  const describedBy = error ? `${generatedId}-error` : hint ? `${generatedId}-hint` : undefined
+
+  const control =
+    label && isValidElement<{ id?: string; 'aria-describedby'?: string }>(children)
+      ? cloneElement(children, {
+          id: children.props.id ?? generatedId,
+          'aria-describedby': describedBy,
+        })
+      : children
+
   return (
     <div className={cn('space-y-1.5', className)}>
       {label && (
-        <Label>
+        <Label htmlFor={generatedId}>
           {label}
           {required && <span className="ml-0.5 text-danger-600">*</span>}
         </Label>
       )}
-      {children}
+      {control}
       {error ? (
-        <p className="text-sm text-danger-600">{error}</p>
+        <p id={describedBy} className="text-sm text-danger-600 dark:text-danger-400">
+          {error}
+        </p>
       ) : hint ? (
-        <p className="text-xs text-slate-500">{hint}</p>
+        <p id={describedBy} className="text-xs text-slate-500 dark:text-slate-400">
+          {hint}
+        </p>
       ) : null}
     </div>
   )
@@ -355,10 +392,12 @@ export function Field({
 type AlertTone = 'info' | 'success' | 'warn' | 'danger'
 
 const ALERT_TONES: Record<AlertTone, string> = {
-  info: 'border-sky-200 bg-sky-50 text-sky-900',
-  success: 'border-money-100 bg-money-50 text-money-700',
-  warn: 'border-warn-100 bg-warn-50 text-warn-700',
-  danger: 'border-danger-100 bg-danger-50 text-danger-700',
+  info: 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900 dark:bg-sky-900/30 dark:text-sky-200',
+  success:
+    'border-money-100 bg-money-50 text-money-700 dark:border-money-700/40 dark:bg-money-700/20 dark:text-money-300',
+  warn: 'border-warn-100 bg-warn-50 text-warn-700 dark:border-warn-700/40 dark:bg-warn-700/20 dark:text-warn-300',
+  danger:
+    'border-danger-100 bg-danger-50 text-danger-700 dark:border-danger-700/40 dark:bg-danger-700/20 dark:text-danger-300',
 }
 
 export function Alert({
@@ -399,7 +438,7 @@ export function Th({ className, ...props }: HTMLAttributes<HTMLTableCellElement>
   return (
     <th
       className={cn(
-        'whitespace-nowrap border-b border-slate-200 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500',
+        'whitespace-nowrap border-b border-slate-200 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400',
         className,
       )}
       {...props}
@@ -408,7 +447,15 @@ export function Th({ className, ...props }: HTMLAttributes<HTMLTableCellElement>
 }
 
 export function Td({ className, ...props }: HTMLAttributes<HTMLTableCellElement>) {
-  return <td className={cn('border-b border-slate-100 px-4 py-3 text-slate-700', className)} {...props} />
+  return (
+    <td
+      className={cn(
+        'border-b border-slate-100 px-4 py-3 text-slate-700 dark:border-slate-800 dark:text-slate-300',
+        className,
+      )}
+      {...props}
+    />
+  )
 }
 
 // ------------------------------------------------------------------ empty/skeleton
@@ -429,13 +476,15 @@ export function EmptyState({
   return (
     <div className={cn('flex flex-col items-center gap-3 px-6 py-14 text-center', className)}>
       {icon && (
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
           {icon}
         </div>
       )}
       <div>
-        <p className="font-medium text-slate-900">{title}</p>
-        {description && <p className="mt-1 max-w-sm text-sm text-slate-500">{description}</p>}
+        <p className="font-medium text-slate-900 dark:text-slate-100">{title}</p>
+        {description && (
+          <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">{description}</p>
+        )}
       </div>
       {action}
     </div>
@@ -443,7 +492,7 @@ export function EmptyState({
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('animate-pulse rounded-md bg-slate-200', className)} />
+  return <div className={cn('animate-pulse rounded-md bg-slate-200 dark:bg-slate-800', className)} />
 }
 
 export function Spinner({ className }: { className?: string }) {
@@ -499,40 +548,40 @@ export function Dialog({
   const widths = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-4">
-      <div
-        aria-hidden
-        className="absolute inset-0"
-        onClick={onClose}
-      />
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-4 dark:bg-black/60">
+      <div aria-hidden className="absolute inset-0" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         className={cn(
-          'relative flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-card',
+          'relative flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-card dark:bg-slate-900',
           widths[size],
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
           <div>
-            <h2 id={titleId} className="text-base font-semibold text-slate-900">
+            <h2 id={titleId} className="text-base font-semibold text-slate-900 dark:text-slate-100">
               {title}
             </h2>
-            {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
+            {description && (
+              <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{description}</p>
+            )}
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3 pb-safe">{footer}</div>
+          <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3 pb-safe dark:border-slate-800">
+            {footer}
+          </div>
         )}
       </div>
     </div>
@@ -556,7 +605,13 @@ export function Tabs({
 }) {
   return (
     <TabsContext.Provider value={{ value, onChange }}>
-      <div className={cn('flex gap-1 overflow-x-auto border-b border-slate-200', className)} role="tablist">
+      <div
+        className={cn(
+          'flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-700',
+          className,
+        )}
+        role="tablist"
+      >
         {children}
       </div>
     </TabsContext.Provider>
@@ -577,8 +632,8 @@ export function Tab({ value, children }: { value: string; children: ReactNode })
       className={cn(
         '-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors',
         active
-          ? 'border-brand-600 text-brand-700'
-          : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700',
+          ? 'border-brand-600 text-brand-700 dark:text-brand-400'
+          : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-300',
       )}
     >
       {children}

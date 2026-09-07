@@ -200,6 +200,79 @@ no suggestion was offered, which is not the same as one being rejected); dual
 approval on `payments`; suspension, cash threshold, session cap and demo flag on
 `organizations`; and video fields on `help_articles`.
 
+### Sprint 26A — legal hold and field-level encryption
+
+| Table | Purpose | Why it is shaped this way |
+|---|---|---|
+| `legal_holds` | An explicit override that suspends retention and erasure for one entity. | `entity_type` + nullable `entity_id` — the same discriminator shape `audit_logs` already uses — so one hold can name a single tenant or, with `entity_type="organization"` and no id, cover everything in an organisation for a matter too broad to enumerate. No expiry column on purpose: an open legal matter does not have a schedule the software can know, so a hold only ever ends when `released_at` is explicitly set. See `docs/legal/data-retention-policy.md`. |
+
+`tenants.national_id` became three columns instead of one:
+`national_id_encrypted` (ciphertext, sealed per-organisation via
+`app/core/crypto.encrypt_for_org` — the same envelope-encryption construction
+`organization_encryption_keys` already backs), `national_id_blind_index` (a
+deterministic HMAC, `crypto.blind_index`, keyed by `SECRET_KEY` **and** the
+organisation id so one organisation's index values are meaningless compared
+against another's), and `national_id_last4` (a plaintext display/search hint —
+the same idea as `crypto.mask()`, stored rather than computed so the last-4
+survives even where the ciphertext can't be decrypted).
+
+This is the deliberate tradeoff the security questionnaire answers reference:
+a national ID can no longer be found by a partial, arbitrary-position
+substring search (`ILIKE '%1234%'` against ciphertext is meaningless), only by
+its last four digits. Duplicate-tenant detection is unaffected — it was always
+an exact match, and the blind index reproduces exact-match semantics without
+ever decrypting anything to do the comparison. `app/services/tenant_pii.py` is
+the only code that touches these three columns; every other service asks it to
+decrypt (a single-record reveal — a detail view, a generated PDF, an
+export) or mask (a list view, so decrypting on every row of every page load is
+never necessary).
+
+The old plaintext `national_id` column is left in the table, unmapped, rather
+than dropped in the same migration — see
+`backend/scripts/backfill_national_id_encryption.py` for the follow-up that
+moves existing data across, and why dropping the column is a deliberately
+separate, later migration.
+
+`audit_logs` gained `prev_hash` and `entry_hash` — the same idea `receipts`
+already used (`app/core/security.sign_payload`, an HMAC keyed by
+`SECRET_KEY`), extended into a chain: each row's hash covers its own fields
+*and* the previous row's hash, per organisation, so altering or deleting a row
+anywhere in the history breaks every hash after it. Both columns are filled in
+after the write, by the `rentflow.chain_audit_log_entries` beat task, rather
+than inside `audit_service.record` itself — see the module docstring in
+`app/services/audit_chain_service.py` for why (in short: `record` is called
+synchronously from roughly 130 places, and computing "the current tail hash"
+at write time would mean either a query on every one of those call sites or a
+race between two concurrent writes to the same organisation's chain; batching
+the hashing after the fact sidesteps both). `GET /api/v1/security/audit-log/verify`
+recomputes the chain from the stored rows and reports whether it is intact.
+
+### Sprint 26A — email suppression, saved views
+
+| Table | Purpose | Why it is shaped this way |
+|---|---|---|
+| `email_suppressions` | An address RentFlow will not email again. | **Platform-level, not organisation-scoped** (see `PHASE_10_ORG_SCOPED_TABLES`'s note in `app.core.rls`): every organisation's email goes out through one shared Resend sending domain, so one landlord's tenant bouncing has to protect every other landlord's sender reputation too. See `docs/procurement/email-deliverability.md`. |
+| `saved_views` | A named, reusable filter set for one list screen. | `entity_type` is a free string the frontend picks (`"tenants"`, ...); `filters` is a JSONB bag shaped however that screen's own filter state is shaped. Private to its owner unless `is_shared`, which makes it visible — not editable — to the rest of the organisation. |
+
+### Sprint 26A — configurable approval chains
+
+| Table | Purpose | Why it is shaped this way |
+|---|---|---|
+| `approval_rules` | When one `entity_type` needs sign-off, and by whom. | `entity_type` is a free string a feature defines for itself (`"large_expense"`, ...) — this table has no opinion on what kinds of things get approved, only the mechanics. `threshold` compared against whatever value the caller passes; null means "always." |
+| `approval_requests` | One pending-or-resolved approval on one entity. | `required_approvals` and `required_approver_roles` are copied from the rule at creation time rather than read live off it, so editing a rule later never changes what an in-flight request needs. |
+| `approval_actions` | One approve/reject by one person. | Multiple `APPROVE` rows accumulate toward `required_approvals` — a 2-of-3 chain is a rule with `required_approvals: 2`, not a new table shape. |
+
+**This generalises, but does not replace, two existing one-off maker-checker
+implementations**: cash payment dual approval
+(`app/services/payment_service.py`, `Organization.cash_dual_approval_threshold`,
+fields directly on `Payment`) and maintenance cost sign-off
+(`app/models/operations.py`). Both are tested and load-bearing for real money;
+migrating either onto `approval_service` is a deliberate, separately-reviewed
+follow-up, not a side effect of this table existing. A new feature that needs
+threshold-gated sign-off should call `approval_service.evaluate(...)` at the
+point it would otherwise write its own bespoke check — see the module
+docstring in `app/services/approval_service.py`.
+
 ---
 
 ## Reference codes
@@ -243,6 +316,11 @@ portfolio size to leak from RentFlow's own breach count.
 | `a3b4c5d6e7f8` | Sprint 18: rental assets and hire agreements |
 | `c1d2e3f4a5b6` → `9b1c2d3e4f5a` | Sprints 19–25: API keys and webhooks, customer success, reporting, AI/fraud/security hardening, partner integrations, privacy and WebAuthn |
 | `a4b5c6d7e8f9` | Sprint 26A: management agreements, communication templates, demo datasets, the breach register, per-organisation encryption keys, meter OCR, dual cash approval |
+| `b5c6d7e8f9a0` | Sprint 26A: legal holds; encrypted, blind-indexed national ID on tenants |
+| `c6d7e8f9a0b1` | Sprint 26A: hash-chained audit log (`audit_logs.prev_hash` / `.entry_hash`) |
+| `d7e8f9a0b1c2` | Sprint 26A: email suppression list; `BOUNCED`/`COMPLAINED` delivery statuses |
+| `e8f9a0b1c2d3` | Sprint 26A: saved views |
+| `f9a0b1c2d3e4` | Sprint 26A: configurable approval chains |
 
 ```bash
 cd backend

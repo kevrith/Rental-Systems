@@ -38,7 +38,14 @@ from app.models.privacy import DataRequest, DataRequestStatus, DataRequestType
 from app.models.property import Property, Unit
 from app.models.tenant import Tenancy, Tenant
 from app.models.user import User, UserRole
-from app.services import audit_service, notification_service, storage_service, vault_service
+from app.services import (
+    audit_service,
+    legal_hold_service,
+    notification_service,
+    storage_service,
+    tenant_pii,
+    vault_service,
+)
 
 
 async def _notify_operators(db: AsyncSession, organization_id: uuid.UUID, tenant: Tenant, verb: str) -> None:
@@ -114,7 +121,7 @@ async def _export_payload(db: AsyncSession, organization_id: uuid.UUID, tenant: 
             "full_name": tenant.full_name,
             "phone_number": tenant.phone_number,
             "email": tenant.email,
-            "national_id": tenant.national_id,
+            "national_id": await tenant_pii.decrypt_national_id(db, tenant),
             "employer_name": tenant.employer_name,
             "occupation": tenant.occupation,
             "monthly_income": _plain(tenant.monthly_income),
@@ -206,26 +213,19 @@ async def export_tenant_data(
     return data_request
 
 
-async def erase_tenant_data(
-    db: AsyncSession,
-    *,
-    organization_id: uuid.UUID,
-    tenant: Tenant,
-    requested_by_id: uuid.UUID | None,
-    request: Request | None = None,
-) -> DataRequest:
-    if tenant.erased_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="This tenant's data was already erased"
-        )
-
-    before_name = tenant.full_name
+async def redact_tenant_fields(db: AsyncSession, tenant: Tenant) -> None:
+    """Clear a tenant's personal fields, leaving the row and its financial/audit
+    trail in place. Shared by tenant-initiated erasure (`erase_tenant_data`,
+    below) and the scheduled retention sweep (`retention_service.sweep`) —
+    "the tenant asked to be erased" and "retention ran" converge on the same
+    end state, which is what keeps both paths honest against the same tests.
+    """
     tenant.full_name = "Erased tenant"
     # Phone carries a per-organisation uniqueness constraint, so the redacted
     # value still has to be unique rather than a shared placeholder string.
     tenant.phone_number = f"erased-{tenant.id.hex[:12]}"
     tenant.email = None
-    tenant.national_id = None
+    await tenant_pii.set_national_id(db, tenant, None)
     tenant.id_photo_front_id = None
     tenant.id_photo_back_id = None
     tenant.passport_photo_id = None
@@ -239,6 +239,30 @@ async def erase_tenant_data(
     tenant.erased_at = datetime.now(UTC)
     tenant.is_archived = True
     tenant.archived_at = tenant.erased_at
+
+
+async def erase_tenant_data(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    tenant: Tenant,
+    requested_by_id: uuid.UUID | None,
+    request: Request | None = None,
+) -> DataRequest:
+    if tenant.erased_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="This tenant's data was already erased"
+        )
+
+    hold = await legal_hold_service.active_hold(db, organization_id, "tenant", tenant.id)
+    if hold is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This record is under legal hold and cannot be erased while it is active",
+        )
+
+    before_name = tenant.full_name
+    await redact_tenant_fields(db, tenant)
 
     data_request = DataRequest(
         organization_id=organization_id,

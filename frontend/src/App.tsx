@@ -112,6 +112,9 @@ const ArrearsPage = lazy(() =>
 const FraudAlertsPage = lazy(() =>
   import('@/features/security/FraudAlertsPage').then((m) => ({ default: m.FraudAlertsPage })),
 )
+const ApprovalsPage = lazy(() =>
+  import('@/features/approvals/ApprovalsPage').then((m) => ({ default: m.ApprovalsPage })),
+)
 const BulkUnitsPage = lazy(() =>
   import('@/features/units/UnitFormPage').then((m) => ({ default: m.BulkUnitsPage })),
 )
@@ -411,6 +414,7 @@ function App() {
 
             <Route path="/arrears" element={<ArrearsPage />} />
             <Route path="/security/fraud-alerts" element={<FraudAlertsPage />} />
+            <Route path="/approvals" element={<ApprovalsPage />} />
             <Route path="/finances" element={<DashboardPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
 

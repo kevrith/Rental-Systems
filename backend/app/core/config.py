@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     # FastAPI's production behavior (no stack traces in error responses), not
     # its debug behavior. Local dev sets DEBUG=true in .env.example.
     DEBUG: bool = False
+    # "console" (human-readable) or "json" (one object per line, for a log
+    # aggregator). Independent of DEBUG — see app.core.logging's docstring.
+    LOG_FORMAT: str = "console"
     API_V1_PREFIX: str = "/api/v1"
     FRONTEND_URL: str = "http://localhost:5173"
 
@@ -104,6 +107,11 @@ class Settings(BaseSettings):
     # Resend (transactional email)
     RESEND_API_KEY: str | None = None
     EMAIL_FROM: str = "RentFlow <noreply@rentflow.co.ke>"
+    # Signing secret for Resend's delivery-event webhooks (bounce/complaint),
+    # from the Resend dashboard's webhook settings — starts with `whsec_`.
+    # Unset in development; the webhook endpoint refuses to process events
+    # without it rather than accepting unsigned callbacks.
+    RESEND_WEBHOOK_SECRET: str | None = None
 
     # Web Push (VAPID) — generate with: vapid --gen
     VAPID_PUBLIC_KEY: str | None = None
@@ -127,6 +135,20 @@ class Settings(BaseSettings):
     SENTRY_DSN: str | None = None
     SENTRY_TRACES_SAMPLE_RATE: float = 0.05
     SENTRY_PROFILES_SAMPLE_RATE: float = 0.0
+
+    # Distributed tracing (OpenTelemetry). Blank means the SDK never installs a
+    # tracer provider — see app.core.observability.configure_tracing. Points at
+    # any OTLP/HTTP collector: the Jaeger all-in-one in
+    # infra/observability/docker-compose.yml locally, a managed collector in
+    # production.
+    OTEL_EXPORTER_OTLP_ENDPOINT: str | None = None
+
+    # Prometheus metrics endpoint (Sprint 26). Mounted at /metrics, outside
+    # /api/v1 and outside the rate limiter, matching Prometheus convention. A
+    # blank token leaves it open, which is fine for a local scrape but not for
+    # a public droplet — production must set one, and give it to the Prometheus
+    # scrape config as a bearer token.
+    METRICS_TOKEN: str | None = None
 
     # Public API (Sprint 19) — per-key hourly ceiling unless an organization
     # overrides it (Organization.api_rate_limit_per_hour).

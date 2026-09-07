@@ -42,7 +42,7 @@ from app.api.deps import OrgContext
 from app.models.billing import Payment, PaymentMethod, PaymentStatus
 from app.models.property import Property, PropertyType, Unit, UnitStatus
 from app.models.tenant import PaymentMethodPreference, Tenancy, TenancyStatus, Tenant
-from app.services import audit_service, reference_service
+from app.services import audit_service, reference_service, tenant_pii
 from app.services.notifications import normalize_phone
 
 ZERO = Decimal("0.00")
@@ -544,9 +544,9 @@ async def _commit_tenants(db: AsyncSession, context: OrgContext, rows: list[dict
                 full_name=row["full_name"],
                 phone_number=row["phone_number"],
                 email=row["email"],
-                national_id=row["national_id"],
                 notes=row["notes"],
             )
+            await tenant_pii.set_national_id(db, tenant, row["national_id"])
             db.add(tenant)
             await db.flush()
 

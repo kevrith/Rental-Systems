@@ -46,6 +46,7 @@ from app.services import (
     notification_service,
     pdf_service,
     reference_service,
+    tenant_pii,
 )
 
 ZERO = Decimal("0.00")
@@ -536,6 +537,8 @@ async def _render_notice_pdf(db: AsyncSession, notice: VacateNotice, tenancy: Te
     property_record = await db.get(Property, unit.property_id) if unit else None
     if not (organization and tenant and unit and property_record):
         return
+
+    tenant.national_id = await tenant_pii.decrypt_national_id(db, tenant)
 
     pdf_bytes = pdf_service.render_pdf(
         "vacate_notice.html",

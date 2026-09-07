@@ -16,6 +16,7 @@ from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OrgContext, accessible_property_ids, assert_in_org
+from app.core import crypto
 from app.models.billing import Invoice, InvoiceStatus
 from app.models.customer_success import MilestoneKey
 from app.models.developer import WebhookEvent
@@ -35,6 +36,7 @@ from app.services import (
     milestone_service,
     notification_service,
     reference_service,
+    tenant_pii,
     webhook_service,
 )
 from app.services.notifications import normalize_phone
@@ -74,7 +76,9 @@ async def find_duplicates(
 ) -> list[DuplicateWarning]:
     conditions = [Tenant.phone_number == phone]
     if national_id:
-        conditions.append(Tenant.national_id == national_id)
+        conditions.append(
+            Tenant.national_id_blind_index == crypto.blind_index(context.organization_id, national_id)
+        )
 
     query = select(Tenant).where(Tenant.organization_id == context.organization_id, or_(*conditions))
     if exclude_id:
@@ -83,10 +87,13 @@ async def find_duplicates(
     warnings: list[DuplicateWarning] = []
     for match in await db.scalars(query):
         field = "phone_number" if match.phone_number == phone else "national_id"
+        matched_value = (
+            match.phone_number if field == "phone_number" else (tenant_pii.masked_national_id(match) or "")
+        )
         warnings.append(
             DuplicateWarning(
                 field=field,
-                value=match.phone_number if field == "phone_number" else (match.national_id or ""),
+                value=matched_value,
                 existing_tenant_id=match.id,
                 existing_tenant_name=match.full_name,
             )
@@ -120,9 +127,10 @@ async def create_tenant(
     record = Tenant(
         organization_id=context.organization_id,
         reference_code=reference,
-        **payload.model_dump(exclude={"acknowledge_duplicate", "phone_number"}),
+        **payload.model_dump(exclude={"acknowledge_duplicate", "phone_number", "national_id"}),
         phone_number=phone,
     )
+    await tenant_pii.set_national_id(db, record, payload.national_id)
     db.add(record)
     await db.flush()
 
@@ -204,10 +212,18 @@ async def update_tenant(
                     detail="Another tenant in this organization already uses that phone number",
                 )
 
+    national_id_set = "national_id" in fields
+    national_id_value = fields.pop("national_id", None)
+
     before = {field: getattr(record, field) for field in fields}
     for field, value in fields.items():
         setattr(record, field, value)
     after = {field: getattr(record, field) for field in fields}
+
+    if national_id_set:
+        before["national_id"] = record.national_id_last4
+        await tenant_pii.set_national_id(db, record, national_id_value)
+        after["national_id"] = record.national_id_last4
 
     audit_service.record(
         db,
@@ -285,7 +301,10 @@ async def list_tenants(
         query = query.where(
             Tenant.full_name.ilike(pattern)
             | Tenant.phone_number.ilike(pattern)
-            | Tenant.national_id.ilike(pattern)
+            # National ID is encrypted (Sprint 26A) and can no longer be matched by
+            # substring — only its plaintext last-4 hint can, which still covers the
+            # common case of a landlord typing the last few digits they remember.
+            | Tenant.national_id_last4.ilike(pattern)
             | Tenant.reference_code.ilike(pattern)
             | Unit.unit_number.ilike(pattern)
             | Property.name.ilike(pattern)
@@ -347,8 +366,14 @@ async def _balances_for(db: AsyncSession, tenancy_ids: list[uuid.UUID]) -> dict[
     return {tenancy_id: Decimal(total) for tenancy_id, total in rows}
 
 
-def to_csv(rows: list[dict]) -> str:
-    """CSV export for the tenant list (US-017)."""
+async def to_csv(db: AsyncSession, rows: list[dict]) -> str:
+    """CSV export for the tenant list (US-017).
+
+    A deliberate bulk reveal — unlike the list view (which shows only the
+    last-4 hint to avoid decrypting on every page load), exporting is an
+    explicit "give me everything" action, so each row's national ID is
+    decrypted here.
+    """
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(
@@ -374,7 +399,7 @@ def to_csv(rows: list[dict]) -> str:
                 tenant.full_name,
                 tenant.phone_number,
                 tenant.email or "",
-                tenant.national_id or "",
+                await tenant_pii.decrypt_national_id(db, tenant) or "",
                 row["property"].name if row["property"] else "",
                 row["unit"].unit_number if row["unit"] else "",
                 f"{tenancy.monthly_rent:.2f}" if tenancy else "",

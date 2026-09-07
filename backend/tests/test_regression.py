@@ -29,6 +29,11 @@ from app.main import app
 PUBLIC_PREFIXES: dict[str, str] = {
     "/": "Service banner. Names the API and its version, nothing more.",
     "/api/v1/health": "Liveness probe for the load balancer.",
+    # Sprint 26. Gated by its own bearer-token check (METRICS_TOKEN) rather
+    # than the app's session auth — a Prometheus scrape has no user session to
+    # present. Open by default because a local scrape has no token configured;
+    # production sets one (see app.core.metrics).
+    "/metrics": "Prometheus scrape target, authenticated by METRICS_TOKEN when one is set.",
     "/api/v1/auth/register": "Creating the first account.",
     "/api/v1/auth/login": "Obtaining a session.",
     "/api/v1/auth/refresh": "Rotating a session on the refresh token alone.",
@@ -38,6 +43,7 @@ PUBLIC_PREFIXES: dict[str, str] = {
     "/api/v1/auth/verify-email": "Email confirmation link.",
     "/api/v1/invitations": "Accepting a team invitation before the account exists.",
     "/api/v1/mpesa": "Safaricom's callbacks. Authenticated by matching a checkout id.",
+    "/api/v1/webhooks": "Resend's delivery-event callbacks. Authenticated by a Svix HMAC signature.",
     "/api/v1/sign": "The tenant's signing link. Authenticated by a single-use token.",
     "/api/v1/renew": "The tenant's renewal link. Authenticated by a single-use token.",
     "/api/v1/files/local": "Development storage. Authenticated by a signed, expiring URL.",

@@ -11,8 +11,8 @@ from app.api.deps import OrgContext, require
 from app.core.database import get_db
 from app.core.permissions import Permission
 from app.models.security import FraudAlert, FraudAlertStatus
-from app.schemas.security import FraudAlertRead, ResolveFraudAlertRequest
-from app.services import security_service
+from app.schemas.security import AuditChainVerification, FraudAlertRead, ResolveFraudAlertRequest
+from app.services import audit_chain_service, security_service
 
 router = APIRouter()
 
@@ -56,4 +56,22 @@ async def export_audit_log(
         content=data,
         media_type=MEDIA_TYPES[format],
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/audit-log/verify", response_model=AuditChainVerification)
+async def verify_audit_log_chain(
+    context: OrgContext = Depends(require(Permission.AUDIT_VIEW)),
+    db: AsyncSession = Depends(get_db),
+) -> AuditChainVerification:
+    """Recompute the audit log's hash chain from the stored rows and report
+    whether it is intact — see `app.services.audit_chain_service`."""
+    result = await audit_chain_service.verify_chain(db, context.organization_id)
+    return AuditChainVerification(
+        total=result.total,
+        verified=result.verified,
+        unchained=result.unchained,
+        intact=result.intact,
+        broken_at_id=result.broken_at_id,
+        broken_at_created_at=result.broken_at_created_at,
     )

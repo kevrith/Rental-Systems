@@ -33,7 +33,7 @@ from app.schemas.tenant import (
     TenantUpdate,
     VacateTenancyRequest,
 )
-from app.services import ai_service, audit_service, file_service, lease_service, tenant_service
+from app.services import ai_service, audit_service, file_service, lease_service, tenant_pii, tenant_service
 from app.services.ai_service import AiServiceError
 
 router = APIRouter()
@@ -42,9 +42,13 @@ lease_templates_router = APIRouter()
 
 
 def _list_item(row: dict) -> TenantListItem:
-    tenancy, unit, property_record = row["tenancy"], row["unit"], row["property"]
+    tenant, tenancy, unit, property_record = row["tenant"], row["tenancy"], row["unit"], row["property"]
+    # List rows show only the last-4 hint, not the full national ID — decrypting
+    # every row on every page load would be an unnecessary N+1 decrypt cost for
+    # a view that does not need the full value. `get_tenant` reveals it in full.
+    tenant.national_id = tenant_pii.masked_national_id(tenant)
     return TenantListItem(
-        **TenantRead.model_validate(row["tenant"]).model_dump(),
+        **TenantRead.model_validate(tenant).model_dump(),
         unit_number=unit.unit_number if unit else None,
         property_name=property_record.name if property_record else None,
         tenancy_id=tenancy.id if tenancy else None,
@@ -63,7 +67,9 @@ async def create_tenant(
     context: OrgContext = Depends(require_write(Permission.TENANT_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ) -> Tenant:
-    return await tenant_service.create_tenant(db, context, payload, request)
+    record = await tenant_service.create_tenant(db, context, payload, request)
+    record.national_id = await tenant_pii.decrypt_national_id(db, record)
+    return record
 
 
 @router.get("", response_model=list[TenantListItem])
@@ -99,7 +105,7 @@ async def export_tenants_csv(
     )
     filename = f"tenants-{date.today().isoformat()}.csv"
     return Response(
-        content=tenant_service.to_csv(rows),
+        content=await tenant_service.to_csv(db, rows),
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
@@ -111,7 +117,9 @@ async def get_tenant(
     context: OrgContext = Depends(require(Permission.TENANT_VIEW)),
     db: AsyncSession = Depends(get_db),
 ) -> Tenant:
-    return await tenant_service.get_tenant(db, context, tenant_id)
+    record = await tenant_service.get_tenant(db, context, tenant_id)
+    record.national_id = await tenant_pii.decrypt_national_id(db, record)
+    return record
 
 
 @router.patch("/{tenant_id}", response_model=TenantRead)
@@ -122,7 +130,9 @@ async def update_tenant(
     context: OrgContext = Depends(require_write(Permission.TENANT_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ) -> Tenant:
-    return await tenant_service.update_tenant(db, context, tenant_id, payload, request)
+    record = await tenant_service.update_tenant(db, context, tenant_id, payload, request)
+    record.national_id = await tenant_pii.decrypt_national_id(db, record)
+    return record
 
 
 @router.delete("/{tenant_id}", response_model=TenantRead)
@@ -132,7 +142,9 @@ async def archive_tenant(
     context: OrgContext = Depends(require_write(Permission.TENANT_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ) -> Tenant:
-    return await tenant_service.archive_tenant(db, context, tenant_id, request)
+    record = await tenant_service.archive_tenant(db, context, tenant_id, request)
+    record.national_id = await tenant_pii.decrypt_national_id(db, record)
+    return record
 
 
 @router.get("/{tenant_id}/documents", response_model=list[dict])

@@ -198,4 +198,12 @@ export const queryKeys = {
   bankInstructions: ['payments', 'bank-instructions'] as const,
   bankStatements: ['payments', 'bank-statements'] as const,
   bankStatement: (id: string) => ['payments', 'bank-statements', id] as const,
+
+  // Command palette (Sprint 26A)
+  search: (q: string) => ['search', q] as const,
+  savedViews: (entityType: string) => ['saved-views', entityType] as const,
+
+  // Configurable approval chains (Sprint 26A, item 13)
+  approvalRules: ['approvals', 'rules'] as const,
+  approvalRequests: (status?: string) => ['approvals', 'requests', status ?? 'all'] as const,
 }

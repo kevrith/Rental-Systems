@@ -1033,3 +1033,43 @@ def scan_for_breach_candidates() -> dict[str, int]:
 
     found = run_async(breach_service.scan_for_candidates)
     return {"candidates": found}
+
+
+@celery_app.task(name="rentflow.sweep_data_retention")
+@monitored("rentflow.sweep_data_retention")
+def sweep_data_retention() -> dict[str, int]:
+    """Redact personal data past its retention window (Sprint 26A).
+
+    See docs/legal/data-retention-policy.md for the periods and the legal
+    hold override this checks before touching anything.
+    """
+    from app.services import retention_service
+
+    return run_async(retention_service.sweep)
+
+
+@celery_app.task(name="rentflow.chain_audit_log_entries")
+@monitored("rentflow.chain_audit_log_entries")
+def chain_audit_log_entries() -> dict[str, int]:
+    """Extend the hash chain over every organisation's newly-written audit rows (Sprint 26A)."""
+    from app.services import audit_chain_service
+
+    async def work(db: AsyncSession) -> int:
+        chained = 0
+        for org_id in await db.scalars(select(Organization.id).where(Organization.is_active.is_(True))):
+            chained += await audit_chain_service.chain_new_entries(db, org_id)
+        return chained
+
+    chained = run_async(work)
+    return {"chained": chained}
+
+
+@celery_app.task(name="rentflow.run_bi_exports")
+@monitored("rentflow.run_bi_exports")
+def run_bi_exports() -> dict[str, int]:
+    """Parquet drops for every organisation that opted into BI export (Sprint 26A)."""
+    from app.services import export_service
+
+    built = run_async(export_service.run_bi_exports)
+    logger.info("Built %s BI export dataset(s)", built)
+    return {"built": built}

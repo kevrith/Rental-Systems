@@ -58,6 +58,7 @@ from app.models.operations import (
 from app.models.organization import Organization
 from app.models.property import Property, PropertyType, Unit, UnitStatus
 from app.models.tenant import PaymentMethodPreference, Tenancy, TenancyStatus, Tenant
+from app.models.user import User
 from app.services import audit_service, reference_service
 
 ZERO = Decimal("0.00")
@@ -460,13 +461,29 @@ async def _make_maintenance(
 
 
 async def remove(db: AsyncSession, context: OrgContext) -> int:
-    """Delete exactly what was seeded, newest row first. Returns how many.
+    """Delete exactly what was seeded, on behalf of the caller in `context`. Returns how many."""
+    return await remove_for_organization(db, context.organization_id, actor=context.user, commit=True)
+
+
+async def remove_for_organization(
+    db: AsyncSession,
+    organization_id: uuid.UUID,
+    *,
+    actor: User | None,
+    commit: bool = True,
+) -> int:
+    """The actual teardown, independent of a request's `OrgContext`.
+
+    Split out from `remove` so `retention_service`'s scheduled sweep of
+    abandoned demo datasets can reuse the same deletion logic without a real
+    user/request behind it — `actor=None` there, and the audit entry records
+    it as a system action rather than crediting an operator who did not act.
 
     Reverse creation order means a child is always gone before its parent, so
     no foreign key ever blocks the delete and no cascade has to be relied on to
     reach something the ledger did not list.
     """
-    dataset = await current(db, context.organization_id)
+    dataset = await current(db, organization_id)
     if dataset is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="This account has no sample data loaded"
@@ -482,25 +499,27 @@ async def remove(db: AsyncSession, context: OrgContext) -> int:
                 model.id == uuid.UUID(str(row["id"])),
                 # Belt and braces: the ledger is already organisation-scoped,
                 # but a delete by bare id is not something to leave unbounded.
-                model.organization_id == context.organization_id,
+                model.organization_id == organization_id,
             )
         )
         removed += result.rowcount or 0
 
     dataset.removed_at = datetime.now(UTC)
 
-    organization = await db.get(Organization, context.organization_id)
+    organization = await db.get(Organization, organization_id)
     if organization is not None:
         organization.is_demo = False
 
     audit_service.record(
         db,
-        organization_id=context.organization_id,
+        organization_id=organization_id,
         action="demo_data.removed",
         entity_type="organization",
-        entity_id=context.organization_id,
-        actor=context.user,
-        summary=f"Removed the sample portfolio ({removed} records)",
+        entity_id=organization_id,
+        actor=actor,
+        summary=f"Removed the sample portfolio ({removed} records)"
+        + ("" if actor else " — automatic, past the 30-day abandoned-dataset retention window"),
     )
-    await db.commit()
+    if commit:
+        await db.commit()
     return removed

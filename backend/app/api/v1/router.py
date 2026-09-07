@@ -4,6 +4,7 @@ from app.api.v1.endpoints import (
     agency,
     analytics,
     applications,
+    approvals,
     auth,
     billing,
     bulk,
@@ -27,6 +28,8 @@ from app.api.v1.endpoints import (
     renewals,
     rentals,
     reporting,
+    saved_views,
+    search,
     security,
     service_charges,
     signatures,
@@ -36,6 +39,7 @@ from app.api.v1.endpoints import (
     vacancies,
     vault,
     vendors,
+    webhooks,
 )
 
 api_router = APIRouter()
@@ -45,6 +49,7 @@ api_router.include_router(health.router, tags=["health"])
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(team.public_router, prefix="/invitations", tags=["team"])
 api_router.include_router(billing.mpesa_router, prefix="/mpesa", tags=["mpesa"])
+api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 api_router.include_router(files.local_router, prefix="/files/local", tags=["files"])
 
 # Organization & people
@@ -167,3 +172,12 @@ api_router.include_router(integrations.oauth_callback_router, prefix="/oauth", t
 
 # Sprint 25 — security, privacy & compliance closeout.
 api_router.include_router(privacy.router, prefix="/privacy", tags=["privacy"])
+
+# Sprint 26A — cross-entity search, for the command palette.
+api_router.include_router(search.router, prefix="/search", tags=["search"])
+
+# Sprint 26A — saved views: named, reusable filter sets for a list screen.
+api_router.include_router(saved_views.router, prefix="/saved-views", tags=["saved-views"])
+
+# Sprint 26A — configurable approval chains.
+api_router.include_router(approvals.router, prefix="/approvals", tags=["approvals"])

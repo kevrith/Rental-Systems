@@ -45,6 +45,8 @@ class OrganizationRead(BaseModel):
     suspended_at: datetime | None = None
     suspension_reason: str | None = None
     is_demo: bool = False
+    # Sprint 26A, item 14 — scheduled Parquet drops for a warehouse/BI team.
+    bi_export_enabled: bool = False
 
 
 class OrganizationWithTrial(OrganizationRead):
@@ -89,6 +91,8 @@ class UpdateOrganizationRequest(BaseModel):
     # a caretaker cannot raise their own ceiling.
     cash_dual_approval_threshold: Decimal | None = Field(default=None, ge=0)
     max_concurrent_sessions: int | None = Field(default=None, ge=1, le=50)
+    # Sprint 26A, item 14.
+    bi_export_enabled: bool | None = None
 
     @field_validator("role_session_timeouts")
     @classmethod

@@ -28,7 +28,7 @@ from app.models.notification import (
 )
 from app.models.tenant import Tenant
 from app.models.user import User
-from app.services import communication_template_service
+from app.services import communication_template_service, email_service
 from app.services.notifications import (
     get_email_notifier,
     get_push_notifier,
@@ -251,6 +251,9 @@ async def send(
                 if not recipient.user or not recipient.user.email:
                     notification.status = DeliveryStatus.SKIPPED
                     notification.error = "No email address on file"
+                elif await email_service.is_suppressed(db, recipient.user.email):
+                    notification.status = DeliveryStatus.SKIPPED
+                    notification.error = "Address is suppressed (bounced or complained previously)"
                 else:
                     result = await get_email_notifier().send(
                         recipient.user.email,

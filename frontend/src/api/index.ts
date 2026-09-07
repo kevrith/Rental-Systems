@@ -8,6 +8,7 @@ import type {
   ApiKeyCreated,
   ApiKeyUsage,
   ArrearsReport,
+  AuditChainVerification,
   CaretakerTaskList,
   Disbursement,
   DisbursementPreview,
@@ -150,6 +151,12 @@ import type {
   PaymentBehaviour,
   TenantTurnover,
   UtilityAnalytics,
+  SearchResult,
+  SavedView,
+  ApprovalRule,
+  ApprovalRequest,
+  ApprovalRequestDetail,
+  ApprovalRequestStatus,
 } from './types'
 
 const get = async <T>(url: string, params?: unknown): Promise<T> =>
@@ -1114,4 +1121,50 @@ export const securityApi = {
     patch<FraudAlert>(`/security/fraud-alerts/${id}`, { status }),
   exportAuditLog: (params: { format: 'csv' | 'pdf'; date_from?: string; date_to?: string }) =>
     getBlob('/security/audit-log/export', params),
+  verifyAuditLog: () => get<AuditChainVerification>('/security/audit-log/verify'),
+}
+
+// ---------------------------------------------------------------------- search
+
+export const searchApi = {
+  query: (q: string) => get<SearchResult[]>('/search', { q }),
+}
+
+// ------------------------------------------------------------------ saved views
+
+export const savedViewsApi = {
+  list: (entityType: string) => get<SavedView[]>('/saved-views', { entity_type: entityType }),
+  create: (body: {
+    entity_type: string
+    name: string
+    filters: Record<string, unknown>
+    is_shared?: boolean
+    is_default?: boolean
+  }) => post<SavedView>('/saved-views', body),
+  update: (id: string, body: Partial<{ name: string; filters: Record<string, unknown>; is_shared: boolean; is_default: boolean }>) =>
+    patch<SavedView>(`/saved-views/${id}`, body),
+  remove: (id: string) => del<void>(`/saved-views/${id}`),
+}
+
+// ---------------------------------------------------------------------- approvals
+
+export const approvalsApi = {
+  listRules: () => get<ApprovalRule[]>('/approvals/rules'),
+  createRule: (body: {
+    entity_type: string
+    name: string
+    threshold?: string | null
+    required_approver_roles?: string[]
+    required_approvals?: number
+    is_active?: boolean
+  }) => post<ApprovalRule>('/approvals/rules', body),
+  updateRule: (id: string, body: Partial<{ name: string; threshold: string | null; required_approver_roles: string[]; required_approvals: number; is_active: boolean }>) =>
+    patch<ApprovalRule>(`/approvals/rules/${id}`, body),
+  removeRule: (id: string) => del<void>(`/approvals/rules/${id}`),
+
+  list: (params?: { entity_type?: string; status?: ApprovalRequestStatus }) =>
+    get<ApprovalRequest[]>('/approvals', params),
+  get: (id: string) => get<ApprovalRequestDetail>(`/approvals/${id}`),
+  approve: (id: string, note?: string) => post<ApprovalRequest>(`/approvals/${id}/approve`, { note }),
+  reject: (id: string, note?: string) => post<ApprovalRequest>(`/approvals/${id}/reject`, { note }),
 }

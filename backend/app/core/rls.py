@@ -155,6 +155,22 @@ PHASE_9_ORG_SCOPED_TABLES: Sequence[str] = (
     "demo_datasets",
 )
 
+# Sprint 26A. `email_suppressions` is deliberately absent for the same reason
+# `security_breaches` is: RentFlow sends every customer's email through one
+# shared sending domain, so a bounced or complained address is suppressed
+# platform-wide, not scoped to the organisation that happened to trigger it.
+PHASE_10_ORG_SCOPED_TABLES: Sequence[str] = ("legal_holds",)
+
+# Sprint 26A, item 11.
+PHASE_11_ORG_SCOPED_TABLES: Sequence[str] = ("saved_views",)
+
+# Sprint 26A, item 13 — configurable approval chains.
+PHASE_12_ORG_SCOPED_TABLES: Sequence[str] = (
+    "approval_rules",
+    "approval_requests",
+    "approval_actions",
+)
+
 ORG_SCOPED_TABLES: Sequence[str] = (
     *PHASE_1_ORG_SCOPED_TABLES,
     *PHASE_2_ORG_SCOPED_TABLES,
@@ -166,6 +182,9 @@ ORG_SCOPED_TABLES: Sequence[str] = (
     *PHASE_7_ORG_SCOPED_TABLES,
     *PHASE_8_ORG_SCOPED_TABLES,
     *PHASE_9_ORG_SCOPED_TABLES,
+    *PHASE_10_ORG_SCOPED_TABLES,
+    *PHASE_11_ORG_SCOPED_TABLES,
+    *PHASE_12_ORG_SCOPED_TABLES,
 )
 
 SETTING = "app.current_org_id"
