@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import OrgContext, get_current_user, get_org_context
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.redis import redis_client
 from app.core.security import generate_url_token, hash_password, hash_token
 from app.models.billing import Invoice, InvoiceStatus, Payment, PaymentStatus
 from app.models.file import StoredFile
@@ -25,10 +26,10 @@ from app.models.notification import NotificationChannel, NotificationType
 from app.models.operations import MaintenanceRequest
 from app.models.property import Property, Unit
 from app.models.session import TokenPurpose, VerificationToken
-from app.models.tenant import Tenancy, TenancyStatus, Tenant
+from app.models.tenant import Tenancy, TenancyCoTenant, TenancyStatus, Tenant
 from app.models.user import DEFAULT_INACTIVITY_TIMEOUT_MINUTES, User, UserRole
 from app.schemas.auth import MessageResponse, TokenResponse
-from app.schemas.billing import InvoiceRead, PaymentRead
+from app.schemas.billing import BankInstructions, InvoiceRead, PaymentRead
 from app.schemas.maintenance import MaintenanceRate
 from app.schemas.operations import (
     MaintenanceCreate,
@@ -38,6 +39,7 @@ from app.schemas.operations import (
 )
 from app.services import (
     auth_service,
+    bank_transfer_service,
     file_service,
     invoice_service,
     maintenance_service,
@@ -47,11 +49,29 @@ from app.services import (
     session_service,
     tenant_service,
 )
+from app.services.notifications import normalize_phone
 
 router = APIRouter()
 invite_router = APIRouter()
 
 LIVE = [TenancyStatus.ACTIVE, TenancyStatus.EXPIRING_SOON, TenancyStatus.NOTICE_GIVEN]
+
+# One sentence, returned whatever actually happened — see `request_magic_link`.
+MAGIC_LINK_RESPONSE = "If that number has a tenant portal, a sign-in link is on its way by WhatsApp and SMS."
+
+
+async def _within_magic_link_budget(phone: str) -> bool:
+    """Cap magic-link requests per number per hour.
+
+    Keyed on the number rather than the caller's IP: every one of these sends a
+    real SMS that costs real money, and the number is what bounds the spend and
+    what stops someone using the endpoint to spam a tenant's phone.
+    """
+    key = f"portal:magic_link:{phone}:{datetime.now(UTC).strftime('%Y-%m-%dT%H')}"
+    count = await redis_client.incr(key)
+    if count == 1:
+        await redis_client.expire(key, 3600)
+    return count <= settings.PORTAL_MAGIC_LINK_MAX_PER_HOUR
 
 
 # ------------------------------------------------------------------ portal access
@@ -71,16 +91,25 @@ async def get_current_tenant(
 
 
 async def _active_tenancy(db: AsyncSession, tenant: Tenant) -> Tenancy | None:
+    ids = await _owned_tenancy_ids(db, tenant)
+    if not ids:
+        return None
     return await db.scalar(
         select(Tenancy)
-        .where(Tenancy.tenant_id == tenant.id, Tenancy.status.in_(LIVE))
+        .where(Tenancy.id.in_(ids), Tenancy.status.in_(LIVE))
         .order_by(Tenancy.start_date.desc())
         .limit(1)
     )
 
 
 async def _owned_tenancy_ids(db: AsyncSession, tenant: Tenant) -> list[uuid.UUID]:
-    return list(await db.scalars(select(Tenancy.id).where(Tenancy.tenant_id == tenant.id)))
+    """Tenancies this portal login may see: the ones where this tenant is the
+    primary tenant, plus any where they were added as a co-tenant (US-107) —
+    a shared unit's second name should see the same balance and lease as the
+    first, without ever being able to act on someone else's tenancy."""
+    direct = select(Tenancy.id).where(Tenancy.tenant_id == tenant.id)
+    co_tenant = select(TenancyCoTenant.tenancy_id).where(TenancyCoTenant.tenant_id == tenant.id)
+    return list(await db.scalars(direct.union(co_tenant)))
 
 
 async def _operator_context(db: AsyncSession, tenant: Tenant, user: User) -> OrgContext:
@@ -302,6 +331,18 @@ async def portal_home(
 
 
 # ------------------------------------------------------------------------ payment
+
+
+@router.get("/bank-instructions", response_model=BankInstructions)
+async def portal_bank_instructions(
+    tenant: Tenant = Depends(get_current_tenant), db: AsyncSession = Depends(get_db)
+) -> BankInstructions:
+    """What to show under "Pay by bank transfer" (Sprint 23, US-101)."""
+    from app.models.organization import Organization
+
+    organization = await db.get(Organization, tenant.organization_id)
+    payload = bank_transfer_service.instructions(organization) if organization else {"configured": False}
+    return BankInstructions(**payload)
 
 
 class PortalPayRequest(BaseModel):
@@ -589,6 +630,163 @@ async def portal_change_password(
 
     await user_service.change_password(db, current_user, current_password, new_password, request)
     return MessageResponse(message="Password changed")
+
+
+# ---------------------------------------------------------------- data privacy
+
+
+@router.post("/data-requests/export")
+async def portal_request_export(
+    request: Request,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Self-service data export (US-106). `requested_by_id=None` marks this as
+    tenant-initiated rather than raised by staff on their behalf."""
+    from app.services import privacy_service
+
+    data_request = await privacy_service.export_tenant_data(
+        db,
+        organization_id=tenant.organization_id,
+        tenant=tenant,
+        requested_by_id=None,
+        request=request,
+    )
+    stored = await db.get(StoredFile, data_request.export_file_id) if data_request.export_file_id else None
+    return {
+        "id": str(data_request.id),
+        "download_url": file_service.to_url(stored) if stored else None,
+    }
+
+
+@router.post("/data-requests/erase", response_model=MessageResponse)
+async def portal_request_erasure(
+    request: Request,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """Self-service erasure (US-106). Ends this login's own portal access as
+    part of redacting the identity it was tied to."""
+    from app.services import privacy_service
+
+    await privacy_service.erase_tenant_data(
+        db,
+        organization_id=tenant.organization_id,
+        tenant=tenant,
+        requested_by_id=None,
+        request=request,
+    )
+    return MessageResponse(
+        message="Your personal details have been erased. Financial records required by law are retained."
+    )
+
+
+# ------------------------------------------------------------------ magic link
+
+
+class MagicLinkRequest(BaseModel):
+    phone_number: str = Field(min_length=9, max_length=32)
+
+
+class MagicLinkVerify(BaseModel):
+    token: str = Field(min_length=16, max_length=256)
+    tenant_id: uuid.UUID
+
+
+@invite_router.post("/magic-link", response_model=MessageResponse)
+async def request_magic_link(
+    payload: MagicLinkRequest, db: AsyncSession = Depends(get_db)
+) -> MessageResponse:
+    """Send a one-tap sign-in link to a tenant who has forgotten their password.
+
+    The masterplan lists this alongside password and OTP under Authentication
+    Layers, and it is the layer that actually fits the audience: a tenant signs
+    in perhaps twice a year, on a shared or borrowed phone, and a password they
+    set once eleven months ago is not a thing they have.
+
+    The response never varies. Telling a caller whether a number is a tenant
+    here would turn this endpoint into a portfolio directory — anyone could
+    walk a range of Kenyan mobile numbers and learn which belong to tenants of
+    which landlord — so an unknown number, a tenant without portal access and
+    a successful send all return the same sentence.
+    """
+    phone = normalize_phone(payload.phone_number)
+    if not await _within_magic_link_budget(phone):
+        # Same message again: a rate limit that announces itself is a rate
+        # limit that tells an attacker their guess was worth repeating.
+        return MessageResponse(message=MAGIC_LINK_RESPONSE)
+
+    tenant = await db.scalar(
+        select(Tenant).where(
+            Tenant.phone_number == phone,
+            Tenant.portal_user_id.is_not(None),
+            Tenant.is_archived.is_(False),
+        )
+    )
+    if tenant is None:
+        return MessageResponse(message=MAGIC_LINK_RESPONSE)
+
+    raw = generate_url_token()
+    db.add(
+        VerificationToken(
+            user_id=tenant.portal_user_id,
+            purpose=TokenPurpose.TENANT_PORTAL_MAGIC_LINK,
+            token_hash=hash_token(f"{tenant.id}:{raw}"),
+            expires_at=datetime.now(UTC) + timedelta(minutes=settings.PORTAL_MAGIC_LINK_TTL_MINUTES),
+        )
+    )
+
+    link = f"{settings.FRONTEND_URL}/portal/login?token={raw}&t={tenant.id}"
+    minutes = settings.PORTAL_MAGIC_LINK_TTL_MINUTES
+    await notification_service.send(
+        db,
+        recipient=notification_service.Recipient.for_tenant(tenant),
+        notification_type=NotificationType.ACCOUNT,
+        title="Sign in to your tenant portal",
+        body=(
+            f"Hi {tenant.full_name.split()[0]}, tap to sign in to your tenant portal. "
+            f"This link works once and expires in {minutes} minutes: {link}"
+        ),
+        channels=[NotificationChannel.WHATSAPP, NotificationChannel.SMS],
+        organization_id=tenant.organization_id,
+    )
+    await db.commit()
+    return MessageResponse(message=MAGIC_LINK_RESPONSE)
+
+
+@invite_router.post("/magic-link/verify", response_model=PortalSession)
+async def verify_magic_link(
+    payload: MagicLinkVerify, request: Request, db: AsyncSession = Depends(get_db)
+) -> PortalSession:
+    """Exchange a magic link for a session. Single use."""
+    token = await db.scalar(
+        select(VerificationToken).where(
+            VerificationToken.token_hash == hash_token(f"{payload.tenant_id}:{payload.token}"),
+            VerificationToken.purpose == TokenPurpose.TENANT_PORTAL_MAGIC_LINK,
+        )
+    )
+    if token is None or token.used_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="This link is invalid or already used"
+        )
+    if token.expires_at <= datetime.now(UTC):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This link has expired")
+
+    tenant = await db.get(Tenant, payload.tenant_id)
+    if tenant is None or tenant.portal_user_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant portal not found")
+
+    user = await db.get(User, tenant.portal_user_id)
+    if user is None or not user.is_active or user.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="This portal login is no longer active"
+        )
+
+    token.used_at = datetime.now(UTC)
+    _, tokens = await session_service.create_session(db, user, request)
+    await db.commit()
+
+    return PortalSession(tenant_id=tenant.id, full_name=tenant.full_name, tokens=tokens)
 
 
 __all__ = ["router", "invite_router", "get_current_tenant", "auth_service"]

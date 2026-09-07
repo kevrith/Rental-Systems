@@ -2,7 +2,8 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -20,6 +21,13 @@ from app.schemas.billing import (
     AgingBuckets,
     ArrearsReport,
     ArrearsRowRead,
+    BankInstructions,
+    BankStatementCommitRequest,
+    BankStatementCommitResult,
+    BankStatementPreview,
+    BankStatementRow,
+    BankStatementUploadDetail,
+    BankStatementUploadRead,
     GenerateInvoiceRequest,
     InvoiceDetail,
     InvoiceRead,
@@ -36,6 +44,7 @@ from app.schemas.billing import (
 from app.services import (
     agency_service,
     arrears_service,
+    bank_transfer_service,
     demand_letter_service,
     file_service,
     invoice_service,
@@ -72,6 +81,22 @@ async def _invoice_detail(db: AsyncSession, invoice: Invoice) -> InvoiceDetail:
         unit_number=unit.unit_number if unit else None,
         property_name=property_record.name if property_record else None,
         document_url=document_url,
+    )
+
+
+async def _reload_with_receipt(db: AsyncSession, context: OrgContext, payment_id: uuid.UUID) -> Payment:
+    """Re-read a payment with its receipt eagerly loaded.
+
+    `PaymentDetail` serialises the receipt, and `Payment.receipt` is a lazy
+    relationship — touching it on a bare instance raises `MissingGreenlet`
+    rather than quietly loading, because this session is async.
+    """
+    return assert_in_org(
+        await db.scalar(
+            select(Payment).options(selectinload(Payment.receipt)).where(Payment.id == payment_id)
+        ),
+        context,
+        label="payment",
     )
 
 
@@ -272,14 +297,7 @@ async def record_payment(
         reference=payload.reference,
         request=request,
     )
-    reloaded = assert_in_org(
-        await db.scalar(
-            select(Payment).options(selectinload(Payment.receipt)).where(Payment.id == payment.id)
-        ),
-        context,
-        label="payment",
-    )
-    return await _payment_detail(db, reloaded)
+    return await _payment_detail(db, await _reload_with_receipt(db, context, payment.id))
 
 
 @payments_router.get("", response_model=list[PaymentDetail])
@@ -300,6 +318,129 @@ async def list_payments(
         limit=limit,
     )
     return await _payment_details(db, rows)
+
+
+# ------------------------------------------------------- bank transfer (US-101)
+#
+# Registered before `/{payment_id}` below: FastAPI matches routes in
+# registration order, and a bare path segment like "bank-instructions" would
+# otherwise be swallowed by that catch-all as an (invalid) payment id.
+
+MAX_STATEMENT_BYTES = 5 * 1024 * 1024
+
+
+class PaymentApproval(BaseModel):
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class PaymentRejection(BaseModel):
+    reason: str = Field(min_length=3, max_length=512)
+
+
+@payments_router.get("/pending-approval", response_model=list[PaymentDetail])
+async def list_payments_pending_approval(
+    context: OrgContext = Depends(require(Permission.PAYMENT_APPROVE)),
+    db: AsyncSession = Depends(get_db),
+) -> list[PaymentDetail]:
+    """Cash held for a second signature (masterplan, Fraud Prevention)."""
+    rows = await payment_service.list_pending_approval(db, context)
+    return await _payment_details(db, rows)
+
+
+@payments_router.post("/{payment_id}/approve", response_model=PaymentDetail)
+async def approve_payment(
+    payment_id: uuid.UUID,
+    body: PaymentApproval,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.PAYMENT_APPROVE)),
+    db: AsyncSession = Depends(get_db),
+) -> PaymentDetail:
+    """Bank held cash. Allocation, receipt and the tenant's confirmation all
+    happen now — not when it was recorded."""
+    payment = await payment_service.approve_payment(db, context, payment_id, note=body.note, request=request)
+    return await _payment_detail(db, await _reload_with_receipt(db, context, payment.id))
+
+
+@payments_router.post("/{payment_id}/reject", response_model=PaymentDetail)
+async def reject_payment(
+    payment_id: uuid.UUID,
+    body: PaymentRejection,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.PAYMENT_APPROVE)),
+    db: AsyncSession = Depends(get_db),
+) -> PaymentDetail:
+    """Refuse held cash. Nothing is allocated and the tenant is never told."""
+    payment = await payment_service.reject_payment(
+        db, context, payment_id, reason=body.reason, request=request
+    )
+    return await _payment_detail(db, await _reload_with_receipt(db, context, payment.id))
+
+
+@payments_router.get("/bank-instructions", response_model=BankInstructions)
+async def bank_transfer_instructions(
+    context: OrgContext = Depends(require(Permission.PAYMENT_VIEW)),
+) -> BankInstructions:
+    return BankInstructions(**bank_transfer_service.instructions(context.organization))
+
+
+@payments_router.post("/bank-statements/preview", response_model=BankStatementPreview)
+async def preview_bank_statement(
+    file: UploadFile = File(...),
+    context: OrgContext = Depends(require_write(Permission.PAYMENT_RECORD)),
+    db: AsyncSession = Depends(get_db),
+) -> BankStatementPreview:
+    """Parse and match the upload. Nothing is written (US-101)."""
+    data = await file.read()
+    if len(data) > MAX_STATEMENT_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="That file is larger than 5 MB — split it into smaller batches",
+        )
+
+    rows, errors = bank_transfer_service.parse_statement(data, file.filename or "statement.csv")
+    matched = await bank_transfer_service.match_rows(db, context, rows)
+    matched_count = sum(1 for row in matched if row.get("matched_tenancy_id"))
+    return BankStatementPreview(
+        rows=[BankStatementRow(**row) for row in matched],
+        errors=errors,
+        matched_count=matched_count,
+        unmatched_count=len(matched) - matched_count,
+    )
+
+
+@payments_router.post("/bank-statements/commit", response_model=BankStatementCommitResult)
+async def commit_bank_statement(
+    payload: BankStatementCommitRequest,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.PAYMENT_RECORD)),
+    db: AsyncSession = Depends(get_db),
+) -> BankStatementCommitResult:
+    """Record the reviewed rows, and a payment for each the operator confirmed."""
+    upload, failures = await bank_transfer_service.commit_statement(
+        db, context, rows=payload.rows, request=request
+    )
+    return BankStatementCommitResult(
+        upload=BankStatementUploadRead.model_validate(upload), payment_failures=failures
+    )
+
+
+@payments_router.get("/bank-statements", response_model=list[BankStatementUploadRead])
+async def list_bank_statements(
+    context: OrgContext = Depends(require(Permission.PAYMENT_VIEW)),
+    db: AsyncSession = Depends(get_db),
+) -> list[BankStatementUploadRead]:
+    uploads = await bank_transfer_service.list_uploads(db, context)
+    return [BankStatementUploadRead.model_validate(upload) for upload in uploads]
+
+
+@payments_router.get("/bank-statements/{upload_id}", response_model=BankStatementUploadDetail)
+async def get_bank_statement(
+    upload_id: uuid.UUID,
+    context: OrgContext = Depends(require(Permission.PAYMENT_VIEW)),
+    db: AsyncSession = Depends(get_db),
+) -> BankStatementUploadDetail:
+    upload = await bank_transfer_service.get_upload(db, context, upload_id)
+    return BankStatementUploadDetail.model_validate(upload)
 
 
 @payments_router.get("/{payment_id}", response_model=PaymentDetail)

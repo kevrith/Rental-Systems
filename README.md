@@ -37,7 +37,8 @@ pywebpush
 Zustand · React Hook Form + Zod · Recharts · lucide-react · vite-plugin-pwa
 (offline caretaker app)
 
-**Tooling** — ruff · black · mypy · pytest · oxlint · pre-commit · GitHub Actions
+**Tooling** — ruff · black · mypy · pytest (+ coverage) · vitest · oxlint ·
+pip-audit · CodeQL · Sentry · pre-commit · GitHub Actions
 
 ---
 
@@ -113,6 +114,8 @@ frontend/
     api/ hooks/ lib/ store/
     sw.ts               service worker (offline caretaker PWA)
 docs/
+infra/
+  backup/               pg_dump + restore drill, systemd timers
 ```
 
 ---
@@ -133,6 +136,12 @@ permissions, OTP-verified document signing, and an append-only audit log.
 `detect-private-key` runs on every commit, and `.env` files are gitignored — no
 secret is ever committed.
 
+Backups are covered by [`infra/backup/`](infra/backup/README.md): a nightly dump
+with grandfather-father-son retention, an optionally GPG-encrypted copy in
+object storage, and a weekly drill that restores the newest backup into a
+throwaway database and checks it. Run `infra/backup/restore.sh --latest --verify`
+against your local stack to see it work.
+
 ---
 
 ## Development
@@ -144,6 +153,7 @@ ruff check .        # lint
 black .             # format
 mypy app            # typecheck
 pytest -q           # tests
+pytest --cov        # tests with the coverage floor enforced
 alembic upgrade head
 alembic revision --autogenerate -m "description"
 ```
@@ -152,9 +162,16 @@ Frontend, from `frontend/`:
 
 ```bash
 npm run dev
-npm run lint        # oxlint
-npm run build       # tsc -b && vite build
+npm run lint          # oxlint
+npm run test          # vitest
+npm run test:coverage # vitest with the coverage floor enforced
+npm run build         # tsc -b && vite build
 ```
+
+Coverage floors live in `backend/pyproject.toml` and `frontend/vitest.config.ts`.
+Both are set from the measured figure and raised as a ratchet — the comments
+there say where the remaining gap is rather than asserting a number nobody
+currently passes.
 
 Install the git hooks once so lint, format, typecheck and the secret scan run
 before each commit:
@@ -165,8 +182,11 @@ pre-commit install
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same checks
 on `main` and `develop`: backend lint, format, typecheck, migrations and tests
-against live Postgres and Redis services, plus frontend lint and a production
-build.
+against live Postgres and Redis services; frontend lint, tests and a production
+build; `pip-audit` and `npm audit` against the pinned dependency sets; and
+CodeQL over both languages. The audit and CodeQL jobs fail the build rather
+than filing a notification — Dependabot alone only opens PRs on its own
+schedule.
 
 ---
 

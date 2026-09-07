@@ -1,5 +1,5 @@
-import { CreditCard, FileText, Home, LogOut, Wrench } from 'lucide-react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { CreditCard, FileText, Home, LogOut, Settings, Wrench } from 'lucide-react'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 
 import { authApi } from '@/api/auth'
 import { InstallPrompt } from '@/components/InstallPrompt'
@@ -45,14 +45,23 @@ export function PortalShell() {
           </p>
           <p className="text-xs text-slate-500">Tenant portal</p>
         </div>
-        <button
-          type="button"
-          onClick={logout}
-          aria-label="Log out"
-          className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-danger-600"
-        >
-          <LogOut className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <Link
+            to="/portal/privacy"
+            aria-label="Privacy settings"
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          >
+            <Settings className="h-5 w-5" />
+          </Link>
+          <button
+            type="button"
+            onClick={logout}
+            aria-label="Log out"
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-danger-600"
+          >
+            <LogOut className="h-5 w-5" />
+          </button>
+        </div>
       </header>
 
       <main className="min-w-0 flex-1 px-4 py-5 pb-24">

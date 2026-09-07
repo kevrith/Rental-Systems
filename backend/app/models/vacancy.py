@@ -118,6 +118,10 @@ class Inquiry(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
     phone_number: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Where this lead came from (Sprint 23, US-099): "direct" is the public
+    # listing page; a connected portal tags its own inquiries so the pipeline
+    # shows which channel is actually producing leads.
+    source: Mapped[str] = mapped_column(String(32), default="direct", server_default="direct", nullable=False)
 
     stage: Mapped[LeadStage] = mapped_column(
         Enum(LeadStage, name="lead_stage"), default=LeadStage.INQUIRED, nullable=False, index=True

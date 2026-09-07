@@ -1,5 +1,6 @@
 """Profile management, team invitations and caretaker assignment (US-004, US-013)."""
 
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -11,12 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import OrgContext
 from app.core.config import settings
 from app.core.security import generate_url_token, hash_password, hash_token, verify_password
+from app.models.audit import AuditLog
+from app.models.file import FileCategory, StoredFile
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.property import CaretakerAssignment, Property
-from app.models.session import Invitation, InvitationStatus
+from app.models.session import Invitation, InvitationStatus, UserSession
 from app.models.user import DEFAULT_INACTIVITY_TIMEOUT_MINUTES, User, UserRole
 from app.schemas.user import AcceptInvitationRequest, InviteUserRequest, UpdateProfileRequest
-from app.services import audit_service, auth_service, notification_service, session_service
+from app.services import audit_service, auth_service, notification_service, session_service, storage_service
 from app.services.notifications import get_sms_notifier, normalize_phone
 
 
@@ -171,6 +174,81 @@ async def cancel_account_deletion(db: AsyncSession, user: User, request: Request
         request=request,
     )
     await db.commit()
+
+
+async def export_own_data(db: AsyncSession, user: User, request: Request | None = None) -> str:
+    """Self-service data export for a staff account (Sprint 25, US-106).
+
+    A tenant's equivalent goes through `privacy_service` and gets a durable
+    `DataRequest` row, because it is raised on the tenant's behalf as often as
+    it is self-served. A staff export is always self-served, so this returns a
+    signed URL directly rather than adding a second request-tracking table for
+    a workflow that has none.
+    """
+    sessions = list(await db.scalars(select(UserSession).where(UserSession.user_id == user.id)))
+    audit_rows = list(
+        await db.scalars(
+            select(AuditLog)
+            .where(AuditLog.user_id == user.id)
+            .order_by(AuditLog.created_at.desc())
+            .limit(500)
+        )
+    )
+
+    payload = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "profile": {
+            "full_name": user.full_name,
+            "email": user.email,
+            "phone_number": user.phone_number,
+            "role": user.role.value,
+            "created_at": user.created_at.isoformat(),
+            "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
+        },
+        "sessions": [
+            {
+                "device_name": session.device_name,
+                "ip_address": session.ip_address,
+                "last_active_at": session.last_active_at.isoformat(),
+                "revoked": session.revoked_at is not None,
+            }
+            for session in sessions
+        ],
+        "recent_activity": [
+            {
+                "action": row.action,
+                "entity_type": row.entity_type,
+                "summary": row.summary,
+                "created_at": row.created_at.isoformat(),
+            }
+            for row in audit_rows
+        ],
+    }
+    data = json.dumps(payload, indent=2).encode("utf-8")
+    file_id = await storage_service.store_bytes(
+        db,
+        data=data,
+        filename=f"data-export-{user.id.hex[:10]}-{datetime.now(UTC):%Y%m%d%H%M%S}.json",
+        content_type="application/json",
+        category=FileCategory.DATA_REQUEST_EXPORT,
+        organization_id=user.organization_id,
+        entity_type="user",
+        entity_id=user.id,
+    )
+    audit_service.record(
+        db,
+        organization_id=user.organization_id,
+        action="user.data_export",
+        entity_type="user",
+        entity_id=user.id,
+        actor=user,
+        summary="Requested a personal data export",
+        request=request,
+    )
+    stored = await db.get(StoredFile, file_id)
+    await db.commit()
+    assert stored is not None
+    return storage_service.download_url(stored.storage_key, stored.filename)
 
 
 # ------------------------------------------------------------------ team & invites

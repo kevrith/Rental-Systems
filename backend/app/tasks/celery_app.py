@@ -2,6 +2,12 @@ from celery import Celery
 from celery.schedules import crontab
 
 from app.core.config import settings
+from app.core.observability import configure_sentry
+
+# Workers are a separate process from the API and fail in different ways —
+# a beat task that has been silently erroring for a week is exactly what
+# error tracking is for.
+configure_sentry("worker")
 
 celery_app = Celery(
     "rentflow",
@@ -132,6 +138,52 @@ celery_app.conf.update(
         "compute-health-scores": {
             "task": "rentflow.compute_health_scores",
             "schedule": crontab(day_of_week=1, hour=5, minute=30),
+        },
+        # Sprint 21: the automatic monthly summary, right after the data export.
+        "monthly-owner-report": {
+            "task": "rentflow.monthly_owner_report",
+            "schedule": crontab(day_of_month=1, hour=5, minute=30),
+        },
+        # Sprint 21: any saved custom report scheduled for today.
+        "run-scheduled-custom-reports": {
+            "task": "rentflow.run_scheduled_custom_reports",
+            "schedule": crontab(hour=6, minute=15),
+        },
+        # Sprint 22: daily failed-login summary per account.
+        "send-failed-login-digest": {
+            "task": "rentflow.send_failed_login_digest",
+            "schedule": crontab(hour=7, minute=45),
+        },
+        # Sprint 22: nudge accounts to rotate an API key past its rotation window.
+        "remind-api-key-rotation": {
+            "task": "rentflow.remind_api_key_rotation",
+            "schedule": crontab(hour=9, minute=15),
+        },
+        # Sprint 23: push unsynced payments, maintenance costs and disbursements
+        # to every connected QuickBooks/Xero company.
+        "sync-accounting-connections": {
+            "task": "rentflow.sync_accounting_connections",
+            "schedule": crontab(hour=4, minute=30),
+        },
+        # Sprint 26: end management agreements whose notice period has run.
+        # Just after midnight so an agreement effective "today" is closed on
+        # the day, before the disbursement and invoicing runs read it.
+        "complete-management-agreement-terminations": {
+            "task": "rentflow.complete_management_agreement_terminations",
+            "schedule": crontab(hour=0, minute=30),
+        },
+        # Sprint 26: escalate any breach whose 72-hour notification window is
+        # running down. Hourly, because the deadline is legal and a daily
+        # sweep could burn a fifth of the window before anyone was told.
+        "escalate-breach-notifications": {
+            "task": "rentflow.escalate_breach_notifications",
+            "schedule": crontab(minute=5),
+        },
+        # Sprint 26: look for breach-shaped patterns in authentication and
+        # export telemetry. Every 15 minutes, matching the payment reconciler.
+        "scan-for-breach-candidates": {
+            "task": "rentflow.scan_for_breach_candidates",
+            "schedule": crontab(minute="*/15"),
         },
     },
 )

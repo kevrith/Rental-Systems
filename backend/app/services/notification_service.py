@@ -9,6 +9,7 @@ roll back the payment that produced it. Failures are recorded and surfaced in th
 notification history instead.
 """
 
+import html
 import logging
 import uuid
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ from app.models.notification import (
 )
 from app.models.tenant import Tenant
 from app.models.user import User
+from app.services import communication_template_service
 from app.services.notifications import (
     get_email_notifier,
     get_push_notifier,
@@ -128,6 +130,17 @@ async def _deliver_push(db: AsyncSession, user_id: uuid.UUID, notification: Noti
         notification.sent_at = datetime.now(UTC)
 
 
+def to_email_html(body: str) -> str:
+    """Wrap a plain-text notification body for an HTML email.
+
+    Escaped, not interpolated raw. Every caller writes prose, and since Sprint 26
+    an organisation can supply its own wording (Module 21) — so a stray `<` or
+    `&` in a landlord's template would otherwise either break the markup or
+    inject it into an email sent to their tenants.
+    """
+    return f"<p>{html.escape(body).replace(chr(10), '<br>')}</p>"
+
+
 async def send(
     db: AsyncSession,
     *,
@@ -141,11 +154,18 @@ async def send(
     entity_type: str | None = None,
     entity_id: uuid.UUID | None = None,
     organization_id: uuid.UUID | None = None,
+    variables: dict[str, object] | None = None,
 ) -> list[Notification]:
     """Dispatch across `channels` (default WhatsApp + SMS) and return the log rows.
 
     Rows are added to the caller's session but not committed — the caller decides
     the transaction boundary.
+
+    `title` and `body` are the built-in copy. An organisation that has written
+    its own wording for this notification type gets theirs instead, rendered
+    from `variables` (Module 21). Callers that pass no variables simply never
+    match a template that needs any, and their own copy stands — which is why
+    adding this required no change at any existing call site.
     """
     org_id = organization_id or recipient.organization_id
     if org_id is None:
@@ -158,6 +178,17 @@ async def send(
 
     written: list[Notification] = []
     for channel in channels:
+        # Per channel, not once per send: an organisation may write a short SMS
+        # and a fuller email for the same event.
+        channel_title, channel_body = await communication_template_service.apply(
+            db,
+            organization_id=org_id,
+            notification_type=notification_type,
+            channel=channel,
+            title=title,
+            body=body,
+            variables=variables,
+        )
         notification = Notification(
             organization_id=org_id,
             channel=channel,
@@ -165,8 +196,8 @@ async def send(
             user_id=user_id,
             tenant_id=tenant_id,
             recipient=phone,
-            title=title,
-            body=body,
+            title=channel_title,
+            body=channel_body,
             link_path=link_path,
             entity_type=entity_type,
             entity_id=entity_id,
@@ -200,10 +231,12 @@ async def send(
                     notifier = get_whatsapp_notifier()
                     if attachment:
                         result = await notifier.send_document(
-                            phone, attachment.url, attachment.filename, caption=body
+                            phone, attachment.url, attachment.filename, caption=notification.body
                         )
                     else:
-                        result = await notifier.send_text(phone, f"{title}\n\n{body}")
+                        result = await notifier.send_text(
+                            phone, f"{notification.title}\n\n{notification.body}"
+                        )
                     _apply(notification, result)
 
             elif channel == NotificationChannel.SMS:
@@ -211,7 +244,7 @@ async def send(
                     notification.status = DeliveryStatus.SKIPPED
                     notification.error = "No phone number on file"
                 else:
-                    result = await get_sms_notifier().send(phone, body)
+                    result = await get_sms_notifier().send(phone, notification.body)
                     _apply(notification, result)
 
             else:  # EMAIL
@@ -222,7 +255,7 @@ async def send(
                     result = await get_email_notifier().send(
                         recipient.user.email,
                         notification.title,
-                        f"<p>{notification.body.replace(chr(10), '<br>')}</p>",
+                        to_email_html(notification.body),
                     )
                     _apply(notification, result)
 

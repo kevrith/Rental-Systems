@@ -3,9 +3,15 @@ import {
   AlertTriangle,
   Bell,
   Building2,
+  Download,
+  Fingerprint,
   Laptop,
   LogOut,
+  Plug,
+  Plus,
+  MessageSquare,
   ShieldCheck,
+  Sparkles,
   Trash2,
   UserRound,
   Receipt,
@@ -13,7 +19,7 @@ import {
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
-import { notificationsApi, organizationApi } from '@/api'
+import { notificationsApi, organizationApi, securityApi } from '@/api'
 import { authApi } from '@/api/auth'
 import { PageHeader } from '@/components/PageHeader'
 import {
@@ -29,11 +35,22 @@ import {
   Input,
   PageLoader,
   Select,
+  Textarea,
 } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { dateTime, errorMessage, humanize, relative } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
+import { createPasskey, isWebauthnSupported } from '@/lib/webauthn'
 import { useAuthStore } from '@/store/auth-store'
+
+const SECURITY_POLICY_ROLES: { value: string; label: string }[] = [
+  { value: 'owner', label: 'Owner' },
+  { value: 'agency_admin', label: 'Agency admin' },
+  { value: 'property_manager', label: 'Property manager' },
+  { value: 'caretaker', label: 'Caretaker' },
+  { value: 'accountant', label: 'Accountant' },
+  { value: 'owner_portal_user', label: 'Owner portal' },
+]
 
 const TABS = [
   { to: '/settings/profile', label: 'Profile', icon: <UserRound className="h-4 w-4" /> },
@@ -41,7 +58,10 @@ const TABS = [
   { to: '/settings/sessions', label: 'Devices', icon: <Laptop className="h-4 w-4" /> },
   { to: '/settings/notifications', label: 'Notifications', icon: <Bell className="h-4 w-4" /> },
   { to: '/settings/organization', label: 'Organization', icon: <Building2 className="h-4 w-4" /> },
+  { to: '/settings/messages', label: 'Message wording', icon: <MessageSquare className="h-4 w-4" /> },
   { to: '/settings/etims', label: 'KRA eTIMS', icon: <Receipt className="h-4 w-4" /> },
+  { to: '/settings/portals', label: 'Property portals', icon: <Plug className="h-4 w-4" /> },
+  { to: '/settings/accounting', label: 'Accounting', icon: <Plug className="h-4 w-4" /> },
 ]
 
 export function SettingsLayout() {
@@ -128,6 +148,15 @@ export function ProfileSettings() {
     },
   })
 
+  const exportData = useMutation({
+    mutationFn: authApi.exportOwnData,
+    onSuccess: (result) => {
+      if (result.download_url) window.open(result.download_url, '_blank', 'noopener')
+      setNotice({ tone: 'success', text: 'Your data export is ready.' })
+    },
+    onError: (error) => setNotice({ tone: 'danger', text: errorMessage(error) }),
+  })
+
   if (!user) return <PageLoader />
 
   return (
@@ -189,6 +218,26 @@ export function ProfileSettings() {
 
           <Button loading={save.isPending} onClick={() => save.mutate()}>
             Save changes
+          </Button>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Your data</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <p className="mb-3 text-sm text-slate-600">
+            Download a copy of your profile, sessions and recent activity (Kenya Data Protection
+            Act, US-106).
+          </p>
+          <Button
+            variant="outline"
+            icon={<Download className="h-4 w-4" />}
+            loading={exportData.isPending}
+            onClick={() => exportData.mutate()}
+          >
+            Download my data
           </Button>
         </CardBody>
       </Card>
@@ -464,7 +513,106 @@ export function SessionsSettings() {
           ))}
         </ul>
       </Card>
+
+      <PasskeysCard />
     </div>
+  )
+}
+
+/** Passkey / biometric login management (Sprint 25, US-108). */
+function PasskeysCard() {
+  const queryClient = useQueryClient()
+  const [error, setError] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+
+  const passkeys = useQuery({ queryKey: queryKeys.passkeys, queryFn: authApi.webauthnCredentials })
+
+  const remove = useMutation({
+    mutationFn: (id: string) => authApi.webauthnDeleteCredential(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.passkeys })
+    },
+  })
+
+  const addPasskey = async () => {
+    setError(null)
+    setAdding(true)
+    try {
+      const { options } = await authApi.webauthnRegisterOptions()
+      const credential = await createPasskey(options)
+      const deviceName =
+        typeof window !== 'undefined' && /iphone|ipad/i.test(window.navigator.userAgent)
+          ? 'iPhone/iPad passkey'
+          : /android/i.test(window.navigator.userAgent)
+            ? 'Android passkey'
+            : 'This device'
+      await authApi.webauthnRegisterVerify({ credential, device_name: deviceName })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.passkeys })
+    } catch (registerError) {
+      setError(errorMessage(registerError, 'Could not register this passkey.'))
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  if (!isWebauthnSupported()) return null
+
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>Passkeys</CardTitle>
+          <p className="mt-0.5 text-sm text-slate-500">
+            Sign in with your fingerprint or face instead of an SMS code.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          icon={<Plus className="h-3.5 w-3.5" />}
+          loading={adding}
+          onClick={() => void addPasskey()}
+        >
+          Add a passkey
+        </Button>
+      </CardHeader>
+
+      {error && (
+        <div className="px-5 pb-3">
+          <Alert tone="danger">{error}</Alert>
+        </div>
+      )}
+
+      {passkeys.data?.length ? (
+        <ul className="divide-y divide-slate-100">
+          {passkeys.data.map((passkey) => (
+            <li key={passkey.id} className="flex items-center justify-between gap-3 px-5 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <Fingerprint className="h-5 w-5 shrink-0 text-slate-400" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900">{passkey.device_name}</p>
+                  <p className="text-xs text-slate-500">
+                    Added {dateTime(passkey.created_at)}
+                    {passkey.last_used_at && ` · last used ${relative(passkey.last_used_at)}`}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-danger-600"
+                loading={remove.isPending}
+                onClick={() => remove.mutate(passkey.id)}
+              >
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="px-5 pb-5 text-sm text-slate-500">No passkeys registered yet.</p>
+      )}
+    </Card>
   )
 }
 
@@ -587,8 +735,12 @@ export function NotificationSettings() {
 export function OrganizationSettings() {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<Record<string, string>>({})
+  const [roleTimeouts, setRoleTimeouts] = useState<Record<string, string>>({})
   const [notice, setNotice] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null)
   const canManage = useAuthStore((state) => state.user?.permissions?.includes('org:manage'))
+  const canManageSecurity = useAuthStore((state) =>
+    state.user?.permissions?.includes('security:manage'),
+  )
 
   const organization = useQuery({
     queryKey: queryKeys.organization,
@@ -607,7 +759,25 @@ export function OrganizationSettings() {
       kra_pin: String(data.kra_pin ?? ''),
       default_billing_day: String(data.default_billing_day ?? '1'),
       default_caretaker_cash_limit: String(data.default_caretaker_cash_limit ?? ''),
+      report_delivery_channel: String(data.report_delivery_channel ?? 'both'),
+      ip_whitelist: ((data.ip_whitelist as string[] | undefined) ?? []).join('\n'),
+      fraud_max_cash_payments_per_window: String(data.fraud_max_cash_payments_per_window ?? '5'),
+      fraud_cash_window_minutes: String(data.fraud_cash_window_minutes ?? '30'),
+      fraud_unusual_amount_multiplier: String(data.fraud_unusual_amount_multiplier ?? '3.00'),
+      bank_name: String(data.bank_name ?? ''),
+      bank_account_name: String(data.bank_account_name ?? ''),
+      bank_account_number: String(data.bank_account_number ?? ''),
+      bank_branch: String(data.bank_branch ?? ''),
+      cash_dual_approval_threshold: String(data.cash_dual_approval_threshold ?? ''),
+      max_concurrent_sessions: String(data.max_concurrent_sessions ?? ''),
     })
+    setRoleTimeouts(
+      Object.fromEntries(
+        Object.entries((data.role_session_timeouts as Record<string, number>) ?? {}).map(
+          ([role, minutes]) => [role, String(minutes)],
+        ),
+      ),
+    )
   }, [organization.data])
 
   const save = useMutation({
@@ -622,6 +792,29 @@ export function OrganizationSettings() {
         default_billing_day: Number(form.default_billing_day) || 1,
         default_caretaker_cash_limit: form.default_caretaker_cash_limit
           ? Number(form.default_caretaker_cash_limit)
+          : null,
+        report_delivery_channel: form.report_delivery_channel || 'both',
+        ip_whitelist: (form.ip_whitelist ?? '')
+          .split('\n')
+          .map((entry) => entry.trim())
+          .filter(Boolean),
+        role_session_timeouts: Object.fromEntries(
+          Object.entries(roleTimeouts).filter(([, value]) => value.trim() !== ''),
+        ),
+        fraud_max_cash_payments_per_window: Number(form.fraud_max_cash_payments_per_window) || 5,
+        fraud_cash_window_minutes: Number(form.fraud_cash_window_minutes) || 30,
+        fraud_unusual_amount_multiplier: Number(form.fraud_unusual_amount_multiplier) || 3,
+        bank_name: form.bank_name || null,
+        bank_account_name: form.bank_account_name || null,
+        bank_account_number: form.bank_account_number || null,
+        bank_branch: form.bank_branch || null,
+        // Blank means off, not zero — a threshold of 0 would hold every
+        // shilling of cash for a second signature.
+        cash_dual_approval_threshold: form.cash_dual_approval_threshold
+          ? Number(form.cash_dual_approval_threshold)
+          : null,
+        max_concurrent_sessions: form.max_concurrent_sessions
+          ? Number(form.max_concurrent_sessions)
           : null,
       }),
     onSuccess: async () => {
@@ -711,14 +904,353 @@ export function OrganizationSettings() {
               disabled={!canManage}
             />
           </Field>
+          <Field
+            label="Monthly report delivery"
+            hint="Where your automatic monthly summary is sent."
+          >
+            <Select
+              value={form.report_delivery_channel ?? 'both'}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, report_delivery_channel: event.target.value }))
+              }
+              disabled={!canManage}
+            >
+              <option value="whatsapp">WhatsApp only</option>
+              <option value="email">Email only</option>
+              <option value="both">WhatsApp and email</option>
+            </Select>
+          </Field>
         </CardBody>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Bank transfer</CardTitle>
+          <p className="text-xs text-slate-500">
+            Shown to tenants as instructions for paying rent by bank transfer.
+          </p>
+        </CardHeader>
+        <CardBody className="grid gap-4 sm:grid-cols-2">
+          <Field label="Bank name">
+            <Input value={form.bank_name ?? ''} onChange={set('bank_name')} disabled={!canManage} />
+          </Field>
+          <Field label="Account name">
+            <Input
+              value={form.bank_account_name ?? ''}
+              onChange={set('bank_account_name')}
+              disabled={!canManage}
+            />
+          </Field>
+          <Field label="Account number">
+            <Input
+              value={form.bank_account_number ?? ''}
+              onChange={set('bank_account_number')}
+              disabled={!canManage}
+            />
+          </Field>
+          <Field label="Branch">
+            <Input value={form.bank_branch ?? ''} onChange={set('bank_branch')} disabled={!canManage} />
+          </Field>
+        </CardBody>
+      </Card>
+
+      {canManageSecurity && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Access control</CardTitle>
+              <p className="text-xs text-slate-500">
+                Enterprise security hardening — restrict sign-in by network and set per-role
+                session policy.
+              </p>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <Field
+                label="IP whitelist"
+                hint="One IP address or CIDR range per line. Leave blank to allow sign-in from anywhere."
+              >
+                <Textarea
+                  rows={4}
+                  placeholder={'203.0.113.4\n41.90.64.0/20'}
+                  value={form.ip_whitelist ?? ''}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, ip_whitelist: event.target.value }))
+                  }
+                  className="font-mono text-xs"
+                />
+              </Field>
+
+              <div>
+                <p className="mb-2 text-sm font-medium text-slate-700">
+                  Session timeout by role (minutes)
+                </p>
+                <p className="mb-3 text-xs text-slate-500">
+                  Applies immediately to every user of that role. Leave blank to keep the default.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {SECURITY_POLICY_ROLES.map((role) => (
+                    <Field key={role.value} label={role.label}>
+                      <Input
+                        type="number"
+                        min="5"
+                        max="1440"
+                        placeholder="Default"
+                        value={roleTimeouts[role.value] ?? ''}
+                        onChange={(event) =>
+                          setRoleTimeouts((current) => ({
+                            ...current,
+                            [role.value]: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                  ))}
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Fraud detection thresholds</CardTitle>
+              <p className="text-xs text-slate-500">
+                What counts as suspicious enough to alert you (US-097).
+              </p>
+            </CardHeader>
+            <CardBody className="grid gap-4 sm:grid-cols-3">
+              <Field
+                label="Max cash payments per window"
+                hint="More than this by one caretaker triggers an alert."
+              >
+                <Input
+                  type="number"
+                  min="1"
+                  value={form.fraud_max_cash_payments_per_window ?? '5'}
+                  onChange={set('fraud_max_cash_payments_per_window')}
+                />
+              </Field>
+              <Field label="Window (minutes)">
+                <Input
+                  type="number"
+                  min="1"
+                  value={form.fraud_cash_window_minutes ?? '30'}
+                  onChange={set('fraud_cash_window_minutes')}
+                />
+              </Field>
+              <Field
+                label="Unusual amount multiplier"
+                hint="A payment above rent × this, or below rent ÷ this, is flagged."
+              >
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="1.1"
+                  value={form.fraud_unusual_amount_multiplier ?? '3.00'}
+                  onChange={set('fraud_unusual_amount_multiplier')}
+                />
+              </Field>
+            </CardBody>
+          </Card>
+        </>
+      )}
+
+      {canManage && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Cash controls and sessions</CardTitle>
+            <p className="text-xs text-slate-500">
+              Who has to sign off on money, and how many devices stay signed in.
+            </p>
+          </CardHeader>
+          <CardBody className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Hold cash above (KES)"
+              hint="A cash payment above this is recorded but not banked until a second person approves it. Leave blank to switch this off."
+            >
+              <Input
+                type="number"
+                min="0"
+                placeholder="Off"
+                value={form.cash_dual_approval_threshold ?? ''}
+                onChange={set('cash_dual_approval_threshold')}
+              />
+            </Field>
+            <Field
+              label="Maximum devices signed in"
+              hint="A new login beyond this signs out the least recently used device. Blank uses the platform default."
+            >
+              <Input
+                type="number"
+                min="1"
+                max="50"
+                placeholder="Platform default"
+                value={form.max_concurrent_sessions ?? ''}
+                onChange={set('max_concurrent_sessions')}
+              />
+            </Field>
+          </CardBody>
+        </Card>
+      )}
+
+      {canManage && <DemoDataCard />}
 
       {canManage && (
         <Button loading={save.isPending} onClick={() => save.mutate()}>
           Save organization settings
         </Button>
       )}
+
+      {canManageSecurity && <SecurityAuditLogExport />}
     </div>
+  )
+}
+
+// ----------------------------------------------------------- security audit log
+
+function SecurityAuditLogExport() {
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const runExport = useMutation({
+    mutationFn: async (format: 'csv' | 'pdf') => {
+      const blob = await securityApi.exportAuditLog({
+        format,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+      })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `rentflow-audit-log.${format}`
+      link.click()
+      URL.revokeObjectURL(url)
+    },
+    onError: (err) => setError(errorMessage(err)),
+  })
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Security audit log</CardTitle>
+        <p className="text-xs text-slate-500">
+          Every privileged action taken on this account, exportable for compliance.
+        </p>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        {error && <Alert tone="danger">{error}</Alert>}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="From">
+            <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+          </Field>
+          <Field label="To">
+            <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+          </Field>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            icon={<Download className="h-4 w-4" />}
+            loading={runExport.isPending}
+            onClick={() => runExport.mutate('csv')}
+          >
+            Export CSV
+          </Button>
+          <Button
+            variant="secondary"
+            icon={<Download className="h-4 w-4" />}
+            loading={runExport.isPending}
+            onClick={() => runExport.mutate('pdf')}
+          >
+            Export PDF
+          </Button>
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
+
+// ----------------------------------------------------------------- demo data
+
+/**
+ * Sample data (Module 24). A landlord evaluating RentFlow on an empty account
+ * sees empty screens, which tells them nothing about whether it would help.
+ *
+ * Removal deletes exactly the rows the seeding recorded, in reverse order —
+ * nothing is matched by name — so a customer who has started entering their own
+ * portfolio alongside the sample can still clear the sample cleanly.
+ */
+function DemoDataCard() {
+  const queryClient = useQueryClient()
+  const [notice, setNotice] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null)
+
+  const status = useQuery({ queryKey: queryKeys.demoData, queryFn: organizationApi.demoData })
+
+  const settled = async (text: string) => {
+    setNotice({ tone: 'success', text })
+    // Everything is affected: the portfolio, the money, the reports.
+    await queryClient.invalidateQueries()
+  }
+
+  const load = useMutation({
+    mutationFn: organizationApi.loadDemoData,
+    onSuccess: (result) => settled(`Loaded ${result.row_count} sample records.`),
+    onError: (error) => setNotice({ tone: 'danger', text: errorMessage(error) }),
+  })
+  const remove = useMutation({
+    mutationFn: organizationApi.removeDemoData,
+    onSuccess: (result) => settled(result.message),
+    onError: (error) => setNotice({ tone: 'danger', text: errorMessage(error) }),
+  })
+
+  const loaded = status.data?.loaded ?? false
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Sample data</CardTitle>
+        <p className="text-xs text-slate-500">
+          A small demonstration portfolio, so every screen has something in it.
+        </p>
+      </CardHeader>
+      <CardBody className="space-y-3">
+        {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
+
+        {loaded ? (
+          <>
+            <Alert tone="info" title="Sample data is loaded">
+              {status.data?.row_count} example records — a block of flats, four tenants at
+              different stages of paying, and about a year of history. Everything in it is
+              fabricated. Remove it before you go live.
+            </Alert>
+            <Button
+              variant="danger"
+              icon={<Trash2 className="h-4 w-4" />}
+              onClick={() => remove.mutate()}
+              loading={remove.isPending}
+            >
+              Remove sample data
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-slate-600">
+              Adds one example property, six units, four tenants and their payment history. It
+              sits alongside anything you have already entered, and removing it never touches
+              your own records.
+            </p>
+            <Button
+              variant="secondary"
+              icon={<Sparkles className="h-4 w-4" />}
+              onClick={() => load.mutate()}
+              loading={load.isPending}
+            >
+              Load sample data
+            </Button>
+          </>
+        )}
+      </CardBody>
+    </Card>
   )
 }

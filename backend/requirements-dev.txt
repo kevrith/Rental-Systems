@@ -6,3 +6,8 @@ black==24.10.0
 mypy==1.14.0
 pre-commit==4.0.1
 fakeredis==2.26.2
+# Coverage measurement (Sprint 26). The global Definition of Done asks for
+# 80%; until this was added it had never been measured.
+pytest-cov==6.0.0
+# Dependency vulnerability scanning, run in CI (Sprint 26).
+pip-audit==2.7.3

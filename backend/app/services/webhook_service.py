@@ -45,7 +45,7 @@ async def create_endpoint(
         organization_id=context.organization_id,
         url=payload.url,
         description=payload.description,
-        secret_encrypted=crypto.encrypt(secret),
+        secret_encrypted=await crypto.encrypt_for_org(db, context.organization_id, secret),
         event_types=[event.value for event in payload.event_types],
         created_by_id=context.user.id,
     )
@@ -85,7 +85,7 @@ async def get_endpoint(db: AsyncSession, context: OrgContext, endpoint_id: uuid.
 
 async def reveal_secret(db: AsyncSession, context: OrgContext, endpoint_id: uuid.UUID) -> str:
     row = await get_endpoint(db, context, endpoint_id)
-    secret = crypto.decrypt(row.secret_encrypted)
+    secret = await crypto.decrypt_for_org(db, row.organization_id, row.secret_encrypted)
     if secret is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

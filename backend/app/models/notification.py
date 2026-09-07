@@ -62,6 +62,20 @@ class NotificationType(str, enum.Enum):
     COMPLIANCE_EXPIRY = "compliance_expiry"
     AMENITY_BOOKING = "amenity_booking"
     UTILITY_OVERDUE = "utility_overdue"
+    # Sprint 21 — the monthly summary and any scheduled custom report.
+    REPORT_READY = "report_ready"
+    # Sprint 22 — AI, fraud and security hardening.
+    LEASE_ANALYSIS_READY = "lease_analysis_ready"
+    FRAUD_ALERT = "fraud_alert"
+    SECURITY_LOGIN_BLOCKED = "security_login_blocked"
+    FAILED_LOGIN_DIGEST = "failed_login_digest"
+    API_KEY_ROTATION_DUE = "api_key_rotation_due"
+    # Sprint 25 — a tenant exercised a data subject access or erasure request.
+    DATA_REQUEST = "data_request"
+    # Sprint 26 — masterplan gap closure.
+    BREACH_NOTIFICATION = "breach_notification"
+    MANAGEMENT_AGREEMENT = "management_agreement"
+    PAYMENT_APPROVAL = "payment_approval"
 
 
 class DeliveryStatus(str, enum.Enum):

@@ -28,7 +28,7 @@ import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.crypto import decrypt, encrypt, mask
+from app.core.crypto import decrypt_for_org, encrypt_for_org, mask
 from app.models.billing import Invoice, Payment, Receipt
 from app.models.customer_success import MilestoneKey
 from app.models.etims import EtimsCredential, EtimsStatus, EtimsSubmission
@@ -78,14 +78,24 @@ async def save_credential(
     environment: str = "sandbox",
 ) -> EtimsCredential:
     """Store (or replace) a landlord's eTIMS registration, encrypted at rest."""
+    # Sealed under this organisation's own key, not the platform master key
+    # (see `app.core.crypto`). Re-saving an existing credential is what
+    # migrates it off the legacy master-key ciphertext.
+    #
+    # Encrypted *before* the row is added to the session: minting a first-time
+    # organisation key flushes, and a flush with a half-built credential row
+    # already attached fails that row's NOT NULL constraints.
+    sealed_serial = await encrypt_for_org(db, organization_id, device_serial.strip())
+    sealed_api_key = await encrypt_for_org(db, organization_id, api_key.strip())
+
     record = await get_credential(db, organization_id)
     if record is None:
         record = EtimsCredential(organization_id=organization_id, kra_pin=kra_pin)
         db.add(record)
 
     record.kra_pin = kra_pin.strip().upper()
-    record.device_serial_encrypted = encrypt(device_serial.strip())
-    record.api_key_encrypted = encrypt(api_key.strip())
+    record.device_serial_encrypted = sealed_serial
+    record.api_key_encrypted = sealed_api_key
     record.branch_id = branch_id.strip() or "00"
     record.environment = "production" if environment == "production" else "sandbox"
     record.is_active = True
@@ -96,7 +106,7 @@ async def save_credential(
     return record
 
 
-def describe_credential(record: EtimsCredential | None) -> dict:
+async def describe_credential(db: AsyncSession, record: EtimsCredential | None) -> dict:
     """Safe to return over the API — proves a credential is set without leaking it."""
     if record is None:
         return {"configured": False}
@@ -106,7 +116,9 @@ def describe_credential(record: EtimsCredential | None) -> dict:
         "branch_id": record.branch_id,
         "environment": record.environment,
         "is_active": record.is_active,
-        "device_serial_hint": mask(decrypt(record.device_serial_encrypted)),
+        "device_serial_hint": mask(
+            await decrypt_for_org(db, record.organization_id, record.device_serial_encrypted)
+        ),
         "last_verified_at": record.last_verified_at.isoformat() if record.last_verified_at else None,
         "last_error": record.last_error,
     }
@@ -199,9 +211,10 @@ async def _build_payload(db: AsyncSession, receipt: Receipt, credential: EtimsCr
     }
 
 
-async def _call_kra(credential: EtimsCredential, payload: dict) -> dict[str, Any]:
-    device_serial = decrypt(credential.device_serial_encrypted)
-    api_key = decrypt(credential.api_key_encrypted)
+async def _call_kra(db: AsyncSession, credential: EtimsCredential, payload: dict) -> dict[str, Any]:
+    organization_id = credential.organization_id
+    device_serial = await decrypt_for_org(db, organization_id, credential.device_serial_encrypted)
+    api_key = await decrypt_for_org(db, organization_id, credential.api_key_encrypted)
     if not device_serial or not api_key:
         raise EtimsError("Stored eTIMS credentials could not be read — re-enter them in settings")
 
@@ -243,7 +256,7 @@ async def submit(db: AsyncSession, submission: EtimsSubmission) -> EtimsSubmissi
 
     try:
         payload = await _build_payload(db, receipt, credential)
-        body = await _call_kra(credential, payload)
+        body = await _call_kra(db, credential, payload)
     except Exception as exc:  # noqa: BLE001 — every failure mode is a retry decision
         message = str(exc)[:512]
         logger.warning(

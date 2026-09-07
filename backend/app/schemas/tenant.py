@@ -69,6 +69,7 @@ class TenantRead(BaseModel):
     passport_photo_id: uuid.UUID | None
     portal_user_id: uuid.UUID | None
     is_archived: bool
+    erased_at: datetime | None
     created_at: datetime
 
 
@@ -161,6 +162,21 @@ class TenancyDetail(TenancyRead):
     lease_url: str | None = None
     days_to_expiry: int | None = None
     balance: Decimal = Decimal("0.00")
+
+
+class CoTenantAdd(BaseModel):
+    tenant_id: uuid.UUID
+
+
+class CoTenantRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    tenancy_id: uuid.UUID
+    tenant_id: uuid.UUID
+    created_at: datetime
+    tenant_name: str | None = None
+    tenant_phone: str | None = None
 
 
 class VacateTenancyRequest(BaseModel):

@@ -165,6 +165,48 @@ async def _query(
 # ----------------------------------------------------------------- tenant vault (US-045)
 
 
+async def _tenant_entity_pairs(
+    db: AsyncSession, organization_id: uuid.UUID, tenant_id: uuid.UUID
+) -> list[tuple[str, uuid.UUID]]:
+    """Every (entity_type, entity_id) a tenant's documents can be filed
+    against: their own record, their tenancies, and the inspection reports of
+    units they've occupied (US-045). Shared by the in-app vault and the
+    data-export bundle (US-106) so the two can never disagree about what
+    counts as "this tenant's documents"."""
+    pairs: list[tuple[str, uuid.UUID]] = [("tenant", tenant_id)]
+
+    tenancy_ids = list(
+        await db.scalars(
+            select(Tenancy.id).where(
+                Tenancy.organization_id == organization_id, Tenancy.tenant_id == tenant_id
+            )
+        )
+    )
+    pairs.extend(("tenancy", tenancy_id) for tenancy_id in tenancy_ids)
+
+    if tenancy_ids:
+        report_ids = list(
+            await db.scalars(
+                select(InspectionReport.id).where(
+                    InspectionReport.organization_id == organization_id,
+                    InspectionReport.tenancy_id.in_(tenancy_ids),
+                )
+            )
+        )
+        pairs.extend(("inspection_report", report_id) for report_id in report_ids)
+
+    return pairs
+
+
+async def documents_for_tenant(
+    db: AsyncSession, organization_id: uuid.UUID, tenant_id: uuid.UUID
+) -> list[StoredFile]:
+    """Every uploaded, non-archived document filed against one tenant — used
+    by the data-export bundle (US-106)."""
+    pairs = await _tenant_entity_pairs(db, organization_id, tenant_id)
+    return await _query(db, organization_id, entity_pairs=pairs)
+
+
 async def tenant_vault(
     db: AsyncSession,
     context: OrgContext,
@@ -177,30 +219,7 @@ async def tenant_vault(
     """Everything filed against one tenant, plus the inspections of their units."""
     tenant = assert_in_org(await db.get(Tenant, tenant_id), context, label="tenant")
 
-    pairs: list[tuple[str, uuid.UUID]] = [("tenant", tenant.id)]
-
-    # Their tenancies carry lease and notice documents of their own.
-    tenancy_ids = list(
-        await db.scalars(
-            select(Tenancy.id).where(
-                Tenancy.organization_id == context.organization_id, Tenancy.tenant_id == tenant.id
-            )
-        )
-    )
-    pairs.extend(("tenancy", tenancy_id) for tenancy_id in tenancy_ids)
-
-    # Inspections of the units they have occupied are theirs to see (US-045).
-    if tenancy_ids:
-        report_ids = list(
-            await db.scalars(
-                select(InspectionReport.id).where(
-                    InspectionReport.organization_id == context.organization_id,
-                    InspectionReport.tenancy_id.in_(tenancy_ids),
-                )
-            )
-        )
-        pairs.extend(("inspection_report", report_id) for report_id in report_ids)
-
+    pairs = await _tenant_entity_pairs(db, context.organization_id, tenant.id)
     records = await _query(
         db,
         context.organization_id,

@@ -16,14 +16,18 @@ from app.api.v1.endpoints import (
     files,
     health,
     inspections,
+    integrations,
     internal,
     notifications,
     operations,
     organizations,
     portal,
+    privacy,
     properties,
     renewals,
     rentals,
+    reporting,
+    security,
     service_charges,
     signatures,
     tasks,
@@ -67,12 +71,14 @@ api_router.include_router(operations.meters_router, prefix="/meter-readings", ta
 api_router.include_router(operations.maintenance_router, prefix="/maintenance", tags=["maintenance"])
 api_router.include_router(operations.notices_router, prefix="/vacate-notices", tags=["vacate-notices"])
 api_router.include_router(operations.caretaker_router, prefix="/caretaker", tags=["caretaker"])
+api_router.include_router(operations.visitor_logs_router, prefix="/visitor-logs", tags=["visitor-logs"])
 
 # Reporting & comms
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 api_router.include_router(dashboard.activity_router, prefix="/activity", tags=["activity"])
 api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
 api_router.include_router(notifications.push_router, prefix="/push", tags=["notifications"])
+api_router.include_router(notifications.templates_router, prefix="/message-templates", tags=["notifications"])
 
 # Files
 api_router.include_router(files.router, prefix="/files", tags=["files"])
@@ -141,3 +147,23 @@ api_router.include_router(external.router, prefix="/external", tags=["external-a
 # customer-success team.
 api_router.include_router(customer_success.router, prefix="/customer-success", tags=["customer-success"])
 api_router.include_router(internal.router, prefix="/internal", tags=["internal"])
+
+# Sprint 21 — the custom report builder and the automatic monthly summary.
+api_router.include_router(reporting.router, prefix="/reports", tags=["reports"])
+
+# Sprint 22 — fraud alert triage and the security audit log export.
+api_router.include_router(security.router, prefix="/security", tags=["security"])
+
+# Sprint 23 — property portal sync and accounting software sync.
+# `portal_webhook_router` and `oauth_callback_router` each carry no RentFlow
+# session, so they get their own top-level prefixes rather than sharing
+# `/integrations` — the same reason `/mpesa`, `/sign` and `/listings` are
+# separate from their authenticated counterparts.
+api_router.include_router(integrations.router, prefix="/integrations", tags=["integrations"])
+api_router.include_router(
+    integrations.portal_webhook_router, prefix="/portal-webhooks", tags=["integrations"]
+)
+api_router.include_router(integrations.oauth_callback_router, prefix="/oauth", tags=["integrations"])
+
+# Sprint 25 — security, privacy & compliance closeout.
+api_router.include_router(privacy.router, prefix="/privacy", tags=["privacy"])

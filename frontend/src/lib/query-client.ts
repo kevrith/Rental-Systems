@@ -48,6 +48,10 @@ export const queryKeys = {
   team: ['team'] as const,
   invitations: ['team', 'invitations'] as const,
   sessions: ['auth', 'sessions'] as const,
+  passkeys: ['auth', 'passkeys'] as const,
+  visitorLogs: (filters?: unknown) => ['visitor-logs', filters ?? {}] as const,
+  coTenants: (tenancyId: string) => ['tenancies', tenancyId, 'co-tenants'] as const,
+  dataRequests: (filters?: unknown) => ['data-requests', filters ?? {}] as const,
   notifications: (filters?: unknown) => ['notifications', filters ?? {}] as const,
   unreadCount: ['notifications', 'unread'] as const,
   preferences: ['notifications', 'preferences'] as const,
@@ -161,4 +165,37 @@ export const queryKeys = {
   internalOrganizationHealth: (id: string) => ['internal', 'organizations', id, 'health'] as const,
   internalHelpArticles: ['internal', 'help-articles'] as const,
   internalChangelogEntries: ['internal', 'changelog-entries'] as const,
+
+  // Reports (Phase 4, Sprint 21)
+  analyticsVacancyRisk: ['analytics', 'vacancy-risk'] as const,
+  analyticsRentReview: ['analytics', 'rent-review'] as const,
+
+  // Sprint 26 — masterplan gap closure.
+  analyticsUtilities: (months: number) => ['analytics', 'utilities', months] as const,
+  analyticsBehaviour: (months: number) => ['analytics', 'payment-behaviour', months] as const,
+  analyticsTurnover: (months: number) => ['analytics', 'turnover', months] as const,
+  messageTemplates: ['message-templates'] as const,
+  messageTemplateTypes: ['message-templates', 'types'] as const,
+  demoData: ['organization', 'demo-data'] as const,
+  paymentsPendingApproval: ['payments', 'pending-approval'] as const,
+  managementAgreements: (filters?: unknown) =>
+    ['agency', 'management-agreements', filters ?? {}] as const,
+  reportDatasets: ['reports', 'datasets'] as const,
+  reportFields: (dataset: string) => ['reports', 'datasets', dataset, 'fields'] as const,
+  reportDefinitions: ['reports', 'definitions'] as const,
+  reportDefinition: (id: string) => ['reports', 'definitions', id] as const,
+  monthlyReports: ['reports', 'monthly'] as const,
+
+  // AI and security (Phase 4, Sprint 22)
+  leaseAnalyses: (templateId: string) => ['lease-templates', templateId, 'analyses'] as const,
+  fraudAlerts: (status?: string) => ['security', 'fraud-alerts', status ?? 'all'] as const,
+
+  // Partner integrations (Phase 4, Sprint 23)
+  portalConnections: ['integrations', 'portals'] as const,
+  portalListingSync: (listingId: string) => ['integrations', 'portals', 'listings', listingId] as const,
+  accountingConnections: ['integrations', 'accounting'] as const,
+  accountingReport: (provider: string) => ['integrations', 'accounting', provider, 'report'] as const,
+  bankInstructions: ['payments', 'bank-instructions'] as const,
+  bankStatements: ['payments', 'bank-statements'] as const,
+  bankStatement: (id: string) => ['payments', 'bank-statements', id] as const,
 }

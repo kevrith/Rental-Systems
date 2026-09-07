@@ -21,7 +21,7 @@ from app.models.customer_success import MilestoneKey
 from app.models.developer import WebhookEvent
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.property import Property, Unit, UnitStatus
-from app.models.tenant import Tenancy, TenancyStatus, Tenant
+from app.models.tenant import Tenancy, TenancyCoTenant, TenancyStatus, Tenant
 from app.schemas.tenant import (
     DuplicateWarning,
     TenancyCreate,
@@ -609,6 +609,164 @@ async def vacate_tenancy(
             channels=[NotificationChannel.WHATSAPP, NotificationChannel.SMS],
         )
 
+    await db.commit()
+    await db.refresh(tenancy)
+    return tenancy
+
+
+# --------------------------------------------------------------------- co-tenants
+
+
+async def list_co_tenants(
+    db: AsyncSession, context: OrgContext, tenancy_id: uuid.UUID
+) -> list[tuple[TenancyCoTenant, Tenant | None]]:
+    await get_tenancy(db, context, tenancy_id)  # 403/404 on scope
+    rows = list(
+        await db.scalars(
+            select(TenancyCoTenant)
+            .where(TenancyCoTenant.tenancy_id == tenancy_id)
+            .order_by(TenancyCoTenant.created_at)
+        )
+    )
+    return [(row, await db.get(Tenant, row.tenant_id)) for row in rows]
+
+
+async def add_co_tenant(
+    db: AsyncSession,
+    context: OrgContext,
+    tenancy_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    request: Request | None = None,
+) -> TenancyCoTenant:
+    """Link an additional tenant to a tenancy (Sprint 25, US-107).
+
+    Purely additive — every financial query still keys off `Tenancy.tenant_id`
+    alone, so this can never duplicate a charge or split a balance.
+    """
+    tenancy = await get_tenancy(db, context, tenancy_id)
+    tenant = assert_in_org(await db.get(Tenant, tenant_id), context, label="tenant")
+
+    if tenant.id == tenancy.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="This tenant is already the primary tenant"
+        )
+    existing = await db.scalar(
+        select(TenancyCoTenant.id).where(
+            TenancyCoTenant.tenancy_id == tenancy_id, TenancyCoTenant.tenant_id == tenant_id
+        )
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Already a co-tenant on this tenancy"
+        )
+
+    co_tenant = TenancyCoTenant(
+        organization_id=context.organization_id,
+        tenancy_id=tenancy_id,
+        tenant_id=tenant_id,
+        added_by_id=context.user.id,
+    )
+    db.add(co_tenant)
+    await db.flush()
+
+    audit_service.record(
+        db,
+        organization_id=context.organization_id,
+        action="tenancy.co_tenant_added",
+        entity_type="tenancy",
+        entity_id=tenancy_id,
+        actor=context.user,
+        summary=f"{tenant.full_name} added as a co-tenant on {tenancy.reference_code}",
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(co_tenant)
+    return co_tenant
+
+
+async def remove_co_tenant(
+    db: AsyncSession,
+    context: OrgContext,
+    tenancy_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    request: Request | None = None,
+) -> None:
+    """Remove a co-tenant — e.g. one of two roommates moving out while the
+    other stays (US-107's partial-turnover case). The tenancy, its invoices and
+    its payment history are untouched; only this tenant's shared visibility and
+    signing obligation on it end."""
+    tenancy = await get_tenancy(db, context, tenancy_id)
+    co_tenant = await db.scalar(
+        select(TenancyCoTenant).where(
+            TenancyCoTenant.tenancy_id == tenancy_id, TenancyCoTenant.tenant_id == tenant_id
+        )
+    )
+    if co_tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Co-tenant not found")
+
+    tenant = await db.get(Tenant, tenant_id)
+    await db.delete(co_tenant)
+
+    audit_service.record(
+        db,
+        organization_id=context.organization_id,
+        action="tenancy.co_tenant_removed",
+        entity_type="tenancy",
+        entity_id=tenancy_id,
+        actor=context.user,
+        summary=f"{tenant.full_name if tenant else 'A co-tenant'} removed from {tenancy.reference_code}",
+        request=request,
+    )
+    await db.commit()
+
+
+async def promote_co_tenant(
+    db: AsyncSession,
+    context: OrgContext,
+    tenancy_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    request: Request | None = None,
+) -> Tenancy:
+    """Make a co-tenant the primary tenant — the partial-turnover case where
+    the current primary is the one moving out and a co-tenant is staying
+    (US-107). The old primary is dropped from the tenancy entirely (they've
+    left); the promoted co-tenant becomes `Tenancy.tenant_id`, so invoices,
+    arrears and the portal home screen all key off them going forward.
+    History is untouched — past invoices and payments still reference this
+    same tenancy, whoever was primary when they were raised.
+    """
+    tenancy = await get_tenancy(db, context, tenancy_id)
+    co_tenant_row = await db.scalar(
+        select(TenancyCoTenant).where(
+            TenancyCoTenant.tenancy_id == tenancy_id, TenancyCoTenant.tenant_id == tenant_id
+        )
+    )
+    if co_tenant_row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="That tenant is not a co-tenant on this tenancy"
+        )
+
+    old_primary_id = tenancy.tenant_id
+    old_primary = await db.get(Tenant, old_primary_id)
+    new_primary = await db.get(Tenant, tenant_id)
+
+    tenancy.tenant_id = tenant_id
+    await db.delete(co_tenant_row)
+
+    audit_service.record(
+        db,
+        organization_id=context.organization_id,
+        action="tenancy.primary_tenant_swapped",
+        entity_type="tenancy",
+        entity_id=tenancy_id,
+        actor=context.user,
+        summary=(
+            f"{new_primary.full_name if new_primary else 'A co-tenant'} is now the primary tenant on "
+            f"{tenancy.reference_code}, replacing "
+            f"{old_primary.full_name if old_primary else 'the previous tenant'}"
+        ),
+        request=request,
+    )
     await db.commit()
     await db.refresh(tenancy)
     return tenancy

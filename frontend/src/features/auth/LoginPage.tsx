@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
-import { AlertCircle, ShieldCheck } from 'lucide-react'
+import { AlertCircle, Fingerprint, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { authApi, type TokenResponse } from '@/api/auth'
 import { Alert, Button, Field, Input } from '@/components/ui'
 import { errorMessage } from '@/lib/format'
+import { getPasskeyAssertion, isWebauthnSupported } from '@/lib/webauthn'
 import { useAuthStore } from '@/store/auth-store'
 
 import { AuthLayout } from './AuthLayout'
@@ -29,8 +30,13 @@ export function LoginPage() {
   const navigate = useNavigate()
   const setSession = useAuthStore((state) => state.setSession)
   const [serverError, setServerError] = useState<string | null>(null)
-  const [challenge, setChallenge] = useState<{ token: string; message: string } | null>(null)
+  const [challenge, setChallenge] = useState<{
+    token: string
+    message: string
+    webauthnOptions: string | null
+  } | null>(null)
   const [rememberDevice, setRememberDevice] = useState(false)
+  const [passkeyPending, setPasskeyPending] = useState(false)
 
   const credentialsForm = useForm<CredentialsValues>({
     resolver: zodResolver(credentialsSchema),
@@ -63,7 +69,11 @@ export function LoginPage() {
         return
       }
       if (data.challenge_token) {
-        setChallenge({ token: data.challenge_token, message: data.message })
+        setChallenge({
+          token: data.challenge_token,
+          message: data.message,
+          webauthnOptions: data.webauthn_options,
+        })
       }
     },
     onError: (error) => setServerError(errorMessage(error, 'Invalid email or password.')),
@@ -81,6 +91,25 @@ export function LoginPage() {
     onSuccess: finishLogin,
     onError: (error) => setServerError(errorMessage(error, 'Invalid or expired code.')),
   })
+
+  const signInWithPasskey = async () => {
+    if (!challenge?.webauthnOptions) return
+    setServerError(null)
+    setPasskeyPending(true)
+    try {
+      const assertion = await getPasskeyAssertion(challenge.webauthnOptions)
+      const tokens = await authApi.verifyLoginWebauthn({
+        challenge_token: challenge.token,
+        credential: assertion,
+        remember_device: rememberDevice,
+      })
+      await finishLogin(tokens)
+    } catch (error) {
+      setServerError(errorMessage(error, 'Passkey sign-in failed. Use your SMS code instead.'))
+    } finally {
+      setPasskeyPending(false)
+    }
+  }
 
   if (challenge) {
     return (
@@ -129,6 +158,18 @@ export function LoginPage() {
           <Button type="submit" className="w-full justify-center" loading={otpMutation.isPending}>
             Verify and log in
           </Button>
+
+          {challenge.webauthnOptions && isWebauthnSupported() && (
+            <button
+              type="button"
+              onClick={() => void signInWithPasskey()}
+              disabled={passkeyPending}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              <Fingerprint className="h-4 w-4" />
+              {passkeyPending ? 'Waiting for your passkey…' : 'Use your passkey instead'}
+            </button>
+          )}
 
           <button
             type="button"
@@ -210,9 +251,21 @@ export function LoginPage() {
           Log in
         </Button>
 
-        <p className="flex items-center justify-center gap-1.5 text-xs text-slate-400">
+        <p className="flex items-center justify-center gap-1.5 text-xs text-slate-500">
           <ShieldCheck className="h-3.5 w-3.5" />
           Protected by two-factor authentication
+        </p>
+
+        {/*
+          Tenants sign in perhaps twice a year, often on a borrowed phone, and
+          most have no email address on file — so the reset flow above is not a
+          route back in for them. The link sign-in is (Sprint 26).
+        */}
+        <p className="text-center text-sm text-slate-500">
+          Are you a tenant?{' '}
+          <Link to="/portal/login" className="font-medium text-brand-600 hover:underline">
+            Get a sign-in link
+          </Link>
         </p>
       </form>
     </AuthLayout>

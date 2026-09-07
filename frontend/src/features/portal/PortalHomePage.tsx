@@ -39,6 +39,7 @@ import { queryKeys } from '@/lib/query-client'
 
 export function PortalHomePage() {
   const [payOpen, setPayOpen] = useState(false)
+  const [bankOpen, setBankOpen] = useState(false)
   const [vacateOpen, setVacateOpen] = useState(false)
 
   const home = useQuery({ queryKey: queryKeys.portalHome, queryFn: portalApi.home })
@@ -111,6 +112,13 @@ export function PortalHomePage() {
           >
             Pay rent with M-Pesa
           </Button>
+          <button
+            type="button"
+            className="mt-2 text-sm text-brand-600 hover:underline"
+            onClick={() => setBankOpen(true)}
+          >
+            Pay by bank transfer instead
+          </button>
         </CardBody>
       </Card>
 
@@ -195,6 +203,7 @@ export function PortalHomePage() {
         balance={data.balance}
         phone={data.phone_number}
       />
+      <BankTransferDialog open={bankOpen} onClose={() => setBankOpen(false)} />
       <VacateDialog open={vacateOpen} onClose={() => setVacateOpen(false)} />
     </div>
   )
@@ -358,6 +367,42 @@ function PayDialog({
 }
 
 /** Digital notice to vacate (US-033). */
+function BankTransferDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const home = useQuery({ queryKey: queryKeys.portalHome, queryFn: portalApi.home })
+  const instructions = useQuery({
+    queryKey: queryKeys.bankInstructions,
+    queryFn: portalApi.bankInstructions,
+    enabled: open,
+  })
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Pay by bank transfer"
+      footer={<Button onClick={onClose}>Done</Button>}
+    >
+      {instructions.isPending ? (
+        <Skeleton className="h-24" />
+      ) : instructions.data?.configured ? (
+        <div className="space-y-2 text-sm">
+          <Row label="Bank" value={instructions.data.bank_name ?? '—'} />
+          <Row label="Account name" value={instructions.data.account_name ?? '—'} />
+          <Row label="Account number" value={instructions.data.account_number ?? '—'} />
+          <Row label="Branch" value={instructions.data.branch ?? '—'} />
+          <Row label="Reference" value={home.data?.tenancy_reference ?? '—'} />
+          <p className="mt-3 text-xs text-slate-500">
+            Always include your reference so your payment is matched to your account. It can take a
+            day or two to reflect after you transfer — tell your caretaker once you have paid.
+          </p>
+        </div>
+      ) : (
+        <Alert tone="info">Bank transfer is not set up for this account yet.</Alert>
+      )}
+    </Dialog>
+  )
+}
+
 function VacateDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const queryClient = useQueryClient()
   const [moveOutDate, setMoveOutDate] = useState('')

@@ -1,16 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
+  AlertTriangle,
   CreditCard,
   Download,
   FileText,
   Plus,
+  ShieldAlert,
   Star,
   Wrench,
 } from 'lucide-react'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { portalApi } from '@/api'
+import { authApi } from '@/api/auth'
 import type { MaintenanceRequest, MaintenanceStatus } from '@/api/types'
 import { FileUpload, type UploadedFile } from '@/components/FileUpload'
 import {
@@ -489,5 +493,107 @@ function ReportDialog({ open, onClose }: { open: boolean; onClose: () => void })
         )}
       </div>
     </Dialog>
+  )
+}
+
+/** Self-service data privacy requests (Sprint 25, US-106). */
+export function PortalPrivacyPage() {
+  const navigate = useNavigate()
+  const [eraseOpen, setEraseOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const exportData = useMutation({
+    mutationFn: portalApi.requestDataExport,
+    onSuccess: (result) => {
+      if (result.download_url) window.open(result.download_url, '_blank', 'noopener')
+      setNotice('Your data export is ready.')
+    },
+    onError: (exportError) => setError(errorMessage(exportError)),
+  })
+
+  const eraseData = useMutation({
+    mutationFn: portalApi.requestDataErasure,
+    onSuccess: async () => {
+      try {
+        await authApi.logout(null)
+      } catch {
+        // The local session ends either way.
+      }
+      navigate('/login', { replace: true })
+    },
+    onError: (eraseError) => setError(errorMessage(eraseError)),
+  })
+
+  return (
+    <div className="space-y-4">
+      <h1 className="text-lg font-semibold text-slate-900">Your data</h1>
+
+      {notice && <Alert tone="success">{notice}</Alert>}
+      {error && <Alert tone="danger">{error}</Alert>}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Download my data</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <p className="mb-3 text-sm text-slate-600">
+            Get a copy of your profile, tenancies, invoices and payment history.
+          </p>
+          <Button
+            variant="outline"
+            icon={<Download className="h-4 w-4" />}
+            loading={exportData.isPending}
+            onClick={() => exportData.mutate()}
+          >
+            Download my data
+          </Button>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-danger-700">Erase my data</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <p className="mb-3 text-sm text-slate-600">
+            Removes your name, contact details and documents from RentFlow. Financial records
+            required by law (tenancies, invoices, payments) are kept. This cannot be undone and
+            ends your portal access immediately.
+          </p>
+          <Button
+            variant="ghost"
+            className="text-danger-600"
+            icon={<ShieldAlert className="h-4 w-4" />}
+            onClick={() => setEraseOpen(true)}
+          >
+            Erase my data
+          </Button>
+        </CardBody>
+      </Card>
+
+      <Dialog
+        open={eraseOpen}
+        onClose={() => setEraseOpen(false)}
+        title="Erase your personal data?"
+        description="This cannot be undone."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setEraseOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" loading={eraseData.isPending} onClick={() => eraseData.mutate()}>
+              Erase my data
+            </Button>
+          </>
+        }
+      >
+        <Alert tone="warn" icon={<AlertTriangle className="h-4 w-4" />}>
+          Your name, phone, email, ID and documents will be permanently redacted. Your tenancy,
+          invoice and payment history stays on record, as Kenyan law requires — this only removes
+          who it's linked to.
+        </Alert>
+      </Dialog>
+    </div>
   )
 }

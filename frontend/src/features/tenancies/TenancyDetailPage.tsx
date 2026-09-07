@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CreditCard, Download, Eye, LogOut, Receipt, RefreshCw } from 'lucide-react'
+import { CreditCard, Download, Eye, LogOut, Receipt, RefreshCw, UserPlus, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
-import { invoicesApi, noticesApi, paymentsApi, tenanciesApi } from '@/api'
+import { coTenantsApi, invoicesApi, noticesApi, paymentsApi, tenanciesApi, tenantsApi } from '@/api'
 import { PageHeader, StatCard } from '@/components/PageHeader'
 import {
   Alert,
@@ -20,6 +20,7 @@ import {
   Input,
   PAYMENT_STATUS_TONE,
   PageLoader,
+  Select,
   TENANCY_STATUS_TONE,
   Textarea,
   linkButtonClass,
@@ -364,6 +365,8 @@ export function TenancyDetailPage() {
               </Link>
             </CardBody>
           </Card>
+
+          <CoTenantsCard tenancyId={tenancyId!} primaryTenantId={record.tenant_id} canManage={canManage} />
         </div>
       </div>
 
@@ -463,5 +466,165 @@ function Detail({ label, value }: { label: string; value: React.ReactNode }) {
       <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
       <dd className="mt-0.5 text-slate-800">{value}</dd>
     </div>
+  )
+}
+
+/** Co-tenants beyond the primary tenant (Sprint 25, US-107) — couples,
+ * roommates, or business partners who share one tenancy. */
+function CoTenantsCard({
+  tenancyId,
+  primaryTenantId,
+  canManage,
+}: {
+  tenancyId: string
+  primaryTenantId: string
+  canManage?: boolean
+}) {
+  const queryClient = useQueryClient()
+  const [addOpen, setAddOpen] = useState(false)
+  const [selectedTenantId, setSelectedTenantId] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const coTenants = useQuery({
+    queryKey: queryKeys.coTenants(tenancyId),
+    queryFn: () => coTenantsApi.list(tenancyId),
+  })
+
+  const allTenants = useQuery({
+    queryKey: queryKeys.tenants({}),
+    queryFn: () => tenantsApi.list(),
+    enabled: addOpen,
+  })
+
+  const add = useMutation({
+    mutationFn: () => coTenantsApi.add(tenancyId, selectedTenantId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.coTenants(tenancyId) })
+      setAddOpen(false)
+      setSelectedTenantId('')
+    },
+    onError: (addError) => setError(errorMessage(addError)),
+  })
+
+  const remove = useMutation({
+    mutationFn: (tenantId: string) => coTenantsApi.remove(tenancyId, tenantId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.coTenants(tenancyId) })
+    },
+  })
+
+  const promote = useMutation({
+    mutationFn: (tenantId: string) => coTenantsApi.promote(tenancyId, tenantId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.coTenants(tenancyId) })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.tenancy(tenancyId) })
+    },
+    onError: (promoteError) => setError(errorMessage(promoteError)),
+  })
+
+  const available = (allTenants.data ?? []).filter(
+    (tenant) =>
+      tenant.id !== primaryTenantId && !coTenants.data?.some((row) => row.tenant_id === tenant.id),
+  )
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Co-tenants</CardTitle>
+        {canManage && (
+          <Button
+            variant="outline"
+            size="sm"
+            icon={<UserPlus className="h-3.5 w-3.5" />}
+            onClick={() => setAddOpen(true)}
+          >
+            Add
+          </Button>
+        )}
+      </CardHeader>
+      <CardBody className="space-y-2">
+        {error && !addOpen && <Alert tone="danger">{error}</Alert>}
+        {coTenants.data?.length ? (
+          coTenants.data.map((row) => (
+            <div key={row.id} className="flex items-center justify-between text-sm">
+              <div>
+                <Link
+                  to={`/tenants/${row.tenant_id}`}
+                  className="font-medium text-brand-700 hover:underline"
+                >
+                  {row.tenant_name}
+                </Link>
+                <p className="text-xs text-slate-500">{row.tenant_phone}</p>
+              </div>
+              {canManage && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    loading={promote.isPending}
+                    onClick={() => promote.mutate(row.tenant_id)}
+                    title="Make this co-tenant the primary tenant — for when the current primary is moving out but this person is staying"
+                  >
+                    Make primary
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<X className="h-3.5 w-3.5" />}
+                    loading={remove.isPending}
+                    onClick={() => remove.mutate(row.tenant_id)}
+                  />
+                </div>
+              )}
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-slate-500">
+            No co-tenants. Add one for a shared unit — both will see this tenancy in their own
+            portal login and both are asked to sign the lease.
+          </p>
+        )}
+      </CardBody>
+
+      <Dialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        title="Add a co-tenant"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setAddOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!selectedTenantId}
+              loading={add.isPending}
+              onClick={() => {
+                setError(null)
+                add.mutate()
+              }}
+            >
+              Add co-tenant
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Field label="Tenant">
+            <Select value={selectedTenantId} onChange={(event) => setSelectedTenantId(event.target.value)}>
+              <option value="">Choose an existing tenant record</option>
+              {available.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.full_name} — {tenant.phone_number}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <p className="text-xs text-slate-500">
+            The tenant must already have a profile — create one from Tenants first if they don&apos;t.
+          </p>
+          {error && <Alert tone="danger">{error}</Alert>}
+        </div>
+      </Dialog>
+    </Card>
   )
 }

@@ -21,6 +21,7 @@ from app.core.security import (
     device_fingerprint,
     hash_token,
 )
+from app.models.organization import Organization
 from app.models.session import TrustedDevice, UserSession
 from app.models.user import DEFAULT_INACTIVITY_TIMEOUT_MINUTES, User
 from app.schemas.auth import TokenResponse
@@ -75,6 +76,45 @@ def client_ip(request: Request | None) -> str | None:
     return request.client.host if request.client else None
 
 
+async def enforce_session_cap(db: AsyncSession, user: User, keep_session_id: uuid.UUID) -> int:
+    """Revoke the oldest sessions until the user is inside their cap.
+
+    The cap is an organisation setting falling back to a platform default. The
+    *new* session always survives — signing in must never fail because you
+    already had too many logins, and the alternative (refusing the login) turns
+    a forgotten tablet into a lockout.
+
+    Least-recently-active goes first, which is almost always the device the
+    user has actually stopped using.
+    """
+    organization = await db.get(Organization, user.organization_id)
+    cap = (
+        organization.max_concurrent_sessions
+        if organization is not None and organization.max_concurrent_sessions is not None
+        else settings.MAX_CONCURRENT_SESSIONS_PER_USER
+    )
+    if cap <= 0:
+        return 0
+
+    live = list(
+        await db.scalars(
+            select(UserSession)
+            .where(
+                UserSession.user_id == user.id,
+                UserSession.revoked_at.is_(None),
+                UserSession.expires_at > datetime.now(UTC),
+            )
+            .order_by(UserSession.last_active_at.desc())
+        )
+    )
+    surplus = [session for session in live if session.id != keep_session_id][cap - 1 :]
+
+    now = datetime.now(UTC)
+    for session in surplus:
+        session.revoked_at = now
+    return len(surplus)
+
+
 async def create_session(
     db: AsyncSession, user: User, request: Request | None = None
 ) -> tuple[UserSession, TokenResponse]:
@@ -96,6 +136,9 @@ async def create_session(
     )
     db.add(session)
     await db.flush()
+
+    # Sprint 26: cap concurrent logins (masterplan, Security § Authentication).
+    await enforce_session_cap(db, user, session.id)
 
     tokens = _mint(user, session)
     return session, tokens

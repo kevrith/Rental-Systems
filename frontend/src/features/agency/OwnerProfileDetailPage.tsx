@@ -33,6 +33,7 @@ import {
   linkButtonClass,
 } from '@/components/ui'
 import { DISBURSEMENT_STATUS_TONE } from '@/features/agency/disbursement-status'
+import { ManagementAgreementPanel } from '@/features/agency/ManagementAgreementPanel'
 import { dateTime, errorMessage, humanize, kes, shortDate } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
 
@@ -202,6 +203,10 @@ export function OwnerProfileDetailPage() {
             <DetailRow label="Account name" value={record.bank_account_name} />
           </CardBody>
         </Card>
+      </div>
+
+      <div className="mt-4">
+        <ManagementAgreementPanel ownerProfileId={ownerId!} />
       </div>
 
       <Card className="mt-4">

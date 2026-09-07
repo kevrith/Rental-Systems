@@ -56,11 +56,17 @@ async def create_signing_request(
     signer_name: str,
     signer_phone: str,
     signer_role: str = "tenant",
+    document_label: str = "lease agreement",
 ) -> tuple[DigitalSignature, str]:
     """Create a signing request and return (record, raw_token).
 
     The raw token is sent to the signer via WhatsApp/SMS as a link.
     Only the hash is stored — the raw token is never persisted.
+
+    `document_label` is what the signer is told they are signing. It defaults
+    to a lease because that is what this pipeline was built for, but a
+    management agreement goes through the same flow and must not tell an owner
+    to sign a lease (Sprint 26).
     """
     # The signing link is public and unauthenticated, so the org check has to
     # happen here: without it one organisation could raise a signing request
@@ -94,9 +100,9 @@ async def create_signing_request(
         db,
         recipient=notification_service.Recipient(phone_number=signer_phone),
         notification_type=NotificationType.DOCUMENT_SIGNED,
-        title="Please sign your lease agreement",
+        title=f"Please sign your {document_label}",
         body=(
-            f"Dear {signer_name}, your lease agreement is ready for signing. "
+            f"Dear {signer_name}, your {document_label} is ready for signing. "
             f"Please review and sign within {SIGNING_LINK_EXPIRY_HOURS} hours: {signing_url}"
         ),
         channels=[NotificationChannel.WHATSAPP, NotificationChannel.SMS],
@@ -194,6 +200,13 @@ async def verify_otp_and_sign(
         entity_id=sig.id,
         summary=f"{sig.signer_name} ({sig.signer_role}) signed document {sig.document_id}",
     )
+
+    # An agreement needing two signatures activates only once the second one
+    # lands (Sprint 26). Tolerant of every other kind of signature — a lease
+    # signature simply matches nothing and falls through.
+    from app.services import management_agreement_service
+
+    await management_agreement_service.activate_if_fully_signed(db, sig)
 
     # Notify all parties
     await _notify_signed(db, sig)

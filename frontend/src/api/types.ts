@@ -163,6 +163,7 @@ export interface Tenant {
   emergency_contact_phone: string | null
   emergency_contact_relationship: string | null
   notes: string | null
+  erased_at: string | null
   id_photo_front_id: string | null
   id_photo_back_id: string | null
   passport_photo_id: string | null
@@ -268,6 +269,7 @@ export interface Payment {
   method: PaymentMethod
   status: PaymentStatus
   mpesa_receipt: string | null
+  bank_reference: string | null
   phone_number: string | null
   failure_reason: string | null
   paid_at: string | null
@@ -398,6 +400,43 @@ export interface MeterReading {
   property_name?: string | null
   photo_url?: string | null
   recorded_by_name?: string | null
+}
+
+export interface VisitorLog {
+  id: string
+  organization_id: string
+  property_id: string
+  unit_id: string
+  visitor_name: string
+  visitor_phone: string | null
+  purpose: string | null
+  checked_in_at: string
+  checked_out_at: string | null
+  created_at: string
+  unit_number?: string | null
+  property_name?: string | null
+  recorded_by_name?: string | null
+}
+
+export interface CoTenant {
+  id: string
+  tenancy_id: string
+  tenant_id: string
+  created_at: string
+  tenant_name: string | null
+  tenant_phone: string | null
+}
+
+export interface DataRequest {
+  id: string
+  tenant_id: string
+  request_type: 'export' | 'erasure'
+  status: 'completed' | 'failed'
+  resolution_notes: string | null
+  resolved_at: string | null
+  created_at: string
+  tenant_name?: string | null
+  export_url?: string | null
 }
 
 export interface VendorSummary {
@@ -942,6 +981,31 @@ export interface MaintenanceAnalytics {
   this_month_cost: number
   avg_monthly_cost_3m: number
   spike_alert: boolean
+}
+
+// ------------------------------------------------------- predictive (Sprint 21)
+
+export interface VacancyRiskItem {
+  tenancy_id: string
+  tenant_name: string
+  property_name: string
+  unit_number: string
+  end_date: string
+  days_until_expiry: number
+  monthly_rent: number
+  renewal_state: 'none' | 'declined' | 'lapsed'
+}
+
+export interface RentReviewSuggestion {
+  tenancy_id: string
+  tenant_name: string
+  property_name: string
+  unit_number: string
+  monthly_rent: number
+  months_since_last_change: number
+  last_change_date: string
+  portfolio_avg_rent_same_type: number
+  percent_vs_portfolio_average: number
 }
 
 // -------------------------------------------------------------- eTIMS (Phase 2)
@@ -2081,6 +2145,14 @@ export interface HelpArticle {
   body: string
   category: string
   is_published: boolean
+  // Video tutorial (Sprint 26, Module 24). `body` stays required either way:
+  // text is searchable and works on a metered connection, which most of this
+  // product's audience is on.
+  video_url: string | null
+  video_duration_seconds: number | null
+  video_thumbnail_url: string | null
+  video_provider: string | null
+  has_video: boolean
   created_at: string
 }
 
@@ -2161,4 +2233,419 @@ export interface OrganizationHealthScorePoint {
   portal_score: number
   support_score: number
   trend: HealthTrend
+}
+
+// -------------------------------------------------------- reporting (Sprint 21)
+
+export type ReportDataset = 'tenants' | 'tenancies' | 'payments' | 'properties' | 'units' | 'invoices'
+
+export interface ReportDatasetOption {
+  dataset: ReportDataset
+  label: string
+}
+
+export interface ReportFieldMeta {
+  key: string
+  label: string
+  type: 'string' | 'number' | 'date' | 'enum' | 'bool'
+}
+
+export type ReportChartType = 'table' | 'bar' | 'line' | 'pie'
+export type ReportSchedule = 'none' | 'weekly' | 'monthly'
+export type ReportExportFormat = 'csv' | 'excel' | 'pdf'
+export type ReportDeliveryChannel = 'whatsapp' | 'email' | 'both'
+
+export interface ReportDefinition {
+  id: string
+  name: string
+  dataset: ReportDataset
+  fields: string[]
+  filters: Record<string, string[]>
+  date_from: string | null
+  date_to: string | null
+  chart_type: ReportChartType
+  group_by_field: string | null
+  measure_field: string | null
+  export_format: ReportExportFormat
+  schedule: ReportSchedule
+  schedule_day: number | null
+  delivery_channels: string[]
+  created_by_id: string | null
+  last_run_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ReportDefinitionInput {
+  name: string
+  dataset: ReportDataset
+  fields: string[]
+  filters?: Record<string, string[]>
+  date_from?: string | null
+  date_to?: string | null
+  chart_type?: ReportChartType
+  group_by_field?: string | null
+  measure_field?: string | null
+  export_format?: ReportExportFormat
+  schedule?: ReportSchedule
+  schedule_day?: number | null
+  delivery_channels?: string[]
+}
+
+export interface ReportPreviewRequest {
+  dataset: ReportDataset
+  fields: string[]
+  filters?: Record<string, string[]>
+  date_from?: string | null
+  date_to?: string | null
+}
+
+export interface ReportPreviewResult {
+  rows: Record<string, unknown>[]
+  row_count: number
+}
+
+export interface MonthlyReport {
+  id: string
+  period_start: string
+  period_end: string
+  delivered_channels: string[]
+  delivered_at: string | null
+  created_at: string
+  download_url: string | null
+}
+
+// ------------------------------------------------------ AI lease analysis (Sprint 22)
+
+export type LeaseSuggestionCategory = 'missing_clause' | 'problematic_term' | 'unclear_language'
+export type LeaseSuggestionStatus = 'pending' | 'accepted' | 'dismissed'
+
+export interface LeaseSuggestion {
+  id: string
+  category: LeaseSuggestionCategory
+  title: string
+  issue: string
+  suggested_text: string | null
+  status: LeaseSuggestionStatus
+  created_at: string
+}
+
+export interface LeaseAnalysis {
+  id: string
+  lease_template_id: string
+  model_used: string
+  summary: string
+  created_at: string
+  suggestions: LeaseSuggestion[]
+}
+
+// ------------------------------------------------ fraud detection & security (Sprint 22)
+
+export type FraudAlertType =
+  | 'rapid_cash_payments'
+  | 'off_hours_activity'
+  | 'unusual_amount'
+  | 'velocity_duplicate'
+export type FraudAlertStatus = 'open' | 'suppressed' | 'resolved'
+
+export interface FraudAlert {
+  id: string
+  alert_type: FraudAlertType
+  entity_type: string
+  entity_id: string
+  summary: string
+  details: Record<string, unknown>
+  status: FraudAlertStatus
+  resolved_at: string | null
+  created_at: string
+}
+
+// -------------------------------------------------- partner integrations (Sprint 23)
+
+export type PortalName = 'buyrentkenya' | 'pigiame'
+export type PortalSyncStatus = 'pending' | 'published' | 'deactivated' | 'failed'
+
+export interface PortalConnectionSummary {
+  configured: boolean
+  portal?: PortalName
+  account_id?: string | null
+  is_active?: boolean
+  last_synced_at?: string | null
+  last_error?: string | null
+}
+
+export interface PortalListingSync {
+  id: string
+  listing_id: string
+  portal: PortalName
+  external_listing_id: string | null
+  status: PortalSyncStatus
+  attempts: number
+  last_attempt_at: string | null
+  last_error: string | null
+}
+
+export type AccountingProvider = 'quickbooks' | 'xero'
+
+export interface AccountingConnection {
+  id: string
+  provider: AccountingProvider
+  external_account_id: string
+  environment: string
+  is_active: boolean
+  last_synced_at: string | null
+  last_error: string | null
+}
+
+export interface AccountingSyncRecord {
+  id: string
+  entity_type: string
+  entity_id: string
+  external_id: string | null
+  status: string
+  attempts: number
+  last_error: string | null
+  synced_at: string | null
+  created_at: string
+}
+
+export interface AccountingSyncReport {
+  synced: number
+  failed: number
+  pending: number
+  recent_failures: AccountingSyncRecord[]
+}
+
+// ---------------------------------------------------- bank transfer (Sprint 23)
+
+export interface BankInstructions {
+  configured: boolean
+  bank_name: string | null
+  account_name: string | null
+  account_number: string | null
+  branch: string | null
+}
+
+export interface BankStatementRow {
+  row: number
+  entry_date: string
+  description: string
+  amount: string
+  reference_guess: string | null
+  matched_tenancy_id: string | null
+}
+
+export interface BankStatementPreview {
+  rows: BankStatementRow[]
+  errors: { row: number; reason: string }[]
+  matched_count: number
+  unmatched_count: number
+}
+
+export interface BankStatementCommitRow {
+  row: number
+  entry_date: string
+  description: string
+  amount: string
+  tenancy_id: string | null
+  record_payment: boolean
+}
+
+export interface BankStatementEntry {
+  id: string
+  entry_date: string
+  description: string
+  amount: string
+  matched_tenancy_id: string | null
+  matched_payment_id: string | null
+  is_matched: boolean
+}
+
+export interface BankStatementUpload {
+  id: string
+  row_count: number
+  matched_count: number
+  unmatched_count: number
+  created_at: string
+}
+
+export interface BankStatementUploadDetail extends BankStatementUpload {
+  entries: BankStatementEntry[]
+}
+
+export interface BankStatementCommitResult {
+  upload: BankStatementUpload
+  payment_failures: { row: number; reason: string }[]
+}
+
+// ------------------------------------------------- Sprint 26 — masterplan gaps
+
+export interface UtilityTrendPoint {
+  month: string
+  month_start: string
+  water_consumption: number
+  water_amount: number
+  electricity_consumption: number
+  electricity_amount: number
+}
+
+export interface HighConsumptionUnit {
+  unit_id: string
+  unit_number: string
+  property_name: string
+  meter_type: 'water' | 'electricity'
+  reading_date: string
+  consumption: number
+  peer_average: number
+  /** Whether the average compared against is this property's or the whole portfolio's. */
+  peer_scope: 'property' | 'portfolio'
+  percent_above_average: number
+  amount: number
+}
+
+export interface UtilityAnalytics {
+  months: number
+  trend: UtilityTrendPoint[]
+  billing_efficiency: {
+    readings_taken: number
+    readings_billed: number
+    billed_percent: number
+    amount_read: number
+    amount_billed: number
+    /** Consumption measured and never charged — where utility revenue leaks. */
+    amount_unbilled: number
+  }
+  high_consumption_units: HighConsumptionUnit[]
+  above_average_multiplier: number
+}
+
+export type PaymentSegment =
+  | 'on_time'
+  | 'occasionally_late'
+  | 'chronically_late'
+  | 'non_paying'
+  | 'no_history'
+
+export interface PaymentBehaviourRow {
+  tenancy_id: string
+  tenant_name: string
+  property_name: string
+  unit_number: string
+  segment: PaymentSegment
+  invoices_assessed: number
+  paid_on_time: number
+  paid_late: number
+  still_unpaid: number
+  average_days_late: number
+  worst_days_late: number
+  outstanding_balance: number
+  monthly_rent: number
+}
+
+export interface PaymentBehaviour {
+  months: number
+  segments: Record<PaymentSegment, number>
+  tenancies: PaymentBehaviourRow[]
+}
+
+export interface TurnoverProperty {
+  property_id: string
+  property_name: string
+  active_tenancies: number
+  moved_out: number
+  turnover_rate_percent: number
+  average_tenancy_months: number | null
+}
+
+export interface TenantTurnover {
+  window_months: number
+  active_tenancies: number
+  moved_out: number
+  tenancies_held: number
+  turnover_rate_percent: number
+  average_tenancy_months: number | null
+  average_tenancy_months_all_time: number | null
+  tenancies_ever_ended: number
+  properties: TurnoverProperty[]
+}
+
+export type TemplateChannel = 'any' | 'whatsapp' | 'sms' | 'email' | 'in_app' | 'push'
+
+export interface MessageTemplate {
+  id: string
+  notification_type: string
+  channel: TemplateChannel
+  title: string | null
+  body: string
+  is_active: boolean
+  known_variables: string[]
+  last_used_at: string | null
+  updated_at: string
+}
+
+export interface MessageTemplateType {
+  notification_type: string
+  label: string
+  available_variables: string[]
+}
+
+export interface MessageTemplatePreview {
+  title: string | null
+  body: string | null
+  variables_used: string[]
+  available_variables: string[]
+  character_count: number
+  sms_segments: number
+}
+
+export interface DemoDataStatus {
+  loaded: boolean
+  row_count: number
+  recipe: string | null
+  loaded_at: string | null
+}
+
+export interface MeterPhotoRead {
+  reading: string | null
+  confidence: string | null
+  meter_kind: 'water' | 'electricity' | null
+  message: string | null
+  /** False when the reader is unsure enough that the form must not pre-fill. */
+  high_confidence: boolean
+}
+
+export type ManagementAgreementStatus =
+  | 'draft'
+  | 'pending_signatures'
+  | 'active'
+  | 'termination_notice'
+  | 'terminated'
+  | 'expired'
+  | 'cancelled'
+
+export interface ManagementAgreement {
+  id: string
+  reference_code: string
+  owner_profile_id: string
+  status: ManagementAgreementStatus
+  management_fee_percent: string
+  disbursement_day: number
+  maintenance_auto_approve_limit: string
+  maintenance_notify_limit: string
+  scope_of_management: string | null
+  property_ids: string[]
+  start_date: string
+  term_months: number
+  end_date: string | null
+  notice_period_days: number
+  document_id: string | null
+  owner_signature_id: string | null
+  agency_signature_id: string | null
+  activated_at: string | null
+  termination_requested_at: string | null
+  termination_requested_by: 'owner' | 'agency' | null
+  termination_reason: string | null
+  termination_effective_date: string | null
+  terminated_at: string | null
+  created_at: string
 }

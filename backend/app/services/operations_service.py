@@ -26,6 +26,7 @@ from app.models.operations import (
     MeterType,
     VacateNotice,
     VacateNoticeStatus,
+    VisitorLog,
 )
 from app.models.organization import Organization
 from app.models.property import Property, Unit, UnitStatus
@@ -37,6 +38,7 @@ from app.schemas.operations import (
     MeterContext,
     MeterReadingCreate,
     VacateNoticeCreate,
+    VisitorLogCreate,
 )
 from app.services import (
     audit_service,
@@ -176,6 +178,16 @@ async def record_meter_reading(
         gps_latitude=payload.gps_latitude,
         gps_longitude=payload.gps_longitude,
         notes=payload.notes,
+        ocr_reading=payload.ocr_reading,
+        ocr_confidence=payload.ocr_confidence,
+        # None, not False, when no suggestion was offered: "the caretaker
+        # rejected the machine" and "the machine never spoke" are different
+        # facts, and only the first says anything about OCR accuracy.
+        ocr_accepted=(
+            None
+            if payload.ocr_reading is None
+            else Decimal(payload.ocr_reading) == Decimal(payload.current_reading)
+        ),
     )
     db.add(reading)
     await db.flush()
@@ -633,6 +645,104 @@ async def list_vacate_notices(
     if tenancy_id:
         query = query.where(VacateNotice.tenancy_id == tenancy_id)
     rows = await db.scalars(query.order_by(VacateNotice.created_at.desc()))
+    return list(rows)
+
+
+# ------------------------------------------------------------------- visitor log
+
+
+async def log_visitor(
+    db: AsyncSession, context: OrgContext, payload: VisitorLogCreate, request: Request | None = None
+) -> VisitorLog:
+    unit = await _unit_in_scope(db, context, payload.unit_id)
+    checked_in_at = payload.checked_in_at or datetime.now(UTC)
+
+    if payload.checked_out_at is not None and payload.checked_out_at < checked_in_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Check-out time cannot be before check-in time"
+        )
+
+    entry = VisitorLog(
+        organization_id=context.organization_id,
+        property_id=unit.property_id,
+        unit_id=unit.id,
+        visitor_name=payload.visitor_name,
+        visitor_phone=payload.visitor_phone,
+        purpose=payload.purpose,
+        checked_in_at=checked_in_at,
+        checked_out_at=payload.checked_out_at,
+        recorded_by_id=context.user.id,
+        gps_latitude=payload.gps_latitude,
+        gps_longitude=payload.gps_longitude,
+    )
+    db.add(entry)
+    await db.flush()
+
+    audit_service.record(
+        db,
+        organization_id=context.organization_id,
+        action="visitor_log.recorded",
+        entity_type="visitor_log",
+        entity_id=entry.id,
+        actor=context.user,
+        summary=f"Visitor {entry.visitor_name} logged for unit {unit.unit_number}",
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(entry)
+    return entry
+
+
+async def check_out_visitor(
+    db: AsyncSession, context: OrgContext, visitor_log_id: uuid.UUID, request: Request | None = None
+) -> VisitorLog:
+    entry = assert_in_org(await db.get(VisitorLog, visitor_log_id), context, label="visitor log entry")
+    if entry.checked_out_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="This visitor is already checked out"
+        )
+
+    entry.checked_out_at = datetime.now(UTC)
+    audit_service.record(
+        db,
+        organization_id=context.organization_id,
+        action="visitor_log.checked_out",
+        entity_type="visitor_log",
+        entity_id=entry.id,
+        actor=context.user,
+        summary=f"Visitor {entry.visitor_name} checked out",
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(entry)
+    return entry
+
+
+async def list_visitor_logs(
+    db: AsyncSession,
+    context: OrgContext,
+    *,
+    unit_id: uuid.UUID | None = None,
+    property_id: uuid.UUID | None = None,
+    since: date | None = None,
+    open_only: bool = False,
+    limit: int = 100,
+) -> list[VisitorLog]:
+    query = select(VisitorLog).where(VisitorLog.organization_id == context.organization_id)
+
+    allowed = await accessible_property_ids(db, context)
+    if allowed is not None:
+        query = query.where(VisitorLog.property_id.in_(allowed))
+    if unit_id:
+        query = query.where(VisitorLog.unit_id == unit_id)
+    if property_id:
+        query = query.where(VisitorLog.property_id == property_id)
+    if since:
+        query = query.where(func.date(VisitorLog.checked_in_at) >= since)
+    if open_only:
+        query = query.where(VisitorLog.checked_out_at.is_(None))
+
+    rows = await db.scalars(query.order_by(VisitorLog.checked_in_at.desc()).limit(limit))
     return list(rows)
 
 

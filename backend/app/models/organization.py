@@ -4,8 +4,19 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -26,6 +37,12 @@ class SubscriptionPlan(str, enum.Enum):
     PROFESSIONAL = "professional"
     BUSINESS = "business"
     ENTERPRISE = "enterprise"
+
+
+class ReportDeliveryChannel(str, enum.Enum):
+    WHATSAPP = "whatsapp"
+    EMAIL = "email"
+    BOTH = "both"
 
 
 class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -82,7 +99,82 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # yet to draw this down against an invoice — it is a ledger waiting for one.
     credit_months: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
 
-    users: Mapped[list["User"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
+    # Sprint 21 (US-093): where the automatic monthly summary report is sent.
+    report_delivery_channel: Mapped[ReportDeliveryChannel] = mapped_column(
+        Enum(ReportDeliveryChannel, name="report_delivery_channel"),
+        default=ReportDeliveryChannel.BOTH,
+        server_default="BOTH",
+        nullable=False,
+    )
+
+    # Sprint 22 (US-098): login restricted to these IPs/CIDR ranges. Empty means
+    # unrestricted — every account starts open, an enterprise account opts in.
+    ip_whitelist: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
+    # Sprint 22 (US-098): role value -> minutes, overriding
+    # `DEFAULT_INACTIVITY_TIMEOUT_MINUTES` for every user of that role in this
+    # organization. Applied immediately to existing users when saved — this is
+    # an organisation-imposed policy, not a per-user preference.
+    role_session_timeouts: Mapped[dict[str, int]] = mapped_column(
+        JSONB, default=dict, server_default="{}", nullable=False
+    )
+
+    # Sprint 22 (US-097): fraud detection thresholds, configurable per organisation.
+    fraud_max_cash_payments_per_window: Mapped[int] = mapped_column(
+        Integer, default=5, server_default="5", nullable=False
+    )
+    fraud_cash_window_minutes: Mapped[int] = mapped_column(
+        Integer, default=30, server_default="30", nullable=False
+    )
+    # A payment more than this many times the tenancy's rent, or less than
+    # 1/this many times it, is flagged as an unusual amount.
+    fraud_unusual_amount_multiplier: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), default=Decimal("3.00"), server_default="3.00", nullable=False
+    )
+
+    # Sprint 23 (US-101): bank transfer instructions shown to a tenant in the
+    # portal. All optional — a landlord who never fills these in simply never
+    # shows the "pay by bank transfer" option.
+    bank_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    bank_account_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    bank_account_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    bank_branch: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+    # Sprint 26 (Module 25): suspension. `is_active` is what `deps.get_org_context`
+    # already enforces; these three record *why* it was flipped and by whom, so a
+    # suspension is a reversible, auditable act rather than a silent boolean.
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    suspension_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    suspended_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    reactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Cash above this figure is recorded but held PENDING until a second person
+    # approves it (masterplan, Fraud Prevention). None means off, which is what
+    # every existing account gets — turning a money-handling gate on silently
+    # would strand payments no one knew to go and approve.
+    cash_dual_approval_threshold: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+
+    # Most live logins one user may hold at once. None falls back to
+    # `settings.MAX_CONCURRENT_SESSIONS_PER_USER`; the oldest session is revoked
+    # when a new login would exceed the cap.
+    max_concurrent_sessions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # A demo organisation is seeded with fabricated portfolio data (Module 24).
+    # Nothing in it is real, so it is excluded from platform health scoring and
+    # billing, and the UI can label it plainly.
+    is_demo: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
+
+    # `foreign_keys` is explicit because `suspended_by_id` above adds a second
+    # foreign key between these two tables, and without it SQLAlchemy cannot
+    # tell which one this relationship travels.
+    users: Mapped[list["User"]] = relationship(
+        back_populates="organization",
+        cascade="all, delete-orphan",
+        foreign_keys="User.organization_id",
+    )
 
     @property
     def is_trial_expired(self) -> bool:
@@ -94,3 +186,32 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         if self.subscription_plan != SubscriptionPlan.TRIAL or self.trial_ends_at is None:
             return False
         return datetime.now(self.trial_ends_at.tzinfo) > self.trial_ends_at
+
+
+class OrganizationEncryptionKey(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A per-organisation data encryption key, itself stored encrypted.
+
+    Envelope encryption (masterplan, Multi-Tenant Data Isolation). The master
+    key still derives from `SECRET_KEY` — there is no KMS in this deployment —
+    but the material that actually encrypts a customer's third-party
+    credentials is unique per organisation and rotatable on its own. What that
+    buys, concretely: rotating one customer's key after a suspected compromise
+    no longer forces every other customer to re-enter their credentials, and a
+    leaked ciphertext from one tenant is useless against another's.
+
+    Deliberately not `OrgScopedMixin`: RLS keys off `organization_id` for
+    tenant reads, and this table is only ever touched by the server's own
+    crypto path, never by a request-scoped query on a tenant's behalf.
+    """
+
+    __tablename__ = "organization_encryption_keys"
+    __table_args__ = (UniqueConstraint("organization_id", "version", name="uq_org_encryption_key_version"),)
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # The organisation's Fernet key, encrypted under the master key.
+    wrapped_key: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -1,18 +1,20 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OrgContext, get_org_context, require_write
 from app.core.database import get_db
 from app.core.permissions import Permission
 from app.models.organization import Organization, SubscriptionPlan
+from app.schemas.auth import MessageResponse
 from app.schemas.organization import (
     OrganizationRead,
     OrganizationWithTrial,
     UpdateOrganizationRequest,
 )
-from app.services import audit_service
+from app.services import audit_service, demo_service, security_service
 
 router = APIRouter()
 
@@ -53,6 +55,9 @@ async def update_my_organization(
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(organization, field, value)
 
+    if "role_session_timeouts" in payload.model_fields_set:
+        await security_service.apply_role_session_timeouts(db, organization)
+
     after = {field: getattr(organization, field) for field in payload.model_fields_set}
     audit_service.record(
         db,
@@ -68,3 +73,54 @@ async def update_my_organization(
     await db.commit()
     await db.refresh(organization)
     return _with_trial(organization)
+
+
+# ------------------------------------------------------------- sample data
+
+
+class DemoDataStatus(BaseModel):
+    loaded: bool
+    row_count: int
+    recipe: str | None = None
+    loaded_at: datetime | None = None
+
+
+@router.get("/demo-data", response_model=DemoDataStatus)
+async def demo_data_status(
+    context: OrgContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+) -> DemoDataStatus:
+    dataset = await demo_service.current(db, context.organization_id)
+    if dataset is None:
+        return DemoDataStatus(loaded=False, row_count=0)
+    return DemoDataStatus(
+        loaded=True,
+        row_count=dataset.row_count,
+        recipe=dataset.recipe,
+        loaded_at=dataset.created_at,
+    )
+
+
+@router.post("/demo-data", response_model=DemoDataStatus, status_code=status.HTTP_201_CREATED)
+async def load_demo_data(
+    context: OrgContext = Depends(require_write(Permission.ORG_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> DemoDataStatus:
+    """Fill the account with a sample portfolio so every screen has data (Module 24)."""
+    dataset = await demo_service.seed(db, context)
+    return DemoDataStatus(
+        loaded=True,
+        row_count=dataset.row_count,
+        recipe=dataset.recipe,
+        loaded_at=dataset.created_at,
+    )
+
+
+@router.delete("/demo-data", response_model=MessageResponse)
+async def remove_demo_data(
+    context: OrgContext = Depends(require_write(Permission.ORG_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """Delete exactly the rows the sample seeding created, and nothing else."""
+    removed = await demo_service.remove(db, context)
+    return MessageResponse(message=f"Removed {removed} sample record(s)")

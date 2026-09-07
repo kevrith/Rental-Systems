@@ -51,3 +51,54 @@ async def maintenance_analytics(
     db: AsyncSession = Depends(get_db),
 ):
     return await analytics_service.maintenance_analytics(db, context.organization_id)
+
+
+@router.get("/vacancy-risk")
+async def vacancy_risk_forecast(
+    days_ahead: int = 90,
+    context: OrgContext = Depends(require(Permission.FINANCIALS_VIEW)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await analytics_service.vacancy_risk_forecast(db, context.organization_id, days_ahead=days_ahead)
+
+
+@router.get("/rent-review")
+async def rent_review_suggestions(
+    min_months: int = 12,
+    context: OrgContext = Depends(require(Permission.FINANCIALS_VIEW)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await analytics_service.rent_review_suggestions(db, context.organization_id, min_months=min_months)
+
+
+@router.get("/utilities")
+async def utility_analytics(
+    months: int = 6,
+    above_average_multiplier: float = 1.5,
+    context: OrgContext = Depends(require(Permission.FINANCIALS_VIEW)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await analytics_service.utility_analytics(
+        db,
+        context.organization_id,
+        months=months,
+        above_average_multiplier=above_average_multiplier,
+    )
+
+
+@router.get("/payment-behaviour")
+async def payment_behaviour(
+    months: int = 6,
+    context: OrgContext = Depends(require(Permission.FINANCIALS_VIEW)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await analytics_service.payment_behaviour_segments(db, context.organization_id, months=months)
+
+
+@router.get("/turnover")
+async def tenant_turnover(
+    months: int = 12,
+    context: OrgContext = Depends(require(Permission.FINANCIALS_VIEW)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await analytics_service.tenant_turnover(db, context.organization_id, months=months)

@@ -7,6 +7,7 @@ notifies the tenant. Doing it in one place is what keeps the two channels
 consistent.
 """
 
+import logging
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -18,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import OrgContext, accessible_property_ids, assert_in_org
+from app.core.permissions import Permission, role_has
 from app.models.billing import (
     Payment,
     PaymentMethod,
@@ -42,6 +44,8 @@ from app.services import (
 )
 from app.services.notifications import normalize_phone
 from app.services.pdf_service import format_kes
+
+logger = logging.getLogger("rentflow.payments")
 
 ZERO = Decimal("0.00")
 
@@ -104,6 +108,8 @@ async def record_cash_payment(
     if limit is not None and amount > limit:
         over_limit = True
 
+    needs_approval = await _needs_dual_approval(db, context, amount, method)
+
     code = await reference_service.generate_reference(db, Payment, context.organization_id, "PMT")
     payment = Payment(
         organization_id=context.organization_id,
@@ -115,12 +121,20 @@ async def record_cash_payment(
         payment_date=payment_date,
         recorded_by_id=context.user.id,
         notes=notes,
+        requires_approval=needs_approval,
         mpesa_receipt=reference if method == PaymentMethod.MPESA and reference else None,
+        # Bank and cheque references are not globally unique like an M-Pesa
+        # code, so they get their own column rather than sharing `mpesa_receipt`
+        # (US-101).
+        bank_reference=(
+            reference if method in (PaymentMethod.BANK_TRANSFER, PaymentMethod.CHEQUE) and reference else None
+        ),
     )
     db.add(payment)
     await db.flush()
 
-    await _confirm(db, payment, confirmed_at=datetime.now(UTC))
+    if not needs_approval:
+        await _confirm(db, payment, confirmed_at=datetime.now(UTC))
 
     audit_service.record(
         db,
@@ -129,13 +143,22 @@ async def record_cash_payment(
         entity_type="payment",
         entity_id=payment.id,
         actor=context.user,
-        summary=f"Recorded KES {format_kes(amount)} ({method.value}) for {tenancy.reference_code}",
-        changes={"over_cash_limit": over_limit, "cash_limit": str(limit) if limit else None},
+        summary=(
+            f"Recorded KES {format_kes(amount)} ({method.value}) for {tenancy.reference_code}"
+            + (" — held for approval" if needs_approval else "")
+        ),
+        changes={
+            "over_cash_limit": over_limit,
+            "cash_limit": str(limit) if limit else None,
+            "requires_approval": needs_approval,
+        },
         request=request,
     )
 
     if over_limit:
         await _alert_owners_over_limit(db, context, payment, tenancy, limit or ZERO)
+    if needs_approval:
+        await _request_approval(db, context, payment, tenancy)
 
     try:
         await db.commit()
@@ -148,6 +171,200 @@ async def record_cash_payment(
 
     await db.refresh(payment)
     return payment
+
+
+# ------------------------------------------------------------ dual approval
+
+
+async def _needs_dual_approval(
+    db: AsyncSession, context: OrgContext, amount: Decimal, method: PaymentMethod
+) -> bool:
+    """Whether this payment must be signed off by a second person.
+
+    Cash only. An M-Pesa payment already carries Safaricom's own confirmation
+    and a bank transfer shows up on a statement, so neither depends on one
+    person's word — cash is the only channel where the person who takes the
+    money is the only evidence it was taken.
+
+    Off by default (`cash_dual_approval_threshold` is null), and skipped
+    entirely when nobody else in the organisation could approve it. A solo
+    landlord who sets a threshold and then finds their own payments stuck in a
+    queue only they can clear has been given a worse product, not a safer one.
+    """
+    threshold = context.organization.cash_dual_approval_threshold
+    if method != PaymentMethod.CASH or threshold is None or amount <= Decimal(threshold):
+        return False
+
+    approver_roles = [role for role in UserRole if role_has(role, Permission.PAYMENT_APPROVE)]
+    other_approver = await db.scalar(
+        select(User.id).where(
+            User.organization_id == context.organization_id,
+            User.id != context.user.id,
+            User.role.in_(approver_roles),
+            User.is_active.is_(True),
+            User.deleted_at.is_(None),
+        )
+    )
+    return other_approver is not None
+
+
+async def _request_approval(
+    db: AsyncSession, context: OrgContext, payment: Payment, tenancy: Tenancy
+) -> None:
+    tenant = await db.get(Tenant, tenancy.tenant_id)
+    approvers = await db.scalars(
+        select(User).where(
+            User.organization_id == context.organization_id,
+            User.id != context.user.id,
+            User.role.in_([role for role in UserRole if role_has(role, Permission.PAYMENT_APPROVE)]),
+            User.is_active.is_(True),
+            User.deleted_at.is_(None),
+        )
+    )
+    for approver in approvers:
+        await notification_service.send(
+            db,
+            recipient=notification_service.Recipient.for_user(approver),
+            notification_type=NotificationType.PAYMENT_APPROVAL,
+            title="Cash payment needs your approval",
+            body=(
+                f"{context.user.full_name} recorded KES {format_kes(payment.amount)} in cash for "
+                f"{tenant.full_name if tenant else tenancy.reference_code}. It is held pending your "
+                f"approval. Reference {payment.reference_code}."
+            ),
+            channels=[NotificationChannel.IN_APP, NotificationChannel.PUSH, NotificationChannel.WHATSAPP],
+            entity_type="payment",
+            entity_id=payment.id,
+        )
+
+
+async def list_pending_approval(db: AsyncSession, context: OrgContext) -> list[Payment]:
+    """Cash held for a second signature, oldest first."""
+    query = (
+        select(Payment)
+        # The list serialiser reads `payment.receipt`; a lazy load on an async
+        # session raises `MissingGreenlet` rather than quietly fetching.
+        .options(selectinload(Payment.receipt)).where(
+            Payment.organization_id == context.organization_id,
+            Payment.requires_approval.is_(True),
+            Payment.status == PaymentStatus.PENDING,
+        )
+    )
+    allowed = await accessible_property_ids(db, context)
+    if allowed is not None:
+        query = query.where(
+            Payment.tenancy_id.in_(
+                select(Tenancy.id).join(Unit, Unit.id == Tenancy.unit_id).where(Unit.property_id.in_(allowed))
+            )
+        )
+    rows = await db.scalars(query.order_by(Payment.created_at))
+    return list(rows)
+
+
+async def approve_payment(
+    db: AsyncSession,
+    context: OrgContext,
+    payment_id: uuid.UUID,
+    *,
+    note: str | None = None,
+    request: Request | None = None,
+) -> Payment:
+    """Sign off held cash, which is what actually banks it.
+
+    Only now does the payment allocate against invoices, generate a receipt and
+    reach the tenant — everything `_confirm` does for an ordinary payment. Up
+    to this point the money was recorded but not counted, which is the whole
+    point of holding it.
+    """
+    payment = assert_in_org(await db.get(Payment, payment_id), context, label="payment")
+    _assert_approvable(payment, context)
+
+    payment.requires_approval = False
+    payment.approved_by_id = context.user.id
+    payment.approved_at = datetime.now(UTC)
+    payment.approval_note = note
+
+    await _confirm(db, payment, confirmed_at=datetime.now(UTC))
+
+    audit_service.record(
+        db,
+        organization_id=context.organization_id,
+        action="payment.approved",
+        entity_type="payment",
+        entity_id=payment.id,
+        actor=context.user,
+        summary=f"Approved cash payment {payment.reference_code} of KES {format_kes(payment.amount)}",
+        changes={"note": note},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(payment)
+    return payment
+
+
+async def reject_payment(
+    db: AsyncSession,
+    context: OrgContext,
+    payment_id: uuid.UUID,
+    *,
+    reason: str,
+    request: Request | None = None,
+) -> Payment:
+    """Refuse held cash. Nothing is allocated and the tenant is never told it
+    was received — because as far as the books are concerned, it was not."""
+    payment = assert_in_org(await db.get(Payment, payment_id), context, label="payment")
+    _assert_approvable(payment, context)
+
+    payment.requires_approval = False
+    payment.status = PaymentStatus.CANCELLED
+    payment.failure_reason = reason[:512]
+    payment.approved_by_id = context.user.id
+    payment.approved_at = datetime.now(UTC)
+    payment.approval_note = reason
+
+    recorder = await db.get(User, payment.recorded_by_id) if payment.recorded_by_id else None
+    if recorder is not None:
+        await notification_service.send(
+            db,
+            recipient=notification_service.Recipient.for_user(recorder),
+            notification_type=NotificationType.PAYMENT_APPROVAL,
+            title="Cash payment rejected",
+            body=(
+                f"{context.user.full_name} rejected the KES {format_kes(payment.amount)} cash "
+                f"payment you recorded ({payment.reference_code}). Reason: {reason}"
+            ),
+            channels=[NotificationChannel.IN_APP, NotificationChannel.PUSH],
+            entity_type="payment",
+            entity_id=payment.id,
+        )
+
+    audit_service.record(
+        db,
+        organization_id=context.organization_id,
+        action="payment.rejected",
+        entity_type="payment",
+        entity_id=payment.id,
+        actor=context.user,
+        summary=f"Rejected cash payment {payment.reference_code}: {reason}",
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(payment)
+    return payment
+
+
+def _assert_approvable(payment: Payment, context: OrgContext) -> None:
+    """The dual in dual approval — a different person, on a payment still held."""
+    if not payment.requires_approval or payment.status != PaymentStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This payment is not waiting for approval",
+        )
+    if payment.recorded_by_id == context.user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You cannot approve a payment you recorded yourself",
+        )
 
 
 async def _alert_owners_over_limit(
@@ -198,6 +415,16 @@ async def _confirm(db: AsyncSession, payment: Payment, confirmed_at: datetime) -
 
     await receipt_service.deliver(db, receipt, payment)
     await _notify_payment_confirmed(db, payment, balance)
+
+    try:
+        from app.services import fraud_detection_service
+
+        tenancy_for_fraud = await db.get(Tenancy, payment.tenancy_id)
+        if tenancy_for_fraud is not None:
+            await fraud_detection_service.evaluate_payment(db, payment, tenancy_for_fraud)
+    except Exception:  # noqa: BLE001 — a detector bug must never block a payment
+        logger.exception("Fraud detection failed for payment %s", payment.id)
+
     await webhook_service.dispatch(
         db,
         payment.organization_id,
@@ -291,6 +518,15 @@ async def _notify_payment_confirmed(db: AsyncSession, payment: Payment, balance:
         entity_type="payment",
         entity_id=payment.id,
         organization_id=payment.organization_id,
+        # For an organisation that has rewritten this message (Module 21).
+        variables={
+            "tenant_name": tenant.full_name,
+            "amount": format_kes(payment.amount),
+            "reference_code": payment.reference_code,
+            "balance": format_kes(balance),
+            "property_name": property_record.name if property_record else "",
+            "unit_number": unit.unit_number if unit else "",
+        },
     )
 
 

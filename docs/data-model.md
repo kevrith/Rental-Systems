@@ -1,10 +1,16 @@
 # RentFlow Kenya — Data Model
 
-> Schema through Phase 3 (Sprints 1–18). Current Alembic head: `a3b4c5d6e7f8`.
+> Schema through Phase 3 (Sprints 1–18), plus Sprint 26A. Current Alembic head:
+> `a4b5c6d7e8f9`.
 >
 > Phases 1 and 2 are described in full below. The Phase 3 tables are summarised
 > in their own section; each model file carries the reasoning that would
 > otherwise be repeated here.
+>
+> **Known gap:** the tables added by Sprints 19–25 (API keys and webhooks,
+> customer success, reporting, AI and fraud, partner integrations, privacy and
+> WebAuthn) are in the migration list at the bottom but not yet described here.
+> That drift predates Sprint 26A and is called out rather than papered over.
 
 ## Multi-tenant isolation strategy
 
@@ -174,6 +180,26 @@ they are registered in is `PHASE_3_ORG_SCOPED_TABLES` in
 | `rental_assets` | Vehicles and equipment, one table, `kind` discriminator. | A car and a generator are the same business. Vehicle compliance lives here, checked per hire rather than annually. |
 | `rental_agreements` | One hire, with condition snapshots at both ends. | Mileage, fuel and photos out and back turn "you scratched it" into a comparison. |
 
+### Sprint 26A — masterplan gap closure
+
+Three of these carry `organization_id` and are registered in
+`PHASE_9_ORG_SCOPED_TABLES`. Two deliberately do not, and the reason is the
+same in both cases: they are not read on a tenant's behalf.
+
+| Table | Purpose | Why it is shaped this way |
+|---|---|---|
+| `management_agreements` | The owner-agency contract, with its terms frozen as signed. | `owner_profiles` holds the *operative* terms the disbursement run charges; this holds what was *agreed*. When the two disagree, both being visible is the difference between an argument and an audit. Both signatures are ordinary `digital_signatures` rows, so dual signing reuses the OTP pipeline rather than growing a second one. |
+| `communication_templates` | An organisation's own wording for one notification type on one channel. | Absent a row, the service's hardcoded copy still sends — which is what makes this additive. A channel-specific row beats the `ANY` catch-all, so a terse SMS and a fuller email can coexist for one event. |
+| `demo_datasets` | The receipt for one sample-data seeding run. | Records the exact ids created, in order, so teardown walks it in reverse. Nothing is matched by name or heuristic, so removing the sample can never take a customer's own row with it. |
+| `security_breaches` | The Kenya DPA s.43 register and its 72-hour clock. | **Platform-level, like `task_runs`.** One incident routinely spans several customers and the party who must notify the Data Commissioner is RentFlow, not the landlord. Affected customers are a JSONB list on the row, and each is told separately because they are the controller for their own tenants' data. |
+| `organization_encryption_keys` | Per-organisation data encryption keys, themselves wrapped. | **Not org-scoped for RLS**, because it is touched only by the server's own crypto path and never by a request-scoped query on a tenant's behalf. Old key versions are retained rather than deleted, so rotation does not require a coordinated re-encryption pass. |
+
+Column-level additions in the same migration: OCR evidence on `meter_readings`
+(`ocr_reading`, `ocr_confidence`, `ocr_accepted` — `None` on the last one means
+no suggestion was offered, which is not the same as one being rejected); dual
+approval on `payments`; suspension, cash threshold, session cap and demo flag on
+`organizations`; and video fields on `help_articles`.
+
 ---
 
 ## Reference codes
@@ -181,6 +207,10 @@ they are registered in is `PHASE_3_ORG_SCOPED_TABLES` in
 Random rather than sequential, so a competitor cannot infer portfolio size from a
 code. The alphabet excludes `I`, `O`, `0` and `1` because codes get read aloud
 and written down.
+
+`BR-` is the one exception and is deliberately sequential within the year: an
+incident number is quoted in correspondence with a regulator, and there is no
+portfolio size to leak from RentFlow's own breach count.
 
 | Prefix | Entity | Example |
 |---|---|---|
@@ -192,6 +222,8 @@ and written down.
 | `PMT-` | Payment | `PMT-M2SBRS` |
 | `RCT-` | Receipt | `RCT-KMZ975` |
 | `MNT-` | Maintenance | `MNT-QB4T7D` |
+| `MGT-` | Management agreement | `MGT-9PXR4C` |
+| `BR-` | Security breach | `BR-2026-0007` |
 
 ---
 
@@ -209,6 +241,8 @@ and written down.
 | `e1f2a3b4c5d6` | Sprint 16: vacancy listings, lead pipeline, data exports |
 | `f2a3b4c5d6e7` | Sprint 17: compliance calendar, parking, amenities, utility accounts |
 | `a3b4c5d6e7f8` | Sprint 18: rental assets and hire agreements |
+| `c1d2e3f4a5b6` → `9b1c2d3e4f5a` | Sprints 19–25: API keys and webhooks, customer success, reporting, AI/fraud/security hardening, partner integrations, privacy and WebAuthn |
+| `a4b5c6d7e8f9` | Sprint 26A: management agreements, communication templates, demo datasets, the breach register, per-organisation encryption keys, meter OCR, dual cash approval |
 
 ```bash
 cd backend

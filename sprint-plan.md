@@ -1818,6 +1818,54 @@ queries-per-request budget, which is what catches an N+1 before a stopwatch does
 
 ---
 
+### 📍 Phase 4 status — build complete
+
+All six sprints are built. Sprint checkboxes are ticked per task, with the
+account/hosting/legal-review items each sprint left for Kelvin called out
+inline rather than checked off.
+
+| Sprint | Scope | State |
+|---|---|---|
+| 19 | Public API, API keys, webhooks, developer docs | ✅ Done |
+| 20 | Onboarding wizard, help/knowledge base, health scoring, referrals | ✅ Done |
+| 21 | Scheduled + custom reports, predictive intelligence | ✅ Done |
+| 22 | AI lease analysis, fraud detection, security hardening | ✅ Done |
+| 23 | Property portal sync, accounting integrations, bank transfer | ✅ Done |
+| 24 | Golden-path test, OWASP checklist, Lighthouse, legal pages, expansion doc | ✅ Done |
+
+**Verification:** 488 backend tests passing · ruff and mypy clean across 176
+source files · frontend typecheck, oxlint and production build clean. The
+Phase 1 golden path — register, a property with 6 bulk-created units, a
+tenant, a tenancy with its lease generated on creation, an invoice, an
+M-Pesa payment confirmed by a simulated Daraja callback, a receipt, both
+dashboards reflecting all of it — is now a committed, passing test
+(`tests/test_critical_journeys.py`), not just something verified by hand
+against a live server once in Sprint 6.
+
+**Still open — all need Kelvin's own accounts, hosting, or professional
+sign-off, not more code:**
+
+- GitHub branch protection on `main`/`develop`, and switching on Dependabot
+  (config already committed, Sprint 22)
+- DigitalOcean droplet, Nginx + Let's Encrypt, staging/production environments
+- Sentry project + DSN, uptime monitoring, Grafana
+- Cloudflare R2 bucket, WhatsApp Business API production approval, Safaricom
+  Daraja production credentials, KRA eTIMS production credentials
+- The k6 load test (`infra/loadtest/k6-load-test.js`) run for real against a
+  production-sized staging environment
+- A qualified Kenyan lawyer's review of the drafted legal pages
+  (`/legal/privacy`, `/legal/terms`, `/legal/cookies`)
+- Real Uganda/Tanzania market-pricing research (`docs/expansion-readiness.md`
+  lays out the framework; the conversations with landlords in each market
+  still need to happen)
+
+Every third-party integration still degrades gracefully with no credentials
+configured — this phase added AI lease analysis, accounting-software OAuth,
+and property-portal sync to that list, and none of them behave differently
+in that respect from Phase 1's M-Pesa simulation.
+
+---
+
 ## Sprint 19 — Open API, Webhooks & Developer Portal
 **Weeks 37–38 | Story Points Target: 55**
 
@@ -2036,22 +2084,72 @@ Acceptance Criteria:
 - All forecasts shown with confidence indicator and assumptions used
 
 ### 🔧 Technical Tasks
-- [ ] Build scheduled report generation Celery task
-- [ ] Build report PDF template (comprehensive monthly summary)
-- [ ] Build report delivery service (WhatsApp + email)
-- [ ] Build report history storage and retrieval
-- [ ] Build custom report builder UI (drag-and-drop)
-- [ ] Build report filter and configuration engine
-- [ ] Build cash flow forecasting model
-- [ ] Build vacancy risk detection service
-- [ ] Build maintenance budget anomaly detection
-- [ ] Build rent review recommendation service
-- [ ] Build predictive dashboard widgets
+- [x] Build scheduled report generation Celery task
+- [x] Build report PDF template (comprehensive monthly summary)
+- [x] Build report delivery service (WhatsApp + email)
+- [x] Build report history storage and retrieval
+- [x] Build custom report builder UI (drag-and-drop)
+- [x] Build report filter and configuration engine
+- [x] Build cash flow forecasting model — already shipped in Sprint 11; reused as-is
+- [x] Build vacancy risk detection service
+- [x] Build maintenance budget anomaly detection — already shipped in Sprint 11; reused as-is
+- [x] Build rent review recommendation service
+- [x] Build predictive dashboard widgets
+
+**Sprint 21 built:** Sprint 11's `analytics_service.py` already covered cash-flow
+forecasting and a maintenance-spend spike alert, so this sprint's predictive work
+was narrower than the plan implied: `vacancy_risk_forecast` (tenancies expiring
+within 90 days *and* carrying no live renewal offer — built on Sprint 12's
+`LeaseRenewal`/`RenewalStatus`, not just a lease-expiry count) and
+`rent_review_suggestions` (12+ months since the last rent change, compared
+against the average rent this organisation itself charges on same-bedroom-count
+units — an explicit estimate from the owner's own portfolio, never presented as
+external market data). Both ship as two new Analytics page cards alongside the
+existing forecast/maintenance widgets.
+
+The custom report builder (`report_definitions`, US-094) reuses
+`export_service`'s six row-shaping functions rather than a second query layer:
+`reporting_service.execute` calls the same `BUILDERS` dict, applies equality
+filters in Python, and projects down to the chosen columns. The builder UI
+(`/reports/new`, `/reports/:id/edit`) is a dataset picker, a reorderable column
+list (native HTML5 drag-and-drop — no new dependency), value-checkbox filters,
+an optional bar/line/pie chart over a group-by/measure pair, and CSV/Excel/PDF
+export. Saved reports can be scheduled weekly or monthly and delivered by
+WhatsApp, email or in-app notification, run by the same daily Celery task that
+also under-pins the automatic monthly summary (`monthly_reports`, US-093) —
+one PDF per organisation per calendar month, built from
+`dashboard_service`'s period-bound aggregates and `arrears_service`'s current
+snapshot, delivered per the organisation's own delivery-channel preference
+(Settings → Defaults → Monthly report delivery) the same way
+`owner_statement_service` already delivers agency statements.
+
+**A real, pre-existing bug found while wiring the payments dataset into the
+builder:** `export_service._payment_rows` read `payment.mpesa_receipt_number`,
+a column that has never existed — the model field is `mpesa_receipt`. Every
+payments CSV/Excel export (Sprint 16, US-077) has thrown `AttributeError` on
+any account with at least one real payment row since it shipped; the existing
+export test only ever ran against an empty payments list, so nothing caught
+it. Fixed alongside this sprint's own payments-dataset tests, which seed a
+real payment specifically so this class of bug can't hide again.
+
+**Deliberate limits:** WeasyPrint has no chart engine, so a PDF export of a
+bar/line/pie report renders as a table — CSV/Excel carry the same rows for
+anyone who wants to chart it themselves. The builder's checkbox filters only
+cover string/enum/boolean columns with 30 or fewer distinct values; a numeric
+or date range filter on an arbitrary column is not built (the two date-range
+fields are wired to each dataset's natural date column instead). Chart
+grouping caps at three slices — the top two plus an "Other" bucket — reusing
+the app's existing three-hue validated categorical palette rather than
+generating new colours for arbitrary cardinality.
 
 ### 📦 Sprint 21 Deliverables
-- ✅ Monthly reports automatically delivered via WhatsApp
-- ✅ Custom report builder for enterprise customers
-- ✅ Predictive intelligence: cash flow forecast, vacancy risk, maintenance alerts
+- ✅ Monthly reports automatically delivered via WhatsApp and/or email, with a
+  12-month browsable history
+- ✅ Custom report builder: any of six datasets, filtered, column-picked,
+  optionally charted, exported to CSV/Excel/PDF, and optionally scheduled
+- ✅ Predictive intelligence: cash flow forecast and maintenance alerts (Sprint
+  11) plus new renewal-aware vacancy risk and portfolio-relative rent review
+  suggestions
 
 ---
 
@@ -2094,21 +2192,83 @@ Acceptance Criteria:
 - Automated dependency vulnerability scanning in CI/CD (Dependabot / Snyk)
 
 ### 🔧 Technical Tasks
-- [ ] Integrate Anthropic API for document analysis
-- [ ] Build lease analysis prompt engineering and response parsing
-- [ ] Build AI suggestion UI (show/accept/dismiss)
-- [ ] Build fraud detection rule engine (configurable thresholds)
-- [ ] Build anomaly detection Celery task (runs on all payment events)
-- [ ] Build security alert notification service
-- [ ] Build IP whitelisting service and UI
-- [ ] Build security audit log export
-- [ ] Integrate Snyk or Dependabot for vulnerability scanning
-- [ ] Write fraud detection scenario tests
+- [x] Integrate Anthropic API for document analysis
+- [x] Build lease analysis prompt engineering and response parsing
+- [x] Build AI suggestion UI (show/accept/dismiss)
+- [x] Build fraud detection rule engine (configurable thresholds)
+- [x] Build anomaly detection on every payment event (inline, not a Celery task — see note)
+- [x] Build security alert notification service
+- [x] Build IP whitelisting service and UI
+- [x] Build security audit log export
+- [x] Add Dependabot for dependency vulnerability scanning (config only — needs
+      enabling on the GitHub repo, same as branch protection in Sprint 0)
+- [x] Write fraud detection scenario tests
+
+**Sprint 22 built:** AI lease analysis (US-096) calls Claude (`claude-opus-5`,
+structured JSON output, adaptive thinking) with the template body and the
+sprint's own standard-clause list as reference, and returns missing-clause,
+problematic-term and unclear-language findings — each its own `LeaseSuggestion`
+row under a `LeaseAnalysis`. Accepting one appends the AI's plain-text wording
+(HTML-escaped) to `LeaseTemplate.body_html` and bumps its version through the
+same path a manual edit takes; dismissing changes nothing. The AI never writes
+to a template directly — every acceptance is a human clicking Accept, per the
+acceptance criteria. With no `ANTHROPIC_API_KEY` configured the endpoint
+returns a clear 503 rather than a stack trace, the same degrade-gracefully
+treatment every other third-party integration gets.
+
+Fraud detection (US-097) runs inline from `payment_service._confirm` — the one
+function every confirmed payment (cash or M-Pesa) already funnels through —
+rather than as a separate Celery sweep. That is a deliberate deviation from
+the technical task as written: a nightly batch would report a rapid-cash
+pattern after the shift that produced it is over, and every other
+per-payment side effect in this codebase (milestones, NPS prompts) already
+runs the same way. Four rules, each keyed by a stable `pattern_key` so the
+same subject doesn't re-alert every few minutes and so an owner's "not fraud"
+decision (`FraudSuppression`) silences it for good: rapid cash payments by one
+caretaker, off-hours activity (00:00–05:00 Nairobi time), an amount outside
+`rent × threshold` in either direction, and the same amount paid twice on one
+tenancy within ten minutes. Thresholds live on `Organization` and are
+editable from Settings → Organization → Fraud detection thresholds.
+
+Security hardening (US-098): an IP whitelist (exact IPs or CIDR ranges) is
+enforced at login for every account, not gated to an enterprise plan — the
+plan doesn't have a real billing engine yet to gate on (see Sprint 20's
+referral-credit note), so any owner can opt in. Per-role session timeout is
+an organisation-wide policy (`Organization.role_session_timeouts`) that
+overwrites `inactivity_timeout_minutes` on every existing user of that role
+the moment it's saved, rather than a preference a user could quietly keep
+lapsed. The security audit log export (CSV/PDF) reuses `export_service.to_csv`
+and the reporting PDF template. Failed logins are now durable
+(`SecurityEvent`, distinct from `AuditLog`, which only ever recorded
+privileged successes) and summarised to owners daily; API keys past 90 days
+get the same treatment. `AiServiceError`, `FraudAlert` and `SecurityEvent`
+are additive — nothing about existing auth, payment or lease-template
+behaviour changed for an organisation that never touches any of this.
+
+**Deliberate limits:** off-hours detection has no dedicated test — it depends
+on wall-clock time at the moment a payment confirms, which the test suite
+does not freeze. IP whitelisting and the security digest were not built as
+plan-gated enterprise features, since RentFlow has no subscription enforcement
+to gate on yet. Dependabot's config file is committed; the scan itself only
+runs once Dependabot is switched on in the GitHub repo's own settings,
+which needs a real repo and Kelvin's account, like branch protection.
+
+24 backend tests across `tests/test_ai_lease_analysis.py` and
+`tests/test_advanced_security.py` (470 total passing across the whole suite,
+up from Phase 2's 260), plus `tests/test_phase4.py` extended to cover every
+table Sprints 20–22 added and their scheduled tasks — a gap from Sprint 21,
+whose own reporting tables (`report_definitions`, `monthly_reports`) had
+never been added to that cross-cutting check either, closed alongside this
+sprint's own tables.
 
 ### 📦 Sprint 22 Deliverables
-- ✅ AI lease analysis with improvement suggestions
-- ✅ Automated fraud pattern detection with owner alerts
-- ✅ Enterprise security hardening (IP whitelisting, audit exports)
+- ✅ AI lease analysis with improvement suggestions, accept/dismiss per
+  finding, nothing changes without an explicit accept
+- ✅ Automated fraud pattern detection (rapid cash, off-hours, unusual amount,
+  velocity) with owner WhatsApp alerts and per-organisation suppression
+- ✅ Enterprise security hardening: IP whitelisting, per-role session policy,
+  audit log export, failed-login digest, API key rotation reminders,
+  Dependabot configured
 
 ---
 
@@ -2149,20 +2309,97 @@ Acceptance Criteria:
 - Bank statement upload feature: owner uploads monthly statement, system highlights matched and unmatched entries
 
 ### 🔧 Technical Tasks
-- [ ] Research and integrate BuyRentKenya API
-- [ ] Research and integrate PigiaMe API
-- [ ] Build portal sync service (vacancy publish/deactivate)
-- [ ] Build QuickBooks OAuth connection and data sync
-- [ ] Build Xero OAuth connection and data sync
-- [ ] Build accounting sync Celery task
-- [ ] Build sync history and error log UI
-- [ ] Build bank transfer instructions display
-- [ ] Build bank statement upload and matching service
+- [x] Research and integrate BuyRentKenya API — no self-serve developer API is
+      published today; see the sprint note below for what was built instead
+- [x] Research and integrate PigiaMe API — same limit as BuyRentKenya
+- [x] Build portal sync service (vacancy publish/deactivate)
+- [x] Build QuickBooks OAuth connection and data sync
+- [x] Build Xero OAuth connection and data sync
+- [x] Build accounting sync Celery task
+- [x] Build sync history and error log UI
+- [x] Build bank transfer instructions display
+- [x] Build bank statement upload and matching service
+
+**Sprint 23 built:** Property portal sync (US-099) follows `etims_service`'s
+shape exactly — an organisation's own API key, encrypted at rest
+(`PortalConnection`), and a durable per-listing sync row (`PortalListingSync`)
+rather than a fire-and-forget call. It hooks into the existing, opt-in
+`VacancyListing` lifecycle from Sprint 15: `ensure_listing`/`update_listing`
+publishing a listing now calls `portal_integration_service.publish_listing`,
+and `close_listing_for_unit` (already called when a tenancy starts) now calls
+`deactivate_listing`. Neither BuyRentKenya nor PigiaMe publishes a self-serve
+developer API today, so the adapter posts to a configurable base URL using
+the smallest REST contract a listings API is ever likely to expose
+(`settings.BUYRENTKENYA_API_BASE_URL` / `PIGIAME_API_BASE_URL`); a real
+partnership only changes the payload shape in `_call_portal`, not the
+credential storage, retry accounting or lead capture around it. Inbound
+leads are captured through a public, unguessable-URL webhook
+(`/portal-webhooks/{connection_id}/inquiries`) that resolves the listing by
+`external_listing_id` and joins the same `Inquiry` pipeline Sprint 15 built,
+tagged with a new `Inquiry.source` column so a portal-sourced lead is
+distinguishable from one that came through the public listing page.
+
+Accounting sync (US-100) is the one of the three that runs against real,
+stable, publicly documented endpoints today — standard OAuth2
+authorization-code grants against Intuit's and Xero's own token and API
+hosts. What's missing is Kelvin's own developer app registration:
+`QUICKBOOKS_CLIENT_ID`/`XERO_CLIENT_ID` are blank locally, and `connect()`
+returns a clear 503 rather than starting a broken OAuth round-trip, the same
+degrade-gracefully treatment `ai_service` gives a missing
+`ANTHROPIC_API_KEY`. The OAuth callback
+(`/oauth/accounting/{provider}/callback`) carries no session — only a
+short-lived, signed `state` token identifies which organisation is
+connecting — and QuickBooks' `realmId` arrives on that same redirect while
+Xero's `tenantId` needs a follow-up call to `/connections`. A daily Celery
+task (`rentflow.sync_accounting_connections`) pushes every unsynced confirmed
+payment, completed maintenance job cost and completed disbursement outward,
+each recorded once in `AccountingSyncRecord` keyed by
+(connection, entity type, entity id) so a re-run never double-posts and a
+failure sits there for the settings page to show and retry.
+
+Bank transfer (US-101) turned out to be mostly a bug fix: `PaymentMethod.
+BANK_TRANSFER` and the `reference` field already existed end-to-end in the
+frontend's record-payment form, but `payment_service.record_cash_payment`
+only ever stored `reference` into `mpesa_receipt`, and only for
+`PaymentMethod.MPESA` — a bank or cheque reference was silently dropped the
+moment it was typed in, despite the request schema's own docstring promising
+otherwise. Fixed by giving `Payment` its own `bank_reference` column, not
+reusing `mpesa_receipt` (whose uniqueness is global and M-Pesa-specific;
+bank reference formats can collide across organisations). What Sprint 23
+actually added: `Organization.bank_*` fields surfaced as instructions in both
+the operator settings page and the tenant portal's "Pay by bank transfer"
+dialog, and a statement reconciliation flow
+(`bank_transfer_service.parse_statement`/`match_rows`/`commit_statement`)
+that follows the same preview-then-commit shape the Sprint 15 tenant bulk
+import already established: a CSV/Excel upload is parsed and matched by
+scanning each line's bank-supplied narrative for a `TCY-XXXXXX` tenancy
+reference — nothing is written until the operator reviews and confirms each
+row, and only credit lines are considered.
+
+51 backend tests across `tests/test_partner_integrations.py`, extending
+`test_phase4.py` and `test_migrations.py`'s enum/RLS checks to cover all six
+new tables and the new scheduled task.
+
+**Deliberate limits:** BuyRentKenya/PigiaMe's endpoint paths and payload
+shape are a reasonable placeholder pending a real partnership — nothing
+about the credential storage or retry accounting depends on getting that
+shape right today. Portal sync status is visible from Settings → Property
+portals per connection, but not yet as a per-listing badge on the vacancy
+desk table. The bank statement reference match is a straight substring scan
+for a `TCY-` code in the narrative — a bank that truncates or reformats the
+reference will show the line as unmatched rather than partially matched.
 
 ### 📦 Sprint 23 Deliverables
-- ✅ Vacant units auto-published to property portals
-- ✅ QuickBooks and Xero financial data sync
-- ✅ Bank transfer payment method with manual reconciliation
+- ✅ Vacant units auto-published to connected property portals, deactivated
+  the moment a tenancy starts, with inbound portal leads joining the same
+  lead pipeline as direct enquiries
+- ✅ QuickBooks and Xero OAuth connection and daily financial data sync
+  (payments, maintenance costs, disbursements), with a sync history and
+  retry surface in Settings
+- ✅ Bank transfer payment method with a tenant-facing instructions dialog
+  and a statement upload → match → confirm reconciliation flow — plus a
+  fix for a pre-existing bug that silently discarded the bank/cheque
+  reference on every such payment ever recorded
 
 ---
 
@@ -2212,16 +2449,58 @@ Acceptance Criteria:
 - GDPR/Kenya Data Protection Act compliance checklist completed
 
 ### 🔧 Technical Tasks
-- [ ] Execute full end-to-end automated test suite
-- [ ] Load test with k6 (500 concurrent users)
-- [ ] OWASP security checklist execution
-- [ ] Lighthouse audit and optimization
-- [ ] Production infrastructure final configuration
-- [ ] Disaster recovery test (restore from backup)
-- [ ] WhatsApp Business API production approval process
-- [ ] All third-party production credentials obtained and tested
-- [ ] Legal pages (privacy policy, terms) written and published
-- [ ] Expansion readiness research and document
+- [x] Execute full end-to-end automated test suite (`tests/test_critical_journeys.py` — the
+      Phase 1 golden path, chained through the real API for the first time — plus the full
+      existing suite re-verified green)
+- [ ] Load test with k6 (500 concurrent users) — script written and ready
+      (`infra/loadtest/k6-load-test.js`), not run for real: no staging environment sized like
+      production exists yet to point it at (same gap as Sprint 19's sandbox environment)
+- [x] OWASP security checklist execution (`docs/owasp-top-10-checklist.md` — two real fixes
+      made, three gaps documented rather than silently left implicit)
+- [x] Lighthouse audit and optimization (`docs/lighthouse-report.md` — 95-100 on every
+      category except a deliberately non-indexed login page's SEO score; three real
+      accessibility/SEO bugs found and fixed)
+- [ ] Production infrastructure final configuration — needs the DigitalOcean droplet from
+      Sprint 0
+- [x] Disaster recovery test (restore from backup) — re-ran the actual drill against the dev
+      database after all of Sprints 13–23's schema changes; still passes (`infra/backup/README.md`)
+- [ ] WhatsApp Business API production approval process — needs Kelvin's own business account
+- [ ] All third-party production credentials obtained and tested — Daraja, eTIMS, R2, Sentry:
+      all need Kelvin's own accounts, same as every earlier phase
+- [x] Legal pages (privacy policy, terms) written and published — cookie policy added too
+      (`/legal/privacy`, `/legal/terms`, `/legal/cookies`); published to the running app, not
+      to a live domain (Sprint 0 hosting gap) or past a qualified lawyer yet — both flagged
+      on the pages themselves
+- [x] Expansion readiness research and document (`docs/expansion-readiness.md` — a technical
+      and legal audit grounded in this codebase; pricing itself needs real people in-market,
+      which no document can substitute for)
+
+**Sprint 24 built:** Before adding anything new, the tree's substantial *uncommitted* Sprint
+21–23 work (advanced reporting, AI/fraud/security hardening, partner integrations) was
+verified rather than assumed: full gates green, 487 backend tests passing. Two real,
+independently-found issues were fixed as part of the OWASP pass rather than left for later —
+`Settings.DEBUG` defaulted to `True` (a production deployment that forgot to set it explicitly
+would leak stack traces) and there were no security response headers at all
+(`SecurityHeadersMiddleware`, `app/main.py`) — plus two dependency bumps (`python-jose`,
+`jinja2`) after `pip-audit` surfaced 28 advisories across 8 packages, re-verified against the
+auth/signing/PDF test suites before being folded in. The Lighthouse pass caught and fixed a
+missing `<main>` landmark on every unauthenticated screen, a pre-existing insufficient-contrast
+caption on the login page (`text-slate-400` at 12px, below WCAG's 4.5:1 minimum — the new
+legal-page footer links were about to repeat the same mistake, caught before they shipped), and
+added a `robots.txt` that didn't exist before (scoped to keep the authenticated app out of
+search indexing while allowing the new legal pages and existing public listing pages to be
+crawled). `test_critical_journeys.py` chains Phase 1's own "golden path" — register, a property
+with 6 bulk-created units, a tenant, a tenancy with its lease generated on creation, an invoice,
+an M-Pesa STK push confirmed by a simulated Daraja callback, a receipt, both dashboards
+reflecting all of it — through nothing but the public API in one continuous test, reusing every
+existing test helper (`make_property`, `make_tenancy`, `daraja_callback`) rather than
+duplicating the many already-passing single-stage tests those helpers already cover.
+
+**Deliberate limits, same category as every earlier phase's leftover list:** the k6 script is
+untested against real infrastructure because none exists yet; production credentials
+(WhatsApp, Daraja, eTIMS, Sentry, R2) all need Kelvin's own accounts; the legal pages are
+Kelvin's draft, not a lawyer's, and say so on the page; expansion pricing needs real
+conversations with landlords in Uganda and Tanzania that no document can substitute for.
 
 ### 🏁 Phase 4 Complete — Full Platform Launch!
 **All deliverables across all phases:**
@@ -2239,6 +2518,741 @@ Acceptance Criteria:
 
 ---
 
+## PHASE 5 — ENTERPRISE HARDENING & MARKET EXPANSION
+### Months 13–14.5 | Sprints 25–29
+**Phase Goal:** Close every real gap found between the masterplan's promises and the Phase 1–4 build, and add the identity, billing, and financial-services features that turn "feature-complete" into "enterprise-ready"
+
+---
+
+### 📍 Phase 5 status — in progress (Sprint 25 of 5 complete)
+
+This phase was scoped on 2026-09-07 from a gap analysis: the masterplan and sprint-plan
+were re-read against the actual Phase 1–4 codebase rather than trusting the checkboxes.
+Everything below was genuinely missing at that point, not just unverified — each item
+was confirmed absent by grep before being added here.
+
+| Sprint | Scope | State |
+|---|---|---|
+| 25 | Virus scanning, DSAR export/erasure, co-tenants, WebAuthn, visitor log | ✅ Done |
+| 26A | Masterplan gap closure — 16 promised features that were in no sprint | ✅ Done |
+| 26 | SSO/SAML, custom roles, session policy, security compliance pack | ⬜ Not started |
+| 27 | Subscription billing engine, referral credit, white-label | ⬜ Not started |
+| 28 | General ledger, ML fraud scoring, two-way messaging, rent pricing | ⬜ Not started |
+| 29 | Credit bureau, card payments, bank/insurance foundations, floor plans | ⬜ Not started |
+
+**Sprint 25 verification:** 507 backend tests passing (488 carried over + 19 new in
+`tests/test_sprint25.py`) · ruff and mypy clean · frontend typecheck, oxlint and
+production build clean · the actual Alembic migration applied to a live
+`docker compose` Postgres and inspected via `psql` (not just the test suite's
+ORM-built schema) · every new endpoint hit with `curl` against the real running
+server · a full Playwright session driving real Chromium against the real dev
+server through five pages and three real mutations (log a visitor, add a
+co-tenant, promote a co-tenant to primary), screenshotted at each step. See
+Sprint 25's own "Built" and "Gap-closing pass" notes below for what shipped,
+what a second read against its own acceptance criteria found and fixed, and a
+real crash this pass caught in the live backend container.
+
+**Confirmed gaps this phase closes:**
+
+| Gap | Promised in |
+|---|---|
+| Virus scanning on uploads | Sprint 2 (US-012), flagged "Phase 2 — note for later," never revisited |
+| DSAR / right-to-erasure self-service | Kenya Data Protection Act compliance section |
+| Co-tenant / joint tenancy support | Module 3 |
+| Biometric / WebAuthn login | Security Architecture section |
+| Caretaker visitor log | Module 5 |
+| SSO/SAML | Security Architecture section, Module 25 |
+| Custom roles beyond the 8 built-in | implied by "granular permission flags per role" in Security Architecture |
+| Real subscription billing for RentFlow's own fees | Pricing Strategy section — plans exist, nothing enforces or bills them |
+| White-label capability | Module 25 + explicit Phase 4 deliverable (only a CSS comment exists today) |
+| Double-entry general ledger | implied by "Trust fund compliance" (Module 9) and the accounting sync being one-way |
+| General two-way WhatsApp messaging | Module 21 (only a narrow Y/N reference-check bot exists) |
+| Credit bureau integration (TransUnion/Metropol) | Module 4 + explicit Phase 4 deliverable |
+| Card payments (Flutterwave/Stripe) | Integrations table, marked Phase 2 |
+| Bank partner / insurance marketplace | Phase 4 deliverable + Future Expansion section |
+| Floor plan / unit mapping | Module 1 |
+
+---
+
+## Sprint 25 — Security, Privacy & Compliance Closeout
+**Weeks 49–50 | Story Points Target: 50**
+**🎯 Sprint Goal:** Close the gaps that matter most in a compliance audit or a customer's security questionnaire — nothing here is optional once RentFlow is being sold as enterprise-ready
+
+---
+
+### 📖 User Stories
+
+**US-105 — Virus Scanning on Uploads** `[8 pts]`
+*As the system, I want every uploaded file scanned for malware before it's stored so that RentFlow never becomes a distribution vector for infected documents*
+
+Acceptance Criteria:
+- Every upload (property/unit photos, KYC docs, lease PDFs, inspection photos) is scanned via ClamAV (or equivalent) before being persisted to R2/local storage
+- Infected files rejected with a clear error; the attempt is logged
+- Scanning does not add more than ~2 seconds to typical single-file upload flows (async scan + quarantine for large batch imports)
+- Existing stored files can be swept retroactively via a one-off Celery task
+
+**US-106 — Data Subject Access & Erasure Workflow** `[8 pts]`
+*As a tenant or user, I want to request a copy of my data or its deletion so that my rights under the Kenya Data Protection Act are actually usable, not just promised in a policy page*
+
+Acceptance Criteria:
+- "Request my data" and "Request deletion" actions available from the tenant portal and user profile
+- DSAR request generates a complete export (profile, tenancy history, payments, documents) delivered securely within the policy's stated window
+- Erasure request soft-deletes PII while preserving the financial/audit records the law requires landlords to keep
+- Every request and its resolution logged in the audit trail
+- Owner/agency notified when a request affects one of their tenants
+
+**US-107 — Co-Tenant / Joint Tenancy Support** `[8 pts]`
+*As a caretaker or owner, I want to link more than one tenant to a single tenancy so that couples, roommates, and business partners can share legal responsibility for one unit*
+
+Acceptance Criteria:
+- A tenancy supports multiple tenant records with one designated primary contact
+- Each co-tenant can view the shared tenancy from their own portal login
+- Lease document lists all co-tenants and requires each to digitally sign
+- Payments and arrears are tracked once per tenancy, never duplicated per co-tenant
+- Vacating/renewal workflows explicitly handle partial turnover (one co-tenant leaves, one stays)
+
+**US-108 — Biometric / WebAuthn Login** `[5 pts]`
+*As a user on a supported device, I want to log in with fingerprint or face ID so that daily login is fast without weakening security*
+
+Acceptance Criteria:
+- WebAuthn registration flow available from account settings
+- Login offers biometric as an alternative second factor to SMS OTP where a platform authenticator is available
+- Falls back cleanly to SMS OTP on unsupported devices/browsers
+- Registered authenticators listed and individually revocable from session management
+
+**US-109 — Caretaker Visitor Log** `[5 pts]`
+*As a caretaker, I want to log visitors to the property so that there's a record of who came and went, for security and dispute purposes*
+
+Acceptance Criteria:
+- Caretaker logs visitor name, phone, unit visited, purpose, and time in/out from the mobile PWA
+- Visible to the owner in the property's activity log
+- Works offline like other caretaker flows, syncs when connectivity returns
+- Searchable by date/unit for incident investigation
+
+### 🔧 Technical Tasks
+- [x] Integrate ClamAV (or a cloud AV API) into the upload pipeline for all file types
+- [x] Build quarantine + rejection flow with audit logging
+- [x] Build DSAR export service that aggregates all tenant-linked data into a downloadable package
+- [x] Build erasure workflow with legal-hold logic for financial/audit records
+- [x] Extend the Tenancy model to support multiple linked tenants with a primary flag
+- [x] Update lease template and signing flow for multi-signer documents
+- [x] Build WebAuthn registration and authentication endpoints
+- [x] Build authenticator management UI in session settings
+- [x] Build VisitorLog model, offline-queue support, and caretaker UI
+- [x] Write tests for DSAR/erasure legal-hold edge cases and co-tenant payment attribution
+
+**Built:** Virus scanning (`app/services/virus_scan_service.py`) talks to a clamd
+daemon over the standard INSTREAM protocol; with no `CLAMAV_HOST` configured it
+returns `SKIPPED` rather than blocking anything, and a configured-but-unreachable
+daemon returns `FAILED` without blocking the upload either — scanning is defence
+in depth, not a single point of failure for the upload button. `StoredFile` gets
+a `scan_status`/`scanned_at`/`scan_detail` verdict rather than a separate log
+table; an `INFECTED` result deletes the object and the row is never marked
+`UPLOADED`, so it never becomes visible or attachable anywhere. A one-off
+`rentflow.rescan_stored_files` Celery task (deliberately **not** on the beat
+schedule — it's a catch-up run, not a recurring job) re-scans anything left
+`PENDING`/`SKIPPED`/`FAILED`.
+
+The visitor log (`VisitorLog` in `app/models/operations.py`) is a plain record,
+not a state machine — check-in creates it, a separate check-out action closes
+it, property-scoped through the existing `accessible_property_ids` caretaker
+guard like every other field-operations table.
+
+Co-tenancy (`TenancyCoTenant`) is purely additive next to `Tenancy.tenant_id`:
+every invoice, payment and arrears query still keys off the one primary tenant,
+so adding a co-tenant can never duplicate a charge or split a balance. The
+portal's `_owned_tenancy_ids` now unions direct tenancies with co-tenancies, so
+a roommate added this way sees the shared tenancy and balance from their own
+login. The lease template gained a `co_tenant_names` variable (`lease_service.
+build_variables`) rendered through a `{% if %}` guard in the starter template —
+a tenancy with no co-tenants renders byte-for-byte as before. Each co-tenant is
+sent their own signing request through the existing, already-generic
+`POST /signatures` endpoint — no signature-service changes were needed for
+"multi-signer," since it never assumed exactly one signer per document.
+
+`DataRequest` (`app/models/privacy.py`) is scoped to tenants only. A staff
+account's own equivalent rights already had a working path from Sprint 1
+(`/auth/me/delete`, US-004's 30-day grace deletion) — export was the only gap,
+closed with a plain `/auth/me/data-export` endpoint that needs no tracking
+table since it's always self-served. Tenant erasure redacts name, phone
+(replaced with a unique `erased-<id>` placeholder, since phone carries a
+per-organisation uniqueness constraint), email, national ID, KYC photo
+references, employment and emergency-contact fields, and notes — then archives
+the row. `Tenancy`, `Invoice` and `Payment` rows are never touched, since Kenyan
+tax and accounting law require they be kept regardless of what the tenant who
+generated them later asks for. Both export and erasure are processed
+synchronously and immediately (no approval queue — an export can't leak
+anything the requester didn't already have a right to see, and erasure only
+ever narrows what's stored), with the owner/agency notified either way. Erasing
+an already-erased tenant is refused with a 409 rather than silently re-run.
+
+WebAuthn (`app/services/webauthn_service.py`) rides the exact same login
+challenge token `initiate_login` already mints for the SMS OTP: after password
+verification, `authentication_options_for_login` checks whether this user has
+any registered passkey and, if so, returns options alongside the OTP dispatch —
+never instead of it. Whichever the user completes first (SMS code or passkey)
+finishes the login; the other path is simply never consumed.
+`complete_login_with_webauthn` (new) mirrors `complete_login`, substituting a
+verified assertion for a verified OTP. Challenges live in Redis with the same
+short TTL discipline as an OTP. A real, pre-existing test-infra gap surfaced
+while testing this: `tests/conftest.py`'s `fake_redis` fixture patches a fixed
+list of modules that hold their own `from app.core.redis import redis_client`
+reference, and `webauthn_service` wasn't on it — so every WebAuthn test was
+silently exercising a real local Redis connection rather than the fake one,
+until a stale connection from a previous test's closed event loop surfaced it
+as a `RuntimeError`. Fixed by adding the module to that list.
+
+19 backend tests in `tests/test_sprint25.py`, including a full WebAuthn
+registration-and-login ceremony driven by a from-scratch software authenticator
+(`SoftAuthenticator`) — a real ES256 keypair, a spec-shaped `authenticatorData`
+structure, a genuine CBOR "none"-format attestation object, and a real ECDSA
+signature over the assertion — rather than mocking the verification call, so
+the test proves the cryptographic round trip actually works end to end, not
+just that the code path was reached.
+
+**Deliberate limits:** the co-tenant clause added to the default lease template
+names co-tenants but doesn't extend the ID-number clause to each of them
+individually (only the primary tenant's national ID appears there) — adding a
+second, fully-formed identity clause per co-tenant was judged more legally
+risky to get wrong than valuable to add speculatively. The frontend's
+device-name guess for a newly registered passkey ("iPhone/iPad passkey" /
+"Android passkey" / "This device") is a plain user-agent sniff, not derived
+from the authenticator's own attestation data. Nothing here has been run
+against a real ClamAV daemon or a physical fingerprint sensor — both degrade
+gracefully with no credentials/hardware configured, the same treatment every
+other third-party integration in this codebase gets, and the WebAuthn
+cryptography itself is verified for real by the software-authenticator test
+rather than left as an assumption.
+
+**Gap-closing pass (same day):** re-read against its own acceptance criteria
+after the first "done" claim, which surfaced real gaps the pytest suite alone
+couldn't see:
+
+- The DSAR export bundle listed profile/tenancy/invoice/payment data but no
+  *documents*, despite that being one of the four things US-106 explicitly asks
+  for. Fixed by having `privacy_service` pull every document filed against the
+  tenant (leases, notices, KYC files, inspection reports) through a new
+  `vault_service.documents_for_tenant`, the same entity-resolution logic
+  `tenant_vault` already used — extracted into a shared `_tenant_entity_pairs`
+  helper so the in-app vault and the export bundle can never disagree about
+  what counts as "this tenant's documents."
+- US-107's explicit "vacating/renewal workflows require explicit handling of
+  partial co-tenant turnover (one moves out, one stays)" had nothing built for
+  it — co-tenants could be added and removed, but there was no way to make one
+  the primary tenant when the *current* primary is the one leaving. Added
+  `promote_co_tenant` (`POST /tenancies/{id}/co-tenants/{tenant_id}/promote`):
+  swaps `Tenancy.tenant_id` to the co-tenant, drops the old primary from the
+  tenancy entirely rather than leaving them behind as a stale co-tenant, and
+  leaves every past invoice and payment untouched since they key off
+  `tenancy_id`, never `tenant_id`.
+- The visitor log's own acceptance criterion — "searchable by date/unit" — was
+  true of the API (it already took `unit_id`/`since` params) but not of the
+  page: the frontend only exposed an "on site" checkbox. Added the unit and
+  date filters to `VisitorLogPage`.
+- WebAuthn credential registration and removal weren't audit-logged, unlike
+  every other security-sensitive action in this codebase (password changes,
+  account deletion requests). Added `webauthn.credential_registered` /
+  `webauthn.credential_removed` entries.
+- No test proved a caretaker is actually refused the new DSAR and co-tenant
+  endpoints — the permission matrix was correct (`CARETAKER` was never given
+  `DATA_REQUEST_MANAGE`/`CO_TENANT_MANAGE`) but nothing exercised the refusal.
+  Added `test_caretaker_is_denied_data_privacy_and_co_tenant_management`.
+
+**A separate, more consequential gap this pass caught: the running app was
+actually broken.** `pytest` builds its schema straight from the ORM
+(`Base.metadata.create_all()`) and never proves the real Alembic migration or
+the real Docker image — a gap this file has flagged before (Sprint 20's
+`webhook_delivery_status` enum-case bug shipped the same way). Checking the
+live `docker compose` stack found the backend container crash-looping:
+`webauthn`/`clamd` were installed into the local `.venv` used for gate-running
+but never rebuilt into the backend image, so the container's Python had no
+`webauthn` module at all. Fixed with `docker compose build backend`, then
+verified for real rather than assumed: `alembic upgrade head` against the live
+Postgres (not just the test database), the resulting `scan_status` enum and
+`visitor_logs` RLS policy inspected directly via `psql`, and every new
+endpoint hit with `curl` against the real running server. A full Playwright
+session then drove the actual browser against the actual dev server —
+registered a real user via the API, logged a visitor, added a co-tenant, and
+promoted that co-tenant to primary tenant, screenshotting each step — rather
+than trusting that green `tsc`/`oxlint`/`npm run build` output meant the pages
+actually render and their mutations actually work.
+
+**Found but out of scope for this sprint:** there is no frontend anywhere in
+the app for requesting a *lease* signature — Sprint 9 built the digital
+signature service and a generic `POST /signatures` endpoint, but no UI ever
+calls it for a lease (only the guarantor-agreement flow in tenant screening
+triggers one automatically). So while a co-tenant *can* be sent a signing
+request through that existing generic endpoint exactly like a primary tenant
+can, "requires each to digitally sign" has no operator-facing button to make
+it happen for anyone, co-tenant or not. This predates Sprint 25 and is a
+pre-existing gap in Sprint 9's feature, not something introduced or promised
+to be fixed here — flagging it rather than quietly building a lease-signing UI
+as unplanned scope.
+
+### 📦 Sprint 25 Deliverables
+- ✅ Upload pipeline scans every file before storage, with a retry sweep for
+  anything scanned before ClamAV was configured
+- ✅ Tenants can self-serve a data export or erasure request from their portal;
+  an owner/agency can raise either on a tenant's behalf
+- ✅ Tenancies support multiple co-tenants, each with their own portal
+  visibility and signing request, with zero change to how payments or arrears
+  are calculated
+- ✅ Biometric login available as a WebAuthn second factor alongside (not
+  instead of) SMS OTP, with full passkey management in Settings
+- ✅ Caretaker visitor log working, property-scoped like every other
+  field-operations table
+
+---
+
+## Sprint 26A — Masterplan Gap Closure
+**Weeks 51–52 (run alongside Sprint 26) | Story Points Target: 55**
+**🎯 Sprint Goal:** Build the masterplan features that no sprint had ever picked up — not the ones that were scoped and unbuilt, the ones that were promised and forgotten
+
+> **Why this exists.** A second gap review on 2026-09-07 read the masterplan
+> against the code rather than against this plan, and found sixteen promised
+> capabilities that appeared in **no sprint at all**. They are not late; they
+> were never scheduled. Each was confirmed absent by grep before being written
+> here, and each is now built. Numbered `26A` rather than renumbering
+> Sprints 26–29, which are unaffected.
+
+### 📖 What was missing, and what was built
+
+**US-M01 — Meter reading camera OCR** `[5 pts]` (Module 5)
+The meter photo was already mandatory and already stored; nothing read it. Now
+`ocr_service` proposes a reading from the photo and the capture form pre-fills
+it *only* above a confidence threshold. `current_reading` remains what a person
+asserted — `ocr_reading`, `ocr_confidence` and `ocr_accepted` sit beside it as
+the record of what the machine proposed and whether the caretaker took it.
+
+**US-M02 — Utility analytics** `[5 pts]` (Module 12, US-054 acceptance criteria)
+Consumption was computed at reading time and billed, and never aggregated.
+`analytics_service.utility_analytics` adds the consumption trend, above-average
+unit flagging against property-then-portfolio peers, and billing efficiency —
+the gap between what was measured and what was actually charged, which is the
+single commonest way utility revenue leaks out of a manual process.
+
+**US-M03 — Payment-behaviour segmentation** `[5 pts]` (Module 12, US-054)
+Arrears answered "who owes money today". Nothing answered "who is a problem". A
+tenant who clears every invoice three weeks late never enters the top-defaulters
+list yet costs the same cash-flow pain monthly. Settlement dates are recovered
+by replaying the real oldest-first allocation policy over each tenancy's
+history, because `Invoice.amount_paid` records the outcome but not the day.
+
+**US-M04 — Tenant turnover and average tenancy duration** `[3 pts]` (Module 12)
+`property_performance()` returned occupancy, collection rate and maintenance
+cost only. Turnover is now measured against tenancies actually held rather than
+unit count — an empty unit has nobody in it to leave.
+
+**US-M05 — Management agreement generation, dual OTP signing and termination** `[13 pts]`
+(masterplan §"Management Agreement Module")
+Sprint 7 built storage and display. The instrument itself did not exist. Now:
+a generated PDF, terms frozen as signed (so editing the owner profile afterwards
+cannot rewrite what was agreed), two independent OTP signing requests that must
+both complete before the agreement is in force, and a termination workflow where
+notice starts a clock and management continues until it runs out.
+
+**US-M06 — Editable communication templates** `[8 pts]` (Module 21)
+Every notification's copy was hardcoded in whichever service raised it.
+`notification_service.send` now consults a per-organisation template per channel
+and falls back to the built-in wording whenever there isn't one, or the template
+references a variable the caller never supplied — a slightly generic message
+that is correct beats a personalised one with a hole in it.
+
+**US-M07 — Import properties, units and historical payments** `[8 pts]` (Module 20)
+The importer had one sheet, "Tenants", and the property had to exist already,
+which made a first migration impossible. Four sheets now, in the order a
+landlord actually migrates. Historical payments allocate exactly as a live one
+would but issue no receipt and notify nobody — it is history, not a new payment.
+
+**US-M08 — Magic-link login for the tenant portal** `[5 pts]` (Security §
+Authentication Layers)
+A tenant signs in twice a year on a borrowed phone and mostly has no email
+address on file, so password reset was not a route back in for them. The request
+endpoint answers identically whether or not the number belongs to a tenant, so
+it cannot be walked as a directory of a landlord's book.
+
+**US-M09 — Sample data / demo mode** `[5 pts]` (Module 24)
+An empty account demonstrates nothing. Seeding records every created id in a
+`DemoDataset` ledger and teardown walks it in reverse, so removal is exact and
+can never take a customer's own row with it.
+
+**US-M10 — Video tutorials** `[2 pts]` (Module 24)
+`HelpArticle` gains video fields with an https-and-known-provider guard, and the
+help search gains a `video_only` filter. `body` stays required — text is
+searchable and works on a metered connection.
+
+**US-M11 — Account suspension and reactivation** `[3 pts]` (Module 25)
+`Organization.is_active` was enforced at `deps.py` and nothing could flip it.
+Suspension now records why, by whom, and revokes every live session so the cut
+takes effect immediately; the refused request says why rather than being a
+locked door with no notice on it.
+
+**US-M12 — Breach detection and the 72-hour notification protocol** `[8 pts]`
+(Kenya DPA s.43)
+A platform-level breach register with the clock running from awareness, hourly
+escalation at 48 and 72 hours, a required regulator reference to mark a breach
+notified, and a required reason to dismiss one. Two automatic detectors
+(credential stuffing, export bursts) raise candidates; everything else is
+reported by a person, which is how breaches are actually found.
+
+**US-M13 — Dual approval for cash above a threshold** `[5 pts]` (Fraud Prevention)
+Over-limit cash raised an alert and was banked anyway. Above the organisation's
+threshold it is now recorded but held — not allocated, not receipted, tenant not
+told — until a *different* person approves it. Off by default, and skipped
+entirely when nobody else could approve, so a solo landlord is never locked out
+of their own money.
+
+**US-M14 — Native mobile app evaluation** `[2 pts]` (Phase 4 deliverable)
+Written up in `docs/native-mobile-evaluation.md`. Decision: stay on the PWA, with
+the instrumentation needed to revisit it named and the triggers that would
+reopen it listed.
+
+**US-M15 — Concurrent session limits** `[2 pts]` (Security § Authentication)
+List, revoke and trust existed; no cap did. The newest session always survives —
+signing in must never fail because you already had too many logins.
+
+**US-M16 — Per-organisation encryption keys** `[5 pts]` (Multi-Tenant Data Isolation)
+Envelope encryption. Every stored third-party credential — eTIMS, portal API
+keys, accounting OAuth tokens, webhook secrets — is now sealed under a key
+belonging to that one organisation. Rotating one customer's key no longer forces
+every other customer to re-enter theirs, and ciphertext lifted from one tenant is
+inert against another. Legacy master-key ciphertext still reads, and moves across
+the next time it is saved.
+
+### 🔧 Engineering debt closed alongside
+
+- [x] **Frontend tests** — there were none across 101 `.tsx` files. 92 now, over
+      the layer that fails silently: money formatting, the API client's
+      concurrent-refresh collapsing (verified to fail when the collapsing is
+      removed), the offline queue's FIFO and idempotency guarantees, the auth
+      store, the route guard and the UI primitives.
+- [x] **Coverage measured for the first time** — backend **66%**, frontend
+      **83%** over the tested layer. Both enforced in CI as a ratchet. The
+      Definition of Done asks for 80% backend; see `pyproject.toml` for where
+      the gap is and why the floor was not set at a number that fails today.
+- [x] **Sentry wired in** — it had been in the stack list since the masterplan
+      and never installed. PII scrubbing is explicit, not left to defaults.
+- [x] **Supply-chain scanning in CI** — `pip-audit`, `npm audit` and CodeQL.
+      Dependabot alone only opens PRs on its own schedule.
+- [x] **Application rate limiting** — only the external API-key surface was
+      metered. The app's own endpoints, including the ones that send SMS and
+      render PDFs, had nothing but the login lockout in front of them.
+- [x] **Latent bug fixed while testing** — `Button` did not set `type`, so any
+      non-submit button inside a form submitted it. 264 of 287 usages relied on
+      the default.
+
+### 📦 Sprint 26A Deliverables
+- Sixteen masterplan capabilities that were in no sprint, now built and tested
+- 66 new backend tests (`test_sprint26.py`, `test_rate_limit.py`) and 92
+  frontend tests, from zero
+- Coverage, error tracking, supply-chain scanning and rate limiting in CI
+
+---
+
+## Sprint 26 — Enterprise Identity & Access
+**Weeks 51–52 | Story Points Target: 50**
+**🎯 Sprint Goal:** Give enterprise IT departments and large agencies the identity and access controls they'll actually require before signing a contract
+
+---
+
+### 📖 User Stories
+
+**US-110 — SSO / SAML Integration** `[13 pts]`
+*As an enterprise account admin, I want my staff to log in via our own identity provider so that access is centrally managed and deprovisioning is instant when someone leaves*
+
+Acceptance Criteria:
+- SAML 2.0 and OAuth2/OIDC connection configurable per organization
+- Just-in-time user provisioning on first SSO login, mapped to existing roles
+- Organization can enforce SSO-only login (disable password login) for their users
+- Tested against at least one real IdP (e.g., Google Workspace, Azure AD/Entra, Okta)
+- SSO configuration changes logged in the audit trail
+
+**US-111 — Custom Roles & Permission Builder** `[13 pts]`
+*As an agency admin, I want to define custom roles beyond the 8 built-in ones so that access matches our actual org chart*
+
+Acceptance Criteria:
+- Admin can create a role, name it, and toggle granular permissions (view/create/edit/delete/approve) per resource type
+- Custom roles assignable to users alongside built-in roles
+- Permission changes take effect immediately and are audit logged
+- Built-in roles remain as sensible defaults/templates that can be cloned as a starting point
+
+**US-112 — Enterprise Session & Device Policy** `[8 pts]`
+*As an enterprise admin, I want stricter, centrally-configured session and device policies so that our security posture meets our own IT standards*
+
+Acceptance Criteria:
+- Per-organization policy: max concurrent sessions per user, forced re-auth interval, device trust duration
+- Admin can view and revoke any user's active sessions org-wide, not just their own
+- Policy violations (e.g., login from outside the IP whitelist) generate a security event, building on the existing IP whitelist and SecurityEvent model
+
+**US-113 — Security Compliance Pack** `[8 pts]`
+*As an enterprise buyer's procurement team, I want a documented security posture so that we can complete our vendor risk assessment without a lengthy back-and-forth*
+
+Acceptance Criteria:
+- Downloadable security whitepaper covering encryption, RLS isolation, RBAC, and audit logging
+- SOC 2 readiness self-assessment checklist published, with gaps stated honestly rather than implied as certified
+- Public status/uptime page reachable outside the main app
+- Data Processing Agreement (DPA) template available for enterprise customers to countersign
+
+### 🔧 Technical Tasks
+- [ ] Build SAML 2.0 SP endpoints and metadata configuration UI
+- [ ] Build OIDC connection flow as an alternative to SAML
+- [ ] Build JIT provisioning and role-mapping configuration
+- [ ] Build organization-level "SSO required" enforcement
+- [ ] Build custom role/permission data model and builder UI
+- [ ] Migrate existing permission checks to consult custom roles alongside built-in ones
+- [ ] Build org-wide session policy configuration and admin session-revocation UI
+- [ ] Write and publish the security whitepaper and SOC 2 readiness checklist
+- [ ] Stand up a public status page (self-hosted or a lightweight third-party page)
+- [ ] Write SSO and custom-role permission isolation tests
+
+### 📦 Sprint 26 Deliverables
+- SSO/SAML login working against at least one real identity provider
+- Custom role builder live for agency/enterprise accounts
+- Org-wide session and device policy enforcement
+- Published security whitepaper, SOC 2 checklist, and status page
+
+---
+
+## Sprint 27 — Subscription Billing Engine & White-Label
+**Weeks 53–54 | Story Points Target: 71**
+**🎯 Sprint Goal:** RentFlow can finally charge, meter, and bill its own customers automatically — on every revenue stream in masterplan §10, not just the monthly plan fee — and large agencies can run the platform under their own brand
+
+> **Scope note (Sprint 26 gap review):** this sprint originally covered the
+> subscription fee alone. Transaction fees, the six premium add-ons, annual
+> billing and the one-time fee schedule were all in masterplan §10 and in no
+> sprint. US-117a and US-117b close that, which is what takes the target from
+> 55 to 71 points — over a normal sprint's capacity, so if it has to be split,
+> **US-117a ships first**: transaction fees accrue per payment and cannot be
+> backfilled from history that was never metered.
+
+---
+
+### 📖 User Stories
+
+**US-114 — Subscription Billing Engine** `[13 pts]`
+*As the business, I want subscriptions to actually be billed and enforced so that revenue collection isn't manual and plan limits mean something*
+
+Acceptance Criteria:
+- Plan definitions (Starter/Professional/Business/Enterprise) enforced: unit count, user count, and feature flags checked at the point of use, not just displayed
+- Recurring billing via M-Pesa and card, monthly or annual, with automatic retry on failure
+- Invoices generated for RentFlow's own subscription fee, downloadable by the customer
+- Grace period and read-only lockout on non-payment, mirroring the existing trial-expiry lockout pattern
+- Plan upgrade/downgrade prorates correctly
+
+**US-115 — Referral Credit Application** `[5 pts]`
+*As a customer who referred a friend, I want my earned credit to actually reduce my bill so that the referral program pays out as promised*
+
+Acceptance Criteria:
+- The existing `credit_months` ledger is applied automatically against the next invoice generated by the new billing engine
+- Customer sees applied credit itemized on their invoice
+- Admin can view and adjust credit balances with an audit trail
+
+**US-116 — Usage Metering Dashboard** `[8 pts]`
+*As an account owner, I want to see my usage against my plan limits so that I know when I'm approaching an upgrade point*
+
+Acceptance Criteria:
+- Dashboard shows units, users, storage, API calls, and SMS sent this period vs. plan limits
+- Approaching-limit warning (e.g., 90% of unit allowance) with an upsell prompt
+- Usage history available for the last 12 months
+
+**US-117 — White-Label & Custom Branding** `[13 pts]`
+*As a large agency, I want to run RentFlow under our own brand so that our clients see us, not RentFlow*
+
+Acceptance Criteria:
+- Custom domain support (agency's own subdomain or domain)
+- Custom logo, color scheme, and sender name applied across the app, emails, WhatsApp templates, and PDFs
+- "Powered by RentFlow" footer configurable (visible/hidden per plan tier)
+- White-label configuration isolated per organization — no bleed between agencies
+
+**US-117a — Transaction Fee Collection** `[8 pts]`
+*As the business, I want the 0.5% M-Pesa transaction fee to be metered and collected so that the revenue stream the pricing model is built on actually exists*
+
+> Added in the Sprint 26 gap review. The masterplan's §10 puts transaction fees
+> at KES 50–500 per unit per month — on a 200-unit agency that is comparable to
+> the subscription itself — and the sprint that builds billing did not mention
+> them. Subscription-only billing would ship a revenue model that is materially
+> smaller than the one the business case assumes.
+
+Acceptance Criteria:
+- 0.5% accrued on every confirmed M-Pesa payment processed through the platform, capped at **KES 500 per transaction**
+- Fee accrues at confirmation, in its own ledger line — never deducted from the landlord's money in transit, and never from a payment that later reverses
+- Cash, bank transfer and cheque accrue nothing: the fee is for payments RentFlow actually processed
+- Accrued fees roll into the next subscription invoice, itemised separately from the plan fee
+- The landlord can see the running fee total for the current period before it is billed
+- Fee rate and cap are configurable per plan, so an enterprise contract can negotiate them
+
+**US-117b — Add-Ons, Annual Billing and One-Time Fees** `[8 pts]`
+*As the business, I want the six premium add-ons, the annual discount and the one-time fee schedule to be sellable so that the whole of §10's price list is billable, not just the monthly plan row*
+
+> Also added in the Sprint 26 gap review — §10 lists six add-ons, a two-months-free
+> annual commitment and a one-time fee schedule, none of which appeared in this
+> sprint. Annual billing in particular is a cash-flow and churn mechanism, not a
+> discount: leaving it out means every customer stays monthly by default.
+
+Acceptance Criteria:
+- Add-ons subscribable per organization, each with its own monthly fee, prorated on mid-period activation: eTIMS Compliance (KES 1,000), Advanced Analytics (KES 2,000), Extra SMS Bundle (KES 500 / 500 SMS), Extra Storage (KES 500 / 50GB), Vacancy Marketing Portal (KES 1,000), Open API for Starter/Professional (KES 3,000)
+- An add-on grants the feature flag or quota it pays for — buying the eTIMS module switches eTIMS on, buying storage raises the storage limit
+- Annual billing offered alongside monthly at the §10 annual price (two months free), with the saving shown at the point of choice
+- Switching monthly→annual mid-term credits the unused monthly portion
+- One-time fees (enterprise onboarding, data migration, custom integration, training) raisable as a manual invoice line by RentFlow staff, on the same invoice as the subscription
+- Special pricing programs supported as a per-organization discount percentage with a reason on the record: non-profit/faith-based 20%, student accommodation Starter pricing, early-adopter locked pricing
+
+### 🔧 Technical Tasks
+- [ ] Build Plan/Subscription/Invoice data model for RentFlow's own billing
+- [ ] Build plan-limit enforcement middleware (units, users, storage, API calls, SMS)
+- [ ] Build recurring billing via M-Pesa STK and card, reusing the existing Daraja integration where possible
+- [ ] Build dunning flow: retry, grace period, read-only lockout
+- [ ] Wire the `credit_months` ledger into invoice generation
+- [ ] Build usage metering aggregation and dashboard UI
+- [ ] Build custom domain routing and SSL provisioning per organization
+- [ ] Build white-label theming (logo, colors) applied to the app shell, PDFs, and notification templates
+- [ ] Build the transaction fee accrual: hook `payment_service._confirm`, 0.5% capped at KES 500, M-Pesa only, reversed if the payment reverses
+- [ ] Build the add-on catalogue and per-organization subscriptions, with proration and feature-flag/quota grants
+- [ ] Build annual billing terms, the two-months-free price, and monthly→annual switching with credit
+- [ ] Build the one-time fee line item, raisable by platform staff onto a subscription invoice
+- [ ] Build per-organization discount programs (non-profit, student, early adopter) with an auditable reason
+- [ ] Write billing engine tests (proration, dunning, credit application, plan-limit enforcement, fee cap boundary, reversal, annual switch)
+
+### 📦 Sprint 27 Deliverables
+- Subscriptions billed and enforced automatically — no more implicit free-forever accounts
+- Transaction fees metered and billed — the second revenue stream in §10 is live
+- All six premium add-ons sellable, with annual billing and one-time fees
+- Referral credits actually reduce a real invoice
+- Usage dashboard showing plan consumption
+- Agencies can run RentFlow under their own domain and branding
+
+---
+
+## Sprint 28 — Financial Intelligence & Trust Infrastructure
+**Weeks 55–56 | Story Points Target: 50**
+**🎯 Sprint Goal:** Deepen the financial and fraud intelligence beyond rule-based thresholds, and close the accounting and communication gaps an enterprise finance team will notice
+
+---
+
+### 📖 User Stories
+
+**US-118 — Double-Entry General Ledger** `[13 pts]`
+*As an accountant, I want a real general ledger behind the numbers so that RentFlow's financial reports reconcile the way accounting software expects, not just as one-way exports*
+
+Acceptance Criteria:
+- Every financial event (payment, disbursement, fee, refund, deposit) posts a balanced double-entry journal entry
+- Trial balance and ledger detail viewable per organization/owner
+- The existing accounting sync (QuickBooks/Xero) reads from the ledger rather than ad hoc tables
+- Historical data backfilled from existing payment/disbursement records
+
+**US-119 — ML-Based Fraud Scoring** `[8 pts]`
+*As the system, I want fraud detection that learns from confirmed and dismissed alerts so that accuracy improves over time instead of relying on fixed thresholds forever*
+
+Acceptance Criteria:
+- Historical `FraudAlert` outcomes (confirmed vs. suppressed) used to train/tune a scoring model
+- Each new alert carries a confidence score, not just a binary rule match
+- Rule-based detection remains as a fallback/floor — the model augments rather than replaces it
+- Model performance (false positive rate) tracked and visible to the RentFlow team
+
+**US-120 — General Two-Way Messaging** `[8 pts]`
+*As a tenant, I want to reply to any WhatsApp notification and have my message reach the right person in the system, not just respond to a Yes/No reference check*
+
+Acceptance Criteria:
+- Inbound WhatsApp messages matched to the sending tenant/user and threaded against the relevant tenancy, maintenance request, or conversation
+- Caretaker/owner sees inbound replies in-app and can respond from the app or WhatsApp
+- Unmatched senders (unknown numbers) routed to a general inbox for manual triage
+
+**US-121 — Rent Pricing Recommendations** `[8 pts]`
+*As a property owner, I want data-informed rent pricing suggestions so that I'm not leaving money on the table or overpricing a vacant unit*
+
+Acceptance Criteria:
+- Recommendation built from the owner's own portfolio (extends the existing rent-review suggestions) to include comparable vacant-unit fill times and rejection rates at the current price
+- Suggested range shown with the assumptions used, never presented as external market data unless a real market data source is later integrated
+- Available on the vacancy listing and unit detail screens
+
+### 🔧 Technical Tasks
+- [ ] Design and build the double-entry ledger schema (accounts, journal entries, postings)
+- [ ] Wire every financial-event service to post ledger entries
+- [ ] Build trial balance / ledger detail UI and a backfill migration
+- [ ] Repoint QuickBooks/Xero sync to read from the ledger
+- [ ] Build fraud alert outcome tracking and a lightweight scoring model (logistic regression or similar — no need for a heavyweight ML platform at this scale)
+- [ ] Build inbound WhatsApp webhook message-threading service
+- [ ] Build a unified inbox UI for matched and unmatched inbound messages
+- [ ] Extend the rent-review service with fill-time/rejection-rate signals
+- [ ] Write ledger-balance invariant tests (every entry must net to zero) and fraud-model backtests
+
+### 📦 Sprint 28 Deliverables
+- Real general ledger behind every financial report and accounting sync
+- Fraud detection scored by a learning model, not fixed thresholds alone
+- Two-way WhatsApp conversations threaded into the right context
+- Rent pricing recommendations informed by the owner's own vacancy data
+
+---
+
+## Sprint 29 — Financial Services & Ecosystem Partnerships
+**Weeks 57–58 | Story Points Target: 50**
+**🎯 Sprint Goal:** Turn the partnership ambitions in the masterplan's Future Expansion section into real integrations, and round out the remaining physical-space and payment gaps. Phase 5 is DONE.
+
+---
+
+### 📖 User Stories
+
+**US-122 — Credit Bureau Integration** `[13 pts]`
+*As a property owner, I want to check a prospective tenant's credit history so that screening decisions are backed by more than income ratio and references*
+
+Acceptance Criteria:
+- Integration with at least one Kenyan credit bureau (TransUnion Kenya or Metropol) via their API
+- Credit check triggered from the existing tenant application/screening flow, with the applicant's consent captured first (DPA-compliant)
+- Credit score/report folds into the existing 0–100 screening score as a new weighted component
+- Bureau unavailable/no-credentials-configured degrades gracefully — screening still works without it, consistent with every other optional integration
+
+**US-123 — Card Payment Support** `[8 pts]`
+*As a tenant paying from outside Kenya or without M-Pesa, I want to pay by card so that I'm not blocked from paying rent*
+
+Acceptance Criteria:
+- Card payment via Flutterwave or Stripe available alongside M-Pesa and bank transfer in the tenant portal
+- Same reconciliation, receipt, and audit trail treatment as any other payment method
+- Currency handling explicit (KES primary, card processor handles FX where applicable)
+
+**US-124 — Bank Partner & Insurance Marketplace Foundations** `[13 pts]`
+*As a property owner, I want visibility into financing and insurance options relevant to my portfolio so that RentFlow is useful beyond day-to-day operations*
+
+Acceptance Criteria:
+- Rent-roll summary exportable in a bank-partner-ready format (foundation for a future loan-referral integration, not a live lending product)
+- Insurance marketplace tab surfaces partner products relevant to the owner's property types — initially a curated directory with lead capture, live quoting once a real partner is signed
+- Both explicitly framed as informational/referral, with RentFlow never handling loan or policy funds
+
+**US-125 — Floor Plan & Unit Mapping** `[8 pts]`
+*As a property owner, I want to see a visual floor plan of my property with unit status overlaid so that I can understand occupancy spatially, not just as a list*
+
+Acceptance Criteria:
+- Floor plan image uploadable per property (or per floor for multi-floor buildings)
+- Units placeable on the plan via simple click-to-pin positioning
+- Plan view color-codes units by status (occupied/vacant/maintenance), matching the existing status colors
+- Falls back to the existing list view where no plan has been uploaded
+
+**US-126 — Zapier / Webhook-Friendly Ecosystem** `[5 pts]`
+*As a smaller customer without developer resources, I want to connect RentFlow to other tools via Zapier so that I get integration value without writing code*
+
+Acceptance Criteria:
+- RentFlow published as a Zapier (or Make.com) app using the existing public API and webhook events
+- Common triggers (payment received, tenant added, maintenance status changed) and actions (create tenant, send announcement) available
+- Documented alongside the existing developer portal
+
+### 🔧 Technical Tasks
+- [ ] Integrate TransUnion Kenya or Metropol API with consent capture
+- [ ] Fold the credit result into the screening score calculation
+- [ ] Integrate a Flutterwave/Stripe card payment flow into the tenant portal payment options
+- [ ] Build a rent-roll export format for bank partner referrals
+- [ ] Build an insurance marketplace directory and lead capture UI
+- [ ] Build floor plan upload and click-to-pin unit mapping UI
+- [ ] Publish a Zapier app (or Make.com equivalent) wrapping the existing public API
+- [ ] Write tests for credit bureau consent/degrade-gracefully behavior and card payment reconciliation
+
+### 🏁 Phase 5 Complete — Enterprise-Ready
+**All deliverables across Phase 5:**
+- Every masterplan gap identified in the Sprint 24 review closed
+- Real subscription billing, white-labeling, SSO, and custom roles — the features enterprise procurement actually checks for
+- General ledger accounting, ML-assisted fraud detection, and two-way messaging
+- Credit bureau, card payment, bank/insurance partnership foundations, and floor plan mapping
+
+---
+
 ## Sprint Velocity & Timeline Summary
 
 | Phase | Sprints | Weeks | Key Milestone |
@@ -2248,6 +3262,7 @@ Acceptance Criteria:
 | **Phase 2** | 7–12 | Weeks 13–24 | First agency customer (50+ units) |
 | **Phase 3** | 13–18 | Weeks 25–36 | All rental types supported |
 | **Phase 4** | 19–24 | Weeks 37–48 | Full platform launch — 1,000+ units |
+| **Phase 5** | 25–29 | Weeks 49–58 | Enterprise-ready: billing, SSO, white-label, financial services |
 
 ---
 

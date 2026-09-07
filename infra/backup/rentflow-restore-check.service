@@ -1,0 +1,22 @@
+[Unit]
+Description=RentFlow backup restore drill
+Documentation=file:///opt/rentflow/infra/backup/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=rentflow
+EnvironmentFile=/opt/rentflow/infra/backup/backup.env
+# Restores the newest backup into a throwaway database, asserts the schema and
+# Alembic head are there, drops it. Read-only as far as real data is concerned.
+ExecStart=/opt/rentflow/infra/backup/restore.sh --latest --verify
+TimeoutStartSec=3600
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+ReadWritePaths=/var/backups/rentflow
+
+[Install]
+WantedBy=multi-user.target

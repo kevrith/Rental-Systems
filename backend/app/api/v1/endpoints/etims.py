@@ -35,7 +35,7 @@ async def read_credentials(
 ):
     """Whether eTIMS is configured, and a masked hint — never the secrets."""
     record = await etims_service.get_credential(db, context.organization_id)
-    return etims_service.describe_credential(record)
+    return await etims_service.describe_credential(db, record)
 
 
 @router.put("/credentials")
@@ -53,7 +53,7 @@ async def save_credentials(
         branch_id=body.branch_id,
         environment=body.environment,
     )
-    return etims_service.describe_credential(record)
+    return await etims_service.describe_credential(db, record)
 
 
 @router.delete("/credentials")

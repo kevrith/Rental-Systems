@@ -4,17 +4,18 @@ Owner profile management, disbursements, and agency dashboard.
 """
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Request, status
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OrgContext, require, require_write
 from app.core.database import get_db
 from app.core.permissions import Permission
-from app.services import agency_service
+from app.models.agency import ManagementAgreementStatus, TerminationParty
+from app.services import agency_service, management_agreement_service
 
 router = APIRouter()
 
@@ -260,3 +261,161 @@ async def owner_portal_summary(
 ):
     """Read-only summary for an owner portal user."""
     return await agency_service.owner_portal_summary(db, context.user.id, context.organization_id)
+
+
+# ----------------------------------------------------- management agreements
+
+
+class ManagementAgreementCreate(BaseModel):
+    owner_profile_id: uuid.UUID
+    start_date: date
+    term_months: int = Field(default=12, ge=0, le=120)
+    notice_period_days: int = Field(default=90, ge=30, le=365)
+    scope_of_management: str | None = Field(default=None, max_length=5000)
+    # Empty means every property currently attached to the owner profile.
+    property_ids: list[uuid.UUID] = Field(default_factory=list)
+    # Each omitted term is copied from the owner profile.
+    management_fee_percent: Decimal | None = Field(default=None, ge=0, le=100)
+    disbursement_day: int | None = Field(default=None, ge=1, le=28)
+    maintenance_auto_approve_limit: Decimal | None = Field(default=None, ge=0)
+    maintenance_notify_limit: Decimal | None = Field(default=None, ge=0)
+
+
+class ManagementAgreementSend(BaseModel):
+    """Who signs for the agency. The owner's details come from their profile."""
+
+    agency_signatory_name: str = Field(min_length=2, max_length=255)
+    agency_signatory_phone: str = Field(min_length=9, max_length=32)
+
+
+class ManagementAgreementTerminate(BaseModel):
+    requested_by: TerminationParty
+    reason: str | None = Field(default=None, max_length=2000)
+    # Defaults to the contractual notice period from today. An earlier date is
+    # accepted as an agreed shortening and recorded as one.
+    effective_date: date | None = None
+
+
+class ManagementAgreementRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    reference_code: str
+    owner_profile_id: uuid.UUID
+    status: ManagementAgreementStatus
+    management_fee_percent: Decimal
+    disbursement_day: int
+    maintenance_auto_approve_limit: Decimal
+    maintenance_notify_limit: Decimal
+    scope_of_management: str | None
+    property_ids: list[str]
+    start_date: date
+    term_months: int
+    end_date: date | None
+    notice_period_days: int
+    document_id: uuid.UUID | None
+    owner_signature_id: uuid.UUID | None
+    agency_signature_id: uuid.UUID | None
+    activated_at: datetime | None
+    termination_requested_at: datetime | None
+    termination_requested_by: TerminationParty | None
+    termination_reason: str | None
+    termination_effective_date: date | None
+    terminated_at: datetime | None
+    created_at: datetime
+
+
+@router.get("/management-agreements", response_model=list[ManagementAgreementRead])
+async def list_management_agreements(
+    owner_profile_id: uuid.UUID | None = None,
+    live_only: bool = False,
+    context: OrgContext = Depends(require(Permission.ORG_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> list[ManagementAgreementRead]:
+    rows = await management_agreement_service.list_agreements(
+        db, context, owner_profile_id=owner_profile_id, live_only=live_only
+    )
+    return [ManagementAgreementRead.model_validate(row) for row in rows]
+
+
+@router.post(
+    "/management-agreements",
+    response_model=ManagementAgreementRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_management_agreement(
+    body: ManagementAgreementCreate,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.ORG_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> ManagementAgreementRead:
+    """Draft the contract and render its PDF. Nothing is binding until signed."""
+    agreement = await management_agreement_service.create(db, context, request=request, **body.model_dump())
+    return ManagementAgreementRead.model_validate(agreement)
+
+
+@router.get("/management-agreements/{agreement_id}", response_model=ManagementAgreementRead)
+async def get_management_agreement(
+    agreement_id: uuid.UUID,
+    context: OrgContext = Depends(require(Permission.ORG_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> ManagementAgreementRead:
+    agreement = await management_agreement_service.get(db, context, agreement_id)
+    return ManagementAgreementRead.model_validate(agreement)
+
+
+@router.post("/management-agreements/{agreement_id}/send", response_model=ManagementAgreementRead)
+async def send_management_agreement(
+    agreement_id: uuid.UUID,
+    body: ManagementAgreementSend,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.ORG_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> ManagementAgreementRead:
+    """Send one OTP signing link to the owner and one to the agency signatory."""
+    agreement = await management_agreement_service.send_for_signature(
+        db,
+        context,
+        agreement_id,
+        agency_signatory_name=body.agency_signatory_name,
+        agency_signatory_phone=body.agency_signatory_phone,
+        request=request,
+    )
+    return ManagementAgreementRead.model_validate(agreement)
+
+
+@router.post("/management-agreements/{agreement_id}/terminate", response_model=ManagementAgreementRead)
+async def terminate_management_agreement(
+    agreement_id: uuid.UUID,
+    body: ManagementAgreementTerminate,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.ORG_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> ManagementAgreementRead:
+    """Serve notice. Management continues until the effective date."""
+    agreement = await management_agreement_service.request_termination(
+        db,
+        context,
+        agreement_id,
+        requested_by=body.requested_by,
+        reason=body.reason,
+        effective_date=body.effective_date,
+        request=request,
+    )
+    return ManagementAgreementRead.model_validate(agreement)
+
+
+@router.post(
+    "/management-agreements/{agreement_id}/withdraw-termination",
+    response_model=ManagementAgreementRead,
+)
+async def withdraw_management_agreement_termination(
+    agreement_id: uuid.UUID,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.ORG_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> ManagementAgreementRead:
+    agreement = await management_agreement_service.withdraw_termination(
+        db, context, agreement_id, request=request
+    )
+    return ManagementAgreementRead.model_validate(agreement)

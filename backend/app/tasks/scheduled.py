@@ -13,7 +13,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
@@ -146,6 +146,9 @@ def send_rent_reminders() -> dict[str, int]:
 
                 balance = Decimal(invoice.total) - Decimal(invoice.amount_paid)
                 when = "today" if offset == 0 else f"in {offset} day{'s' if offset != 1 else ''}"
+                unit = await db.get(Unit, tenancy.unit_id) if tenancy else None
+                property_record = await db.get(Property, unit.property_id) if unit else None
+                organization = await db.get(Organization, invoice.organization_id)
                 notifications = await notification_service.send(
                     db,
                     recipient=notification_service.Recipient.for_tenant(tenant),
@@ -160,6 +163,18 @@ def send_rent_reminders() -> dict[str, int]:
                     entity_type="invoice",
                     entity_id=invoice.id,
                     organization_id=invoice.organization_id,
+                    # Supplied so an organisation that has rewritten this
+                    # message (Module 21) has real values to interpolate. With
+                    # no custom template these are simply unused.
+                    variables={
+                        "tenant_name": tenant.full_name,
+                        "amount": format_kes(balance),
+                        "balance": format_kes(balance),
+                        "due_date": invoice.due_date.strftime("%d %b %Y"),
+                        "property_name": property_record.name if property_record else "",
+                        "unit_number": unit.unit_number if unit else "",
+                        "organization_name": organization.name if organization else "",
+                    },
                 )
                 for notification in notifications:
                     notification.payload = {"marker": marker}
@@ -358,7 +373,7 @@ def caretaker_daily_summary() -> dict[str, int]:
                 if caretaker.last_login_at is None or (
                     datetime.now(UTC) - caretaker.last_login_at
                 ) > timedelta(days=3):
-                    lines.append(f"  ⚠ {caretaker.full_name} has not logged in for 3+ days.")
+                    lines.append(f"  ! {caretaker.full_name} has not logged in for 3+ days.")
 
             for owner in owners:
                 await notification_service.send(
@@ -784,3 +799,237 @@ def sweep_overdue_utilities() -> dict[str, int]:
     alerted = run_async(facilities_service.sweep_overdue_utilities)
     logger.info("Flagged %s overdue utility account(s)", alerted)
     return {"alerted": alerted}
+
+
+@celery_app.task(name="rentflow.monthly_owner_report")
+@monitored("rentflow.monthly_owner_report")
+def monthly_owner_report() -> dict[str, int]:
+    """Generate and deliver last month's financial summary to every owner
+    (Sprint 21, US-093)."""
+    from app.services import reporting_service
+
+    built = run_async(reporting_service.run_scheduled_monthly_reports)
+    logger.info("Built %s monthly owner report(s)", built)
+    return {"built": built}
+
+
+@celery_app.task(name="rentflow.run_scheduled_custom_reports")
+@monitored("rentflow.run_scheduled_custom_reports")
+def run_scheduled_custom_reports() -> dict[str, int]:
+    """Run and deliver every saved custom report whose schedule is due today
+    (Sprint 21, US-094)."""
+    from app.services import reporting_service
+
+    sent = run_async(reporting_service.run_scheduled_custom_reports)
+    logger.info("Ran %s scheduled custom report(s)", sent)
+    return {"sent": sent}
+
+
+# ------------------------------------------------------------- security (Sprint 22)
+
+
+@celery_app.task(name="rentflow.send_failed_login_digest")
+@monitored("rentflow.send_failed_login_digest")
+def send_failed_login_digest() -> dict[str, int]:
+    """Daily summary of failed sign-in attempts per account (US-098).
+
+    The Redis lockout counter in `auth_service` is ephemeral and only long
+    enough to enforce the 15-minute lockout; this reads the durable
+    `SecurityEvent` rows instead, so a slow trickle of failures spread across a
+    day (too slow to ever trigger a lockout) is still visible to the owner.
+    """
+    from app.models.security import SecurityEvent, SecurityEventType
+
+    async def work(db: AsyncSession) -> int:
+        since = datetime.now(UTC) - timedelta(hours=24)
+        sent = 0
+
+        organizations = await db.scalars(select(Organization).where(Organization.is_active.is_(True)))
+        for organization in organizations:
+            count = await db.scalar(
+                select(func.count(SecurityEvent.id)).where(
+                    SecurityEvent.organization_id == organization.id,
+                    SecurityEvent.event_type == SecurityEventType.LOGIN_FAILED,
+                    SecurityEvent.created_at >= since,
+                )
+            )
+            if not count:
+                continue
+
+            owners = await db.scalars(
+                select(User).where(
+                    User.organization_id == organization.id,
+                    User.role.in_([UserRole.OWNER, UserRole.AGENCY_ADMIN]),
+                    User.is_active.is_(True),
+                )
+            )
+            for owner in owners:
+                await notification_service.send(
+                    db,
+                    recipient=notification_service.Recipient.for_user(owner),
+                    notification_type=NotificationType.FAILED_LOGIN_DIGEST,
+                    title="Failed sign-in attempts in the last 24 hours",
+                    body=f"{organization.name} had {count} failed sign-in attempt(s) in the last 24 hours.",
+                    channels=[NotificationChannel.IN_APP],
+                    organization_id=organization.id,
+                )
+                sent += 1
+
+        await db.commit()
+        return sent
+
+    sent = run_async(work)
+    logger.info("Sent %s failed-login digest(s)", sent)
+    return {"sent": sent}
+
+
+@celery_app.task(name="rentflow.sync_accounting_connections")
+@monitored("rentflow.sync_accounting_connections")
+def sync_accounting_connections() -> dict[str, int]:
+    """Push everything unsynced to every connected QuickBooks/Xero company,
+    daily (Sprint 23, US-100)."""
+    from app.services import accounting_service
+
+    synced = run_async(accounting_service.sync_due_connections)
+    logger.info("Ran accounting sync for %s connection(s)", synced)
+    return {"connections": synced}
+
+
+@celery_app.task(name="rentflow.remind_api_key_rotation")
+@monitored("rentflow.remind_api_key_rotation")
+def remind_api_key_rotation() -> dict[str, int]:
+    """Nudge an account to rotate an API key that has not been rotated in
+    `API_KEY_ROTATION_REMINDER_DAYS` (US-098)."""
+    from app.models.developer import ApiKey
+
+    async def work(db: AsyncSession) -> int:
+        cutoff = datetime.now(UTC) - timedelta(days=settings.API_KEY_ROTATION_REMINDER_DAYS)
+        sent = 0
+
+        keys = await db.scalars(
+            select(ApiKey).where(
+                ApiKey.revoked_at.is_(None),
+                ApiKey.created_at <= cutoff,
+                (ApiKey.rotation_reminder_sent_at.is_(None)) | (ApiKey.rotation_reminder_sent_at <= cutoff),
+            )
+        )
+        for key in keys:
+            owners = await db.scalars(
+                select(User).where(
+                    User.organization_id == key.organization_id,
+                    User.role.in_([UserRole.OWNER, UserRole.AGENCY_ADMIN]),
+                    User.is_active.is_(True),
+                )
+            )
+            for owner in owners:
+                await notification_service.send(
+                    db,
+                    recipient=notification_service.Recipient.for_user(owner),
+                    notification_type=NotificationType.API_KEY_ROTATION_DUE,
+                    title="Time to rotate an API key",
+                    body=(
+                        f"API key '{key.name}' has not been rotated in "
+                        f"{settings.API_KEY_ROTATION_REMINDER_DAYS} days. Generate a new one and "
+                        f"revoke this one once your integration is switched over."
+                    ),
+                    link_path="/settings/developer",
+                    channels=[NotificationChannel.IN_APP, NotificationChannel.EMAIL],
+                    entity_type="api_key",
+                    entity_id=key.id,
+                    organization_id=key.organization_id,
+                )
+            key.rotation_reminder_sent_at = datetime.now(UTC)
+            sent += 1
+
+        await db.commit()
+        return sent
+
+    sent = run_async(work)
+    logger.info("Sent %s API key rotation reminder(s)", sent)
+    return {"sent": sent}
+
+
+@celery_app.task(name="rentflow.rescan_stored_files")
+@monitored("rentflow.rescan_stored_files")
+def rescan_stored_files(limit: int = 500) -> dict[str, int]:
+    """Retroactively scan files uploaded before ClamAV was configured, or whose
+    scan previously failed (US-105).
+
+    Deliberately not on the beat schedule: this is a one-off catch-up run, not a
+    recurring job — re-scanning already-clean files on a schedule would just be
+    wasted daemon load. Trigger it by hand (e.g. once real CLAMAV_HOST
+    credentials are in place) via
+    `celery -A app.tasks.celery_app call rentflow.rescan_stored_files`.
+    """
+    from app.models.file import ScanStatus, StoredFile, UploadStatus
+    from app.services import storage_service, virus_scan_service
+
+    async def work(db: AsyncSession) -> dict[str, int]:
+        rows = await db.scalars(
+            select(StoredFile)
+            .where(
+                StoredFile.status == UploadStatus.UPLOADED,
+                StoredFile.scan_status.in_([ScanStatus.PENDING, ScanStatus.SKIPPED, ScanStatus.FAILED]),
+            )
+            .limit(limit)
+        )
+        scanned = 0
+        infected = 0
+        for record in rows:
+            try:
+                data = storage_service.get_storage().read(record.storage_key)
+            except Exception:
+                continue
+            outcome = virus_scan_service.scan_bytes(data)
+            record.scan_status = outcome.status
+            record.scan_detail = outcome.detail
+            record.scanned_at = datetime.now(UTC)
+            scanned += 1
+            if outcome.status == ScanStatus.INFECTED:
+                infected += 1
+                logger.warning(
+                    "Retroactive scan found an infected file already in storage: %s (%s)",
+                    record.id,
+                    outcome.detail,
+                )
+        await db.commit()
+        return {"scanned": scanned, "infected": infected}
+
+    result = run_async(work)
+    logger.info("Rescanned %s stored file(s), %s infected", result["scanned"], result["infected"])
+    return result
+
+
+@celery_app.task(name="rentflow.complete_management_agreement_terminations")
+@monitored("rentflow.complete_management_agreement_terminations")
+def complete_management_agreement_terminations() -> dict[str, int]:
+    """Close out management agreements whose notice period has run, and expire
+    fixed-term ones that reached their end date (Sprint 26)."""
+    from app.services import management_agreement_service
+
+    completed = run_async(management_agreement_service.complete_due_terminations)
+    logger.info("Closed %s management agreement(s)", completed)
+    return {"completed": completed}
+
+
+@celery_app.task(name="rentflow.escalate_breach_notifications")
+@monitored("rentflow.escalate_breach_notifications")
+def escalate_breach_notifications() -> dict[str, int]:
+    """Chase any breach whose Kenya DPA 72-hour notification window is running
+    down, and any that has already passed it (Sprint 26)."""
+    from app.services import breach_service
+
+    escalated = run_async(breach_service.escalate_due_notifications)
+    if escalated:
+        logger.warning("Escalated %s breach notification deadline(s)", escalated)
+    return {"escalated": escalated}
+
+
+@celery_app.task(name="rentflow.scan_for_breach_candidates")
+@monitored("rentflow.scan_for_breach_candidates")
+def scan_for_breach_candidates() -> dict[str, int]:
+    """Raise breach candidates from authentication and export telemetry."""
+    from app.services import breach_service
+
+    found = run_async(breach_service.scan_for_candidates)
+    return {"candidates": found}

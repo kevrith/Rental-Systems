@@ -40,6 +40,11 @@ class Permission(str, enum.Enum):
     # Money
     PAYMENT_VIEW = "payment:view"
     PAYMENT_RECORD = "payment:record"
+    # Second-person sign-off on cash above the organisation's threshold
+    # (masterplan, Fraud Prevention). Deliberately not held by a caretaker:
+    # the whole point is that the person who took the money is not the
+    # person who declares it banked.
+    PAYMENT_APPROVE = "payment:approve"
     INVOICE_VIEW = "invoice:view"
     INVOICE_MANAGE = "invoice:manage"
     ARREARS_VIEW = "arrears:view"
@@ -70,6 +75,21 @@ class Permission(str, enum.Enum):
     # Customer success (Sprint 20)
     ONBOARDING_MANAGE = "onboarding:manage"
 
+    # Reporting (Sprint 21)
+    REPORT_VIEW = "report:view"
+    REPORT_MANAGE = "report:manage"
+
+    # AI and security hardening (Sprint 22)
+    FRAUD_VIEW = "fraud:view"
+    FRAUD_MANAGE = "fraud:manage"
+    SECURITY_MANAGE = "security:manage"
+
+    # Security, privacy & compliance closeout (Sprint 25)
+    VISITOR_LOG_VIEW = "visitor_log:view"
+    VISITOR_LOG_RECORD = "visitor_log:record"
+    DATA_REQUEST_MANAGE = "data_request:manage"
+    CO_TENANT_MANAGE = "co_tenant:manage"
+
 
 _FULL_OPERATOR_PERMISSIONS: set[Permission] = {
     Permission.USER_INVITE,
@@ -90,6 +110,7 @@ _FULL_OPERATOR_PERMISSIONS: set[Permission] = {
     Permission.APPLICATION_DECIDE,
     Permission.PAYMENT_VIEW,
     Permission.PAYMENT_RECORD,
+    Permission.PAYMENT_APPROVE,
     Permission.INVOICE_VIEW,
     Permission.INVOICE_MANAGE,
     Permission.ARREARS_VIEW,
@@ -109,12 +130,23 @@ _FULL_OPERATOR_PERMISSIONS: set[Permission] = {
     Permission.API_KEY_MANAGE,
     Permission.WEBHOOK_MANAGE,
     Permission.ONBOARDING_MANAGE,
+    Permission.REPORT_VIEW,
+    Permission.REPORT_MANAGE,
+    Permission.FRAUD_VIEW,
+    Permission.FRAUD_MANAGE,
+    Permission.VISITOR_LOG_VIEW,
+    Permission.VISITOR_LOG_RECORD,
+    Permission.DATA_REQUEST_MANAGE,
+    Permission.CO_TENANT_MANAGE,
 }
 
 ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
     UserRole.SYSTEM_ADMIN: set(Permission),
-    UserRole.OWNER: _FULL_OPERATOR_PERMISSIONS | {Permission.ORG_MANAGE},
-    UserRole.AGENCY_ADMIN: _FULL_OPERATOR_PERMISSIONS | {Permission.ORG_MANAGE},
+    # Security hardening (IP whitelist, session policy, audit export) is an
+    # organisation-level configuration decision — like ORG_MANAGE, it sits
+    # alongside the shared operator set rather than inside it.
+    UserRole.OWNER: _FULL_OPERATOR_PERMISSIONS | {Permission.ORG_MANAGE, Permission.SECURITY_MANAGE},
+    UserRole.AGENCY_ADMIN: _FULL_OPERATOR_PERMISSIONS | {Permission.ORG_MANAGE, Permission.SECURITY_MANAGE},
     # A property manager runs day-to-day operations but cannot reconfigure the org.
     UserRole.PROPERTY_MANAGER: _FULL_OPERATOR_PERMISSIONS,
     # A caretaker works on their assigned properties only (enforced separately by
@@ -138,6 +170,8 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.VENDOR_VIEW,
         Permission.FILE_UPLOAD,
         Permission.FILE_VIEW,
+        Permission.VISITOR_LOG_VIEW,
+        Permission.VISITOR_LOG_RECORD,
     },
     UserRole.ACCOUNTANT: {
         Permission.PROPERTY_VIEW,
@@ -146,12 +180,16 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.TENANCY_VIEW,
         Permission.PAYMENT_VIEW,
         Permission.PAYMENT_RECORD,
+        Permission.PAYMENT_APPROVE,
         Permission.INVOICE_VIEW,
         Permission.INVOICE_MANAGE,
         Permission.ARREARS_VIEW,
         Permission.DASHBOARD_VIEW,
         Permission.FINANCIALS_VIEW,
         Permission.FILE_VIEW,
+        Permission.REPORT_VIEW,
+        Permission.REPORT_MANAGE,
+        Permission.FRAUD_VIEW,
     },
     # Read-only transparency portal for owners inside an agency account (Phase 2).
     UserRole.OWNER_PORTAL_USER: {

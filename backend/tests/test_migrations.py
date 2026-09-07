@@ -36,6 +36,18 @@ ENUM_TYPES = {
     "file_category": "app.models.file:FileCategory",
     "renewal_status": "app.models.renewal:RenewalStatus",
     "task_run_status": "app.models.task_run:TaskRunStatus",
+    "portal_name": "app.models.integrations:PortalName",
+    "portal_sync_status": "app.models.integrations:PortalSyncStatus",
+    "accounting_provider": "app.models.integrations:AccountingProvider",
+    "accounting_entity_type": "app.models.integrations:AccountingEntityType",
+    "accounting_sync_status": "app.models.integrations:AccountingSyncStatus",
+    "management_agreement_status": "app.models.agency:ManagementAgreementStatus",
+    "termination_party": "app.models.agency:TerminationParty",
+    "template_channel": "app.models.communication:TemplateChannel",
+    "breach_category": "app.models.security:BreachCategory",
+    "breach_severity": "app.models.security:BreachSeverity",
+    "breach_status": "app.models.security:BreachStatus",
+    "token_purpose": "app.models.session:TokenPurpose",
 }
 
 

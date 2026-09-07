@@ -76,6 +76,8 @@ import type {
   Invitation,
   LeaseTemplate,
   MaintenanceRequest,
+  CoTenant,
+  DataRequest,
   MeterContext,
   MeterReading,
   NotificationPreference,
@@ -98,6 +100,7 @@ import type {
   Unit,
   UnitDetail,
   VacateNotice,
+  VisitorLog,
   WebhookDelivery,
   WebhookEndpoint,
   WebhookEndpointCreated,
@@ -112,6 +115,41 @@ import type {
   Referral,
   ReferralSummary,
   SupportRequest,
+  MonthlyReport,
+  RentReviewSuggestion,
+  ReportDataset,
+  ReportDatasetOption,
+  ReportDefinition,
+  ReportDefinitionInput,
+  ReportFieldMeta,
+  ReportPreviewRequest,
+  ReportPreviewResult,
+  VacancyRiskItem,
+  LeaseAnalysis,
+  LeaseSuggestion,
+  FraudAlert,
+  FraudAlertStatus,
+  AccountingConnection,
+  AccountingProvider,
+  AccountingSyncReport,
+  BankInstructions,
+  BankStatementCommitResult,
+  BankStatementCommitRow,
+  BankStatementPreview,
+  BankStatementUpload,
+  BankStatementUploadDetail,
+  PortalConnectionSummary,
+  PortalListingSync,
+  PortalName,
+  DemoDataStatus,
+  ManagementAgreement,
+  MessageTemplate,
+  MessageTemplatePreview,
+  MessageTemplateType,
+  MeterPhotoRead,
+  PaymentBehaviour,
+  TenantTurnover,
+  UtilityAnalytics,
 } from './types'
 
 const get = async <T>(url: string, params?: unknown): Promise<T> =>
@@ -210,6 +248,12 @@ export const leaseTemplatesApi = {
   }) => postBlob('/lease-templates/preview', body),
   create: (body: unknown) => post<LeaseTemplate>('/lease-templates', body),
   update: (id: string, body: unknown) => patch<LeaseTemplate>(`/lease-templates/${id}`, body),
+
+  // AI lease analysis (Sprint 22, US-096)
+  analyze: (id: string) => post<LeaseAnalysis>(`/lease-templates/${id}/analyze`),
+  analyses: (id: string) => get<LeaseAnalysis[]>(`/lease-templates/${id}/analyses`),
+  resolveSuggestion: (suggestionId: string, status: 'accepted' | 'dismissed') =>
+    patch<LeaseSuggestion>(`/lease-templates/suggestions/${suggestionId}`, { status }),
 }
 
 // ----------------------------------------------------------------------- money
@@ -238,6 +282,28 @@ export const paymentsApi = {
   stkPush: (body: { tenancy_id: string; amount: string; phone_number?: string }) =>
     post<{ payment: PaymentDetail; message: string }>('/payments/stk-push', body),
   status: (id: string) => get<PaymentDetail>(`/payments/${id}/status`),
+
+  // Dual approval for large cash (Sprint 26). A held payment is recorded
+  // but not banked — nothing is allocated or receipted until it is approved.
+  pendingApproval: () => get<PaymentDetail[]>('/payments/pending-approval'),
+  approve: (id: string, note?: string) =>
+    post<PaymentDetail>(`/payments/${id}/approve`, { note }),
+  reject: (id: string, reason: string) =>
+    post<PaymentDetail>(`/payments/${id}/reject`, { reason }),
+
+  // Bank transfer (Sprint 23, US-101)
+  bankInstructions: () => get<BankInstructions>('/payments/bank-instructions'),
+  previewBankStatement: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return apiClient
+      .post<BankStatementPreview>('/payments/bank-statements/preview', form)
+      .then((response) => response.data)
+  },
+  commitBankStatement: (rows: BankStatementCommitRow[]) =>
+    post<BankStatementCommitResult>('/payments/bank-statements/commit', { rows }),
+  bankStatements: () => get<BankStatementUpload[]>('/payments/bank-statements'),
+  bankStatement: (id: string) => get<BankStatementUploadDetail>(`/payments/bank-statements/${id}`),
 }
 
 export const arrearsApi = {
@@ -261,6 +327,40 @@ export const metersApi = {
     limit?: number
   }) => get<MeterReading[]>('/meter-readings', params),
   record: (body: unknown) => post<MeterReading>('/meter-readings', body),
+  // Camera OCR (Sprint 26). A suggestion, never an answer — the caretaker
+  // still confirms or corrects the figure before it becomes a bill.
+  readPhoto: (body: { photo_file_id: string; meter_type?: string }) =>
+    post<MeterPhotoRead>('/meter-readings/read-photo', body),
+}
+
+export const visitorLogsApi = {
+  list: (params?: {
+    unit_id?: string
+    property_id?: string
+    since?: string
+    open_only?: boolean
+    limit?: number
+  }) => get<VisitorLog[]>('/visitor-logs', params),
+  log: (body: unknown) => post<VisitorLog>('/visitor-logs', body),
+  checkOut: (id: string) => post<VisitorLog>(`/visitor-logs/${id}/check-out`),
+}
+
+export const coTenantsApi = {
+  list: (tenancyId: string) => get<CoTenant[]>(`/tenancies/${tenancyId}/co-tenants`),
+  add: (tenancyId: string, tenant_id: string) =>
+    post<CoTenant>(`/tenancies/${tenancyId}/co-tenants`, { tenant_id }),
+  remove: (tenancyId: string, tenantId: string) =>
+    del<void>(`/tenancies/${tenancyId}/co-tenants/${tenantId}`),
+  promote: (tenancyId: string, tenantId: string) =>
+    post<TenancyDetail>(`/tenancies/${tenancyId}/co-tenants/${tenantId}/promote`),
+}
+
+export const privacyApi = {
+  list: (tenant_id?: string) => get<DataRequest[]>('/privacy/data-requests', { tenant_id }),
+  requestExport: (tenantId: string) =>
+    post<DataRequest>(`/privacy/tenants/${tenantId}/export`),
+  requestErasure: (tenantId: string) =>
+    post<DataRequest>(`/privacy/tenants/${tenantId}/erase`),
 }
 
 export const maintenanceApi = {
@@ -535,6 +635,46 @@ export const activityApi = {
 export const organizationApi = {
   me: () => get<Record<string, unknown>>('/organizations/me'),
   update: (body: unknown) => patch<Record<string, unknown>>('/organizations/me', body),
+
+  // Sample data (Sprint 26). Teardown deletes exactly the rows the seeding
+  // created, so it can never take a real one with it.
+  demoData: () => get<DemoDataStatus>('/organizations/demo-data'),
+  loadDemoData: () => post<DemoDataStatus>('/organizations/demo-data'),
+  removeDemoData: () => del<{ message: string }>('/organizations/demo-data'),
+}
+
+// --------------------------------------------------------- message templates
+
+export const messageTemplatesApi = {
+  types: () => get<MessageTemplateType[]>('/message-templates/types'),
+  list: () => get<MessageTemplate[]>('/message-templates'),
+  save: (body: {
+    notification_type: string
+    channel: string
+    title?: string | null
+    body: string
+    is_active?: boolean
+  }) => put<MessageTemplate>('/message-templates', body),
+  preview: (body: { notification_type: string; title?: string | null; body: string }) =>
+    post<MessageTemplatePreview>('/message-templates/preview', body),
+  remove: (id: string) => del<{ message: string }>(`/message-templates/${id}`),
+}
+
+// ----------------------------------------------------- management agreements
+
+export const managementAgreementsApi = {
+  list: (params?: { owner_profile_id?: string; live_only?: boolean }) =>
+    get<ManagementAgreement[]>('/agency/management-agreements', params),
+  get: (id: string) => get<ManagementAgreement>(`/agency/management-agreements/${id}`),
+  create: (body: unknown) => post<ManagementAgreement>('/agency/management-agreements', body),
+  send: (id: string, body: { agency_signatory_name: string; agency_signatory_phone: string }) =>
+    post<ManagementAgreement>(`/agency/management-agreements/${id}/send`, body),
+  terminate: (
+    id: string,
+    body: { requested_by: 'owner' | 'agency'; reason?: string; effective_date?: string },
+  ) => post<ManagementAgreement>(`/agency/management-agreements/${id}/terminate`, body),
+  withdrawTermination: (id: string) =>
+    post<ManagementAgreement>(`/agency/management-agreements/${id}/withdraw-termination`),
 }
 
 export const teamApi = {
@@ -657,6 +797,15 @@ export const analyticsApi = {
     get<CashFlowPoint[]>('/analytics/cash-flow-forecast', { months_ahead }),
   expiringLeases: () => get<ExpiringLeases>('/analytics/expiring-leases'),
   maintenance: () => get<MaintenanceAnalytics>('/analytics/maintenance'),
+  vacancyRisk: (days_ahead = 90) =>
+    get<VacancyRiskItem[]>('/analytics/vacancy-risk', { days_ahead }),
+  rentReview: (min_months = 12) =>
+    get<RentReviewSuggestion[]>('/analytics/rent-review', { min_months }),
+  // Sprint 26 — the Module 12 metrics that had never been computed.
+  utilities: (months = 6) => get<UtilityAnalytics>('/analytics/utilities', { months }),
+  paymentBehaviour: (months = 6) =>
+    get<PaymentBehaviour>('/analytics/payment-behaviour', { months }),
+  turnover: (months = 12) => get<TenantTurnover>('/analytics/turnover', { months }),
 }
 
 // ----------------------------------------------------------------------- eTIMS
@@ -676,6 +825,29 @@ export const etimsApi = {
     post<{ id: string; status: string; attempts: number; last_error: string | null }>(
       `/etims/submissions/${submissionId}/retry`,
     ),
+}
+
+// -------------------------------------------------------- partner integrations
+
+export const portalsApi = {
+  list: () => get<PortalConnectionSummary[]>('/integrations/portals'),
+  save: (portal: PortalName, body: { api_key: string; account_id?: string }) =>
+    put<PortalConnectionSummary>(`/integrations/portals/${portal}`, body),
+  remove: (portal: PortalName) => del<{ removed: boolean }>(`/integrations/portals/${portal}`),
+  listingStatus: (listingId: string) =>
+    get<PortalListingSync[]>(`/integrations/portals/listings/${listingId}`),
+}
+
+export const accountingApi = {
+  list: () => get<AccountingConnection[]>('/integrations/accounting'),
+  connect: (provider: AccountingProvider, environment: 'sandbox' | 'production') =>
+    get<{ authorize_url: string }>(`/integrations/accounting/${provider}/connect`, { environment }),
+  disconnect: (provider: AccountingProvider) =>
+    del<{ removed: boolean }>(`/integrations/accounting/${provider}`),
+  report: (provider: AccountingProvider) =>
+    get<AccountingSyncReport>(`/integrations/accounting/${provider}/report`),
+  sync: (provider: AccountingProvider) =>
+    post<AccountingSyncReport>(`/integrations/accounting/${provider}/sync`),
 }
 
 // --------------------------------------------------------------- demand letters
@@ -753,6 +925,7 @@ export const portalApi = {
     post<{ payment_id: string; reference_code: string; message: string }>('/portal/pay', body),
   paymentStatus: (id: string) => get<PaymentDetail>(`/portal/payments/${id}/status`),
   payments: () => get<PaymentDetail[]>('/portal/payments'),
+  bankInstructions: () => get<BankInstructions>('/portal/bank-instructions'),
   invoices: () => get<InvoiceDetail[]>('/portal/invoices'),
   documents: () => get<StoredDocument[]>('/portal/documents'),
   lease: () => get<StoredDocument>('/portal/lease'),
@@ -775,6 +948,20 @@ export const portalApi = {
       full_name: string
       tokens: { access_token: string; refresh_token: string }
     }>(`/portal/setup?tenant_id=${tenant_id}`, body),
+
+  // Magic link (Sprint 26). The request always answers the same way, whether
+  // or not the number is a tenant — otherwise the endpoint is a directory of
+  // which numbers belong to which landlord's tenants.
+  requestMagicLink: (phone_number: string) =>
+    post<{ message: string }>('/portal/magic-link', { phone_number }),
+  verifyMagicLink: (body: { token: string; tenant_id: string }) =>
+    post<{
+      tenant_id: string
+      full_name: string
+      tokens: { access_token: string; refresh_token: string }
+    }>('/portal/magic-link/verify', body),
+  requestDataExport: () => post<{ id: string; download_url: string | null }>('/portal/data-requests/export'),
+  requestDataErasure: () => post<{ message: string }>('/portal/data-requests/erase'),
 }
 
 // ---------------------------------------------------------------- agency mode
@@ -900,4 +1087,31 @@ export const internalApi = {
     post<ChangelogEntry>('/internal/changelog-entries', body),
   updateChangelogEntry: (id: string, body: { title: string; body: string; is_published: boolean }) =>
     patch<ChangelogEntry>(`/internal/changelog-entries/${id}`, body),
+}
+
+// ------------------------------------------------------------------- reports
+
+export const reportsApi = {
+  datasets: () => get<ReportDatasetOption[]>('/reports/datasets'),
+  fields: (dataset: ReportDataset) => get<ReportFieldMeta[]>(`/reports/datasets/${dataset}/fields`),
+  preview: (body: ReportPreviewRequest) => post<ReportPreviewResult>('/reports/preview', body),
+
+  list: () => get<ReportDefinition[]>('/reports/definitions'),
+  get: (id: string) => get<ReportDefinition>(`/reports/definitions/${id}`),
+  create: (body: ReportDefinitionInput) => post<ReportDefinition>('/reports/definitions', body),
+  update: (id: string, body: Partial<ReportDefinitionInput>) =>
+    patch<ReportDefinition>(`/reports/definitions/${id}`, body),
+  remove: (id: string) => del<void>(`/reports/definitions/${id}`),
+
+  monthly: () => get<MonthlyReport[]>('/reports/monthly'),
+}
+
+// -------------------------------------------------------------------- security
+
+export const securityApi = {
+  fraudAlerts: (status?: FraudAlertStatus) => get<FraudAlert[]>('/security/fraud-alerts', { status }),
+  resolveFraudAlert: (id: string, status: 'suppressed' | 'resolved') =>
+    patch<FraudAlert>(`/security/fraud-alerts/${id}`, { status }),
+  exportAuditLog: (params: { format: 'csv' | 'pdf'; date_from?: string; date_to?: string }) =>
+    getBlob('/security/audit-log/export', params),
 }

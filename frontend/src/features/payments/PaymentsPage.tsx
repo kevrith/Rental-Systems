@@ -5,6 +5,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 
 import { paymentsApi, propertiesApi } from '@/api'
 import { PageHeader } from '@/components/PageHeader'
+import { PendingApprovalPanel } from '@/features/payments/PendingApprovalPanel'
 import {
   Badge,
   Card,
@@ -51,13 +52,21 @@ export function PaymentsPage() {
         description="Every rent payment, however it was collected."
         actions={
           canRecord && (
-            <Link to="/payments/new" className={linkButtonClass()}>
-              <Plus className="h-4 w-4" />
-              Record payment
-            </Link>
+            <>
+              <Link to="/payments/bank-statements" className={linkButtonClass('outline')}>
+                Bank reconciliation
+              </Link>
+              <Link to="/payments/new" className={linkButtonClass()}>
+                <Plus className="h-4 w-4" />
+                Record payment
+              </Link>
+            </>
           )
         }
       />
+
+      {/* Held cash first: it is money the books do not yet know about. */}
+      <PendingApprovalPanel />
 
       <div className="mb-4 flex flex-wrap gap-3">
         <Select

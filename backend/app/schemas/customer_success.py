@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.models.customer_success import (
     FeatureRequestStatus,
@@ -30,6 +30,12 @@ class OnboardingStepUpdate(BaseModel):
     step: str = Field(pattern="^(added_property|added_units|invited_caretaker|added_tenant|setup_payment)$")
 
 
+# Where a tutorial video may be hosted. An allowlist rather than a free
+# string: the frontend picks an embed player from this, and accepting an
+# arbitrary provider would mean accepting an arbitrary iframe source.
+VIDEO_PROVIDERS = ("youtube", "vimeo")
+
+
 class HelpArticleRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,15 +45,42 @@ class HelpArticleRead(BaseModel):
     body: str
     category: str
     is_published: bool
+    video_url: str | None = None
+    video_duration_seconds: int | None = None
+    video_thumbnail_url: str | None = None
+    video_provider: str | None = None
     created_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_video(self) -> bool:
+        return bool(self.video_url)
 
 
 class HelpArticleWrite(BaseModel):
     slug: str = Field(min_length=2, max_length=120)
     title: str = Field(min_length=2, max_length=255)
+    # Still required on a video article: text is searchable, works on a metered
+    # connection, and is what most of this product's audience will actually
+    # read (Module 24).
     body: str = Field(min_length=1)
     category: str = Field(min_length=2, max_length=100)
     is_published: bool = True
+
+    video_url: str | None = Field(default=None, max_length=1024)
+    video_duration_seconds: int | None = Field(default=None, ge=1, le=36000)
+    video_thumbnail_url: str | None = Field(default=None, max_length=1024)
+    video_provider: str | None = Field(default=None, max_length=32)
+
+    @model_validator(mode="after")
+    def _check_video(self) -> "HelpArticleWrite":
+        if self.video_url is None:
+            return self
+        if not self.video_url.startswith("https://"):
+            raise ValueError("A tutorial video URL must be https")
+        if self.video_provider not in VIDEO_PROVIDERS:
+            raise ValueError(f"video_provider must be one of: {', '.join(VIDEO_PROVIDERS)}")
+        return self
 
 
 class SupportRequestCreate(BaseModel):

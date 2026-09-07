@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  AlertTriangle,
   Download,
   FileText,
   FolderOpen,
@@ -7,13 +8,14 @@ import {
   Pencil,
   Phone,
   Send,
+  ShieldAlert,
   ShieldCheck,
   UserPlus,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
-import { paymentsApi, portalApi, tenanciesApi, tenantsApi } from '@/api'
+import { paymentsApi, portalApi, privacyApi, tenanciesApi, tenantsApi } from '@/api'
 import { PageHeader } from '@/components/PageHeader'
 import {
   Alert,
@@ -23,6 +25,7 @@ import {
   CardBody,
   CardHeader,
   CardTitle,
+  Dialog,
   EmptyState,
   PAYMENT_STATUS_TONE,
   PageLoader,
@@ -317,6 +320,12 @@ export function TenantDetailPage() {
             </CardBody>
           </Card>
 
+          <DataPrivacyCard
+            tenantId={tenantId!}
+            erasedAt={record.erased_at}
+            canManage={permissions?.includes('data_request:manage')}
+          />
+
           {record.emergency_contact_name && (
             <Card>
               <CardHeader>
@@ -355,5 +364,102 @@ function Detail({ label, value }: { label: string; value: React.ReactNode }) {
       <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
       <dd className="mt-0.5 text-slate-800">{value}</dd>
     </div>
+  )
+}
+
+/** Raise a data export or erasure request on the tenant's behalf (Sprint 25,
+ * US-106). A tenant can also do both themselves from their own portal. */
+function DataPrivacyCard({
+  tenantId,
+  erasedAt,
+  canManage,
+}: {
+  tenantId: string
+  erasedAt: string | null
+  canManage?: boolean
+}) {
+  const [eraseOpen, setEraseOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const exportData = useMutation({
+    mutationFn: () => privacyApi.requestExport(tenantId),
+    onSuccess: (result) => {
+      if (result.export_url) window.open(result.export_url, '_blank', 'noopener')
+      setNotice('Data export generated.')
+    },
+    onError: (exportError) => setError(errorMessage(exportError)),
+  })
+
+  const eraseData = useMutation({
+    mutationFn: () => privacyApi.requestErasure(tenantId),
+    onSuccess: () => {
+      setEraseOpen(false)
+      setNotice('Personal data erased. Financial records were retained.')
+    },
+    onError: (eraseError) => setError(errorMessage(eraseError)),
+  })
+
+  if (!canManage) return null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Data privacy</CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-3">
+        {notice && <Alert tone="success">{notice}</Alert>}
+        {error && <Alert tone="danger">{error}</Alert>}
+
+        {erasedAt ? (
+          <Alert tone="warn" icon={<AlertTriangle className="h-4 w-4" />}>
+            This tenant's personal data was erased on {dateTime(erasedAt)}.
+          </Alert>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              icon={<Download className="h-3.5 w-3.5" />}
+              loading={exportData.isPending}
+              onClick={() => exportData.mutate()}
+            >
+              Export data
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-danger-600"
+              icon={<ShieldAlert className="h-3.5 w-3.5" />}
+              onClick={() => setEraseOpen(true)}
+            >
+              Erase data
+            </Button>
+          </div>
+        )}
+      </CardBody>
+
+      <Dialog
+        open={eraseOpen}
+        onClose={() => setEraseOpen(false)}
+        title="Erase this tenant's personal data?"
+        description="This cannot be undone."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setEraseOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" loading={eraseData.isPending} onClick={() => eraseData.mutate()}>
+              Erase data
+            </Button>
+          </>
+        }
+      >
+        <Alert tone="warn" icon={<AlertTriangle className="h-4 w-4" />}>
+          Name, contact details, ID and documents will be permanently redacted. Tenancy, invoice
+          and payment records are retained, as Kenyan law requires.
+        </Alert>
+      </Dialog>
+    </Card>
   )
 }

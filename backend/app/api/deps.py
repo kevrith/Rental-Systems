@@ -85,10 +85,15 @@ async def get_org_context(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> OrgContext:
     organization = await db.get(Organization, current_user.organization_id)
-    if organization is None or not organization.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Organization is suspended or missing"
-        )
+    if organization is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization not found")
+    if not organization.is_active:
+        # Say why, when there is a reason on record (Sprint 26). A locked door
+        # with no notice on it just becomes a support ticket.
+        detail = "This account has been suspended."
+        if organization.suspension_reason:
+            detail = f"{detail} Reason: {organization.suspension_reason}"
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
     return OrgContext(user=current_user, organization=organization)
 
 
@@ -107,6 +112,22 @@ def require(*permissions: Permission):
     return dependency
 
 
+def assert_can_write(context: OrgContext) -> None:
+    """The non-permission half of `require_write`, callable mid-handler.
+
+    A route whose required permission depends on a query parameter cannot
+    declare it as a dependency, so it resolves the permission itself and calls
+    this for the account-state checks that would otherwise be skipped.
+    """
+    if context.role in READ_ONLY_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account has read-only access")
+    if context.organization.is_trial_expired:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Your free trial has ended. Upgrade your plan to add or change data.",
+        )
+
+
 def require_write(*permissions: Permission):
     """Like `require`, but also refuses writes from read-only roles and from
     organizations whose trial has lapsed (US-006).
@@ -122,15 +143,7 @@ def require_write(*permissions: Permission):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Your role ({context.role.value}) lacks: {', '.join(p.value for p in missing)}",
             )
-        if context.role in READ_ONLY_ROLES:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="This account has read-only access"
-            )
-        if context.organization.is_trial_expired:
-            raise HTTPException(
-                status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail="Your free trial has ended. Upgrade your plan to add or change data.",
-            )
+        assert_can_write(context)
         return context
 
     return dependency

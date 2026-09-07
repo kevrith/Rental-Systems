@@ -129,7 +129,7 @@ async def _payment_rows(
             "Amount": payment.amount,
             "Method": payment.method,
             "Status": payment.status,
-            "M-Pesa code": payment.mpesa_receipt_number,
+            "M-Pesa code": payment.mpesa_receipt,
             "Recorded on": payment.created_at,
         }
         for payment, tenant, unit, property_record in rows.all()

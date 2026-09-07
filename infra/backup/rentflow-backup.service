@@ -1,0 +1,26 @@
+[Unit]
+Description=RentFlow PostgreSQL backup
+Documentation=file:///opt/rentflow/infra/backup/README.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=rentflow
+# backup.env holds the database URL and R2 credentials. Root-owned, mode 600 —
+# systemd reads it before dropping to the service user, so the credentials never
+# need to be readable by the account that runs the dump.
+EnvironmentFile=/opt/rentflow/infra/backup/backup.env
+ExecStart=/opt/rentflow/infra/backup/backup.sh
+# A dump that hangs on a lock must not still be running when tomorrow's fires.
+TimeoutStartSec=3600
+
+# The job reads a database and writes one directory. Nothing else.
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+ReadWritePaths=/var/backups/rentflow
+
+[Install]
+WantedBy=multi-user.target

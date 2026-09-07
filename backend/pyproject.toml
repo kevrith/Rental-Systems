@@ -29,3 +29,36 @@ log_level = "WARNING"
 filterwarnings = [
     "ignore::DeprecationWarning:starlette.testclient",
 ]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+omit = [
+    # Generated migration scripts: exercised end-to-end by test_migrations.py,
+    # but line coverage over them measures nothing useful.
+    "alembic/*",
+    "app/tasks/celery_app.py",
+]
+
+[tool.coverage.report]
+# The Definition of Done asks for 80%. Measured for the first time in Sprint 26,
+# the real figure is 66%, so that is the floor set here — a ratchet, not the
+# target. A number nobody can pass is a number that gets deleted from CI within
+# a week, and 66 enforced beats 80 ignored.
+#
+# The gap is almost entirely in two places, both visible in the report:
+# `app/tasks/scheduled.py` at 20% (Celery entry points, exercised through their
+# services rather than through the task wrapper) and the service layer's less
+# travelled branches. Raise this line as those are covered; do not raise it
+# ahead of them.
+fail_under = 66
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+    # Optional integrations degrade to a no-op when unconfigured; the branch
+    # that talks to the third party cannot run in CI by design.
+    "except ImportError:",
+]

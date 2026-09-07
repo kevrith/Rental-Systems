@@ -27,6 +27,29 @@ class MeterReadingCreate(BaseModel):
     gps_latitude: float | None = Field(default=None, ge=-90, le=90)
     gps_longitude: float | None = Field(default=None, ge=-180, le=180)
 
+    # What the OCR pass suggested, echoed back by the capture form so the
+    # record shows whether the caretaker accepted the machine's number or
+    # overrode it. Absent when no suggestion was asked for.
+    ocr_reading: Decimal | None = Field(default=None, ge=0)
+    ocr_confidence: Decimal | None = Field(default=None, ge=0, le=100)
+
+
+class MeterPhotoReadRequest(BaseModel):
+    photo_file_id: uuid.UUID
+    meter_type: MeterType | None = None
+
+
+class MeterPhotoReadResult(BaseModel):
+    """A suggestion, never an answer — see `app.services.ocr_service`."""
+
+    reading: Decimal | None
+    confidence: Decimal | None
+    meter_kind: str | None
+    message: str | None
+    # False when the reader is unsure enough that the form should leave the
+    # field empty rather than pre-fill a number nobody checked.
+    high_confidence: bool
+
 
 class MeterReadingRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -44,6 +67,9 @@ class MeterReadingRead(BaseModel):
     photo_file_id: uuid.UUID | None
     billed_invoice_id: uuid.UUID | None
     notes: str | None
+    ocr_reading: Decimal | None
+    ocr_confidence: Decimal | None
+    ocr_accepted: bool | None
     created_at: datetime
 
 
@@ -214,6 +240,43 @@ class CaretakerActivitySummary(BaseModel):
     last_login_at: datetime | None
     days_since_login: int | None
     total_actions: int
+
+
+# ----------------------------------------------------------------- visitor log
+
+
+class VisitorLogCreate(BaseModel):
+    unit_id: uuid.UUID
+    visitor_name: str = Field(min_length=1, max_length=255)
+    visitor_phone: str | None = Field(default=None, max_length=32)
+    purpose: str | None = Field(default=None, max_length=1000)
+    checked_in_at: datetime | None = Field(default=None, description="Defaults to now if omitted")
+    checked_out_at: datetime | None = Field(
+        default=None, description="Set when logging a visit that has already ended"
+    )
+    gps_latitude: float | None = Field(default=None, ge=-90, le=90)
+    gps_longitude: float | None = Field(default=None, ge=-180, le=180)
+
+
+class VisitorLogRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    property_id: uuid.UUID
+    unit_id: uuid.UUID
+    visitor_name: str
+    visitor_phone: str | None
+    purpose: str | None
+    checked_in_at: datetime
+    checked_out_at: datetime | None
+    created_at: datetime
+
+
+class VisitorLogDetail(VisitorLogRead):
+    unit_number: str | None = None
+    property_name: str | None = None
+    recorded_by_name: str | None = None
 
 
 class CaretakerTaskList(BaseModel):

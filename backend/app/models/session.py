@@ -64,6 +64,10 @@ class TokenPurpose(str, enum.Enum):
     EMAIL_VERIFICATION = "email_verification"
     PASSWORD_RESET = "password_reset"
     TENANT_PORTAL_INVITE = "tenant_portal_invite"
+    # A tenant who has already set up the portal but cannot remember their
+    # password signs in from a one-tap link instead (masterplan, Security §
+    # Authentication Layers). Short-lived and single-use, unlike the invite.
+    TENANT_PORTAL_MAGIC_LINK = "tenant_portal_magic_link"
 
 
 class VerificationToken(UUIDPrimaryKeyMixin, TimestampMixin, Base):

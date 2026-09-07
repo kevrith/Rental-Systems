@@ -16,6 +16,7 @@ import {
   Field,
   Input,
   PageLoader,
+  Select,
   Table,
   Tab,
   Tabs,
@@ -115,10 +116,25 @@ function HelpArticleDialog({ article, onClose }: { article: HelpArticle | null; 
   const [category, setCategory] = useState(article?.category ?? '')
   const [body, setBody] = useState(article?.body ?? '')
   const [isPublished, setIsPublished] = useState(article?.is_published ?? true)
+  const [videoUrl, setVideoUrl] = useState(article?.video_url ?? '')
+  const [videoProvider, setVideoProvider] = useState(article?.video_provider ?? 'youtube')
+  const [videoSeconds, setVideoSeconds] = useState(
+    article?.video_duration_seconds ? String(article.video_duration_seconds) : '',
+  )
 
   const save = useMutation({
     mutationFn: () => {
-      const payload = { slug, title, category, body, is_published: isPublished }
+      const payload = {
+        slug,
+        title,
+        category,
+        body,
+        is_published: isPublished,
+        // An empty URL clears the video rather than saving an empty string.
+        video_url: videoUrl.trim() || null,
+        video_provider: videoUrl.trim() ? videoProvider : null,
+        video_duration_seconds: videoUrl.trim() && videoSeconds ? Number(videoSeconds) : null,
+      }
       return article ? internalApi.updateHelpArticle(article.id, payload) : internalApi.createHelpArticle(payload)
     },
     onSuccess: () => {
@@ -153,9 +169,43 @@ function HelpArticleDialog({ article, onClose }: { article: HelpArticle | null; 
         <Field label="Category">
           <Input value={category} onChange={(event) => setCategory(event.target.value)} required maxLength={100} />
         </Field>
-        <Field label="Body">
+        <Field label="Body" hint="Required even for a video article — this is what search finds.">
           <Textarea value={body} onChange={(event) => setBody(event.target.value)} required rows={8} />
         </Field>
+        <Field
+          label="Tutorial video"
+          hint="Optional. Must be https, and from a provider the app has a player for."
+        >
+          <Input
+            type="url"
+            value={videoUrl}
+            onChange={(event) => setVideoUrl(event.target.value)}
+            placeholder="https://www.youtube.com/watch?v=..."
+            maxLength={1024}
+          />
+        </Field>
+        {videoUrl.trim() && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Provider">
+              <Select
+                value={videoProvider}
+                onChange={(event) => setVideoProvider(event.target.value)}
+              >
+                <option value="youtube">YouTube</option>
+                <option value="vimeo">Vimeo</option>
+              </Select>
+            </Field>
+            <Field label="Length (seconds)">
+              <Input
+                type="number"
+                min="1"
+                value={videoSeconds}
+                onChange={(event) => setVideoSeconds(event.target.value)}
+                placeholder="95"
+              />
+            </Field>
+          </div>
+        )}
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input
             type="checkbox"

@@ -68,6 +68,17 @@ class MeterReading(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True
     )
 
+    # --- camera OCR (Module 5) ---
+    # What the OCR pass read off `photo_file_id`, and how sure it was. Kept
+    # alongside the human figure rather than replacing it: the caretaker always
+    # confirms or corrects the number, so `current_reading` is what a person
+    # asserted and these two are the evidence of what the machine proposed.
+    ocr_reading: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    ocr_confidence: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    # True when the submitted reading matched the OCR suggestion exactly. Null
+    # when no OCR was run at all, which is not the same as a rejected suggestion.
+    ocr_accepted: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
     unit: Mapped["Unit"] = relationship()
 
     __table_args__ = (
@@ -312,3 +323,34 @@ class VacateNotice(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
     submitted_by_tenant_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True
     )
+
+
+class VisitorLog(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A caretaker's record of a visitor to a unit (Sprint 25, US-109).
+
+    Logged in one step at check-in; check-out is a separate action so a
+    caretaker can close out a visitor who is still on site when the entry was
+    made. Deliberately a plain record, not a state machine — there is nothing
+    here to approve or reject, only a timestamped fact.
+    """
+
+    __tablename__ = "visitor_logs"
+
+    property_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("properties.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    unit_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("units.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    visitor_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    visitor_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    purpose: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    checked_in_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    checked_out_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    recorded_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    gps_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gps_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)

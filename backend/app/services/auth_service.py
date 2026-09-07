@@ -17,6 +17,7 @@ from app.core.security import (
 )
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.organization import OperatingMode, Organization, SubscriptionPlan
+from app.models.security import SecurityEventType
 from app.models.session import TokenPurpose, VerificationToken
 from app.models.user import DEFAULT_INACTIVITY_TIMEOUT_MINUTES, User, UserRole
 from app.schemas.auth import (
@@ -25,7 +26,14 @@ from app.schemas.auth import (
     RegisterRequest,
     TokenResponse,
 )
-from app.services import notification_service, otp_service, referral_service, session_service
+from app.services import (
+    notification_service,
+    otp_service,
+    referral_service,
+    security_service,
+    session_service,
+    webauthn_service,
+)
 from app.services.notifications import get_email_notifier, get_sms_notifier, normalize_phone
 
 LOGIN_OTP_PURPOSE = "login"
@@ -233,9 +241,36 @@ async def initiate_login(
     user = await db.scalar(select(User).where(User.email == payload.email))
     if not user or not verify_password(payload.password, user.password_hash):
         await _register_failed_login(payload.email)
+        if user:
+            # An unknown email carries no organization to attribute the attempt
+            # to, and recording one would double as an enumeration oracle.
+            await security_service.record_event(
+                db,
+                organization_id=user.organization_id,
+                event_type=SecurityEventType.LOGIN_FAILED,
+                user_id=user.id,
+                request=request,
+            )
+            await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     if not user.is_active or user.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+
+    organization = await db.get(Organization, user.organization_id)
+    client = session_service.client_ip(request)
+    if organization and not security_service.ip_allowed(organization.ip_whitelist, client):
+        await security_service.record_event(
+            db,
+            organization_id=organization.id,
+            event_type=SecurityEventType.LOGIN_BLOCKED_IP,
+            user_id=user.id,
+            request=request,
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Sign-in is not allowed from this network. Contact your administrator.",
+        )
 
     await _clear_failed_logins(payload.email)
 
@@ -255,6 +290,12 @@ async def initiate_login(
     challenge_token = await otp_service.create_login_challenge(
         str(user.id), remember_device=payload.remember_device, device_was_known=was_known
     )
+
+    # Biometric login (US-108) rides the same challenge as an alternative to the
+    # SMS code — offered only when this user has a passkey registered, so an
+    # account with none never sees a dead-end "use your fingerprint" button.
+    webauthn_options = await webauthn_service.authentication_options_for_login(db, challenge_token, user)
+
     await db.commit()
 
     return LoginChallengeResponse(
@@ -262,6 +303,7 @@ async def initiate_login(
         challenge_token=challenge_token,
         expires_in=settings.OTP_TTL_SECONDS,
         message=f"Enter the code sent to {_mask_phone(user.phone_number)}",
+        webauthn_options=webauthn_options,
     )
 
 
@@ -288,6 +330,41 @@ async def complete_login(
     user = await db.get(User, user_id)
     if not user or not user.is_active or user.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+
+    return await _finalize_login(
+        db,
+        user,
+        request,
+        remember_device=remember_device or challenge["remember_device"],
+        device_was_known=challenge["device_was_known"],
+    )
+
+
+async def complete_login_with_webauthn(
+    db: AsyncSession,
+    challenge_token: str,
+    credential: dict,
+    remember_device: bool = False,
+    request: Request | None = None,
+) -> TokenResponse:
+    """Step 2 of login via biometric/passkey instead of the SMS OTP (US-108).
+
+    Rides the same login challenge `initiate_login` created — whichever of the
+    OTP or the passkey assertion is submitted first completes the login; the
+    other is simply never consumed.
+    """
+    challenge = await otp_service.resolve_login_challenge(challenge_token)
+    if not challenge:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Login session expired — please log in again"
+        )
+
+    user = await db.get(User, challenge["user_id"])
+    if not user or not user.is_active or user.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+
+    await webauthn_service.verify_login_assertion(db, challenge_token, credential)
+    await otp_service.consume_login_challenge(challenge_token)
 
     return await _finalize_login(
         db,

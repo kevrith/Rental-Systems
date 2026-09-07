@@ -70,6 +70,9 @@ class ApiKey(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Sprint 22 (US-098): when the 90-day rotation reminder was last sent, so the
+    # daily sweep never repeats it before the next interval is due.
+    rotation_reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def is_usable(self, now: datetime) -> bool:
         if self.revoked_at is not None:

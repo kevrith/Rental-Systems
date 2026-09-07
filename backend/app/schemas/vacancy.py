@@ -87,6 +87,7 @@ class InquiryRead(BaseModel):
     email: str | None
     message: str | None
     stage: LeadStage
+    source: str = "direct"
     application_id: uuid.UUID | None
     last_contacted_at: datetime | None
     notes: str | None

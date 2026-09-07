@@ -24,10 +24,13 @@ from app.schemas.auth import (
     TokenResponse,
     VerifyEmailRequest,
     VerifyLoginOtpRequest,
+    VerifyLoginWebauthnRequest,
     VerifyPhoneRequest,
+    WebauthnCredentialRead,
+    WebauthnRegistrationVerify,
 )
 from app.schemas.user import UpdateProfileRequest, UserProfile, UserRead
-from app.services import auth_service, session_service, user_service
+from app.services import auth_service, session_service, user_service, webauthn_service
 
 router = APIRouter()
 
@@ -56,6 +59,16 @@ async def verify_login_otp(
     """Step 2: verify the OTP and open a session."""
     return await auth_service.complete_login(
         db, payload.challenge_token, payload.otp_code, payload.remember_device, request
+    )
+
+
+@router.post("/login/verify-webauthn", response_model=TokenResponse)
+async def verify_login_webauthn(
+    payload: VerifyLoginWebauthnRequest, request: Request, db: AsyncSession = Depends(get_db)
+) -> TokenResponse:
+    """Step 2, biometric path: verify a passkey assertion instead of an OTP."""
+    return await auth_service.complete_login_with_webauthn(
+        db, payload.challenge_token, payload.credential, payload.remember_device, request
     )
 
 
@@ -172,6 +185,18 @@ async def update_me(
     return UserProfile(**UserRead.model_validate(user).model_dump(), permissions=permissions_for(user.role))
 
 
+@router.post("/me/data-export")
+async def export_own_data(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Self-service data export (Sprint 25, US-106). Erasure already has a
+    working path at `/me/delete` (US-004)."""
+    download_url = await user_service.export_own_data(db, current_user, request)
+    return {"download_url": download_url}
+
+
 @router.post("/me/delete", response_model=MessageResponse)
 async def request_account_deletion(
     request: Request,
@@ -237,6 +262,49 @@ async def revoke_other_sessions(
     revoked = await session_service.revoke_all(db, current_user.id, _current_session_id(request))
     await db.commit()
     return MessageResponse(message=f"Signed out of {revoked} other session(s)")
+
+
+# --------------------------------------------------------------------- webauthn
+
+
+@router.post("/webauthn/register/options")
+async def webauthn_register_options(
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> dict:
+    options = await webauthn_service.registration_options(db, current_user)
+    return {"options": options}
+
+
+@router.post("/webauthn/register/verify", response_model=WebauthnCredentialRead)
+async def webauthn_register_verify(
+    payload: WebauthnRegistrationVerify,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WebauthnCredentialRead:
+    record = await webauthn_service.verify_registration(
+        db, current_user, payload.credential, payload.device_name, request
+    )
+    return WebauthnCredentialRead.model_validate(record)
+
+
+@router.get("/webauthn/credentials", response_model=list[WebauthnCredentialRead])
+async def webauthn_list_credentials(
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> list[WebauthnCredentialRead]:
+    records = await webauthn_service.list_credentials(db, current_user)
+    return [WebauthnCredentialRead.model_validate(record) for record in records]
+
+
+@router.delete("/webauthn/credentials/{credential_id}", response_model=MessageResponse)
+async def webauthn_delete_credential(
+    credential_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    await webauthn_service.delete_credential(db, current_user, credential_id, request)
+    return MessageResponse(message="Passkey removed")
 
 
 def _current_session_id(request: Request) -> uuid.UUID | None:

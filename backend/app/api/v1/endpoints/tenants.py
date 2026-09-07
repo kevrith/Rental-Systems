@@ -10,11 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import OrgContext, require, require_write
 from app.core.database import get_db
 from app.core.permissions import Permission
+from app.models.ai_analysis import LeaseAnalysis, LeaseSuggestion
 from app.models.billing import Invoice, InvoiceStatus
 from app.models.file import StoredFile
 from app.models.property import Property, Unit
 from app.models.tenant import LeaseTemplate, Tenancy, TenancyStatus, Tenant
+from app.schemas.ai import LeaseAnalysisRead, LeaseSuggestionRead, ResolveSuggestionRequest
 from app.schemas.tenant import (
+    CoTenantAdd,
+    CoTenantRead,
     LeaseTemplateCreate,
     LeaseTemplatePreview,
     LeaseTemplateRead,
@@ -29,7 +33,8 @@ from app.schemas.tenant import (
     TenantUpdate,
     VacateTenancyRequest,
 )
-from app.services import audit_service, file_service, lease_service, tenant_service
+from app.services import ai_service, audit_service, file_service, lease_service, tenant_service
+from app.services.ai_service import AiServiceError
 
 router = APIRouter()
 tenancies_router = APIRouter()
@@ -332,6 +337,67 @@ async def vacate_tenancy(
     return await _detail(db, tenancy)
 
 
+@tenancies_router.get("/{tenancy_id}/co-tenants", response_model=list[CoTenantRead])
+async def list_co_tenants(
+    tenancy_id: uuid.UUID,
+    context: OrgContext = Depends(require(Permission.TENANCY_VIEW)),
+    db: AsyncSession = Depends(get_db),
+) -> list[CoTenantRead]:
+    rows = await tenant_service.list_co_tenants(db, context, tenancy_id)
+    return [
+        CoTenantRead(
+            **CoTenantRead.model_validate(co_tenant).model_dump(exclude={"tenant_name", "tenant_phone"}),
+            tenant_name=tenant.full_name if tenant else None,
+            tenant_phone=tenant.phone_number if tenant else None,
+        )
+        for co_tenant, tenant in rows
+    ]
+
+
+@tenancies_router.post(
+    "/{tenancy_id}/co-tenants", response_model=CoTenantRead, status_code=status.HTTP_201_CREATED
+)
+async def add_co_tenant(
+    tenancy_id: uuid.UUID,
+    payload: CoTenantAdd,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.CO_TENANT_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> CoTenantRead:
+    co_tenant = await tenant_service.add_co_tenant(db, context, tenancy_id, payload.tenant_id, request)
+    tenant = await db.get(Tenant, co_tenant.tenant_id)
+    return CoTenantRead(
+        **CoTenantRead.model_validate(co_tenant).model_dump(exclude={"tenant_name", "tenant_phone"}),
+        tenant_name=tenant.full_name if tenant else None,
+        tenant_phone=tenant.phone_number if tenant else None,
+    )
+
+
+@tenancies_router.delete("/{tenancy_id}/co-tenants/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_co_tenant(
+    tenancy_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.CO_TENANT_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await tenant_service.remove_co_tenant(db, context, tenancy_id, tenant_id, request)
+
+
+@tenancies_router.post("/{tenancy_id}/co-tenants/{tenant_id}/promote", response_model=TenancyDetail)
+async def promote_co_tenant(
+    tenancy_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.CO_TENANT_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> TenancyDetail:
+    """Swap the primary tenant to a co-tenant — the partial-turnover case
+    where the current primary is moving out and a co-tenant is staying."""
+    tenancy = await tenant_service.promote_co_tenant(db, context, tenancy_id, tenant_id, request)
+    return await _detail(db, tenancy)
+
+
 @tenancies_router.post("/{tenancy_id}/lease", response_model=dict)
 async def regenerate_lease(
     tenancy_id: uuid.UUID,
@@ -507,3 +573,47 @@ async def _clear_default(db: AsyncSession, organization_id: uuid.UUID) -> None:
         )
     ):
         template.is_default = False
+
+
+# ------------------------------------------------------- AI lease analysis (US-096)
+
+
+@lease_templates_router.post("/{template_id}/analyze", response_model=LeaseAnalysisRead)
+async def analyze_lease_template(
+    template_id: uuid.UUID,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.LEASE_TEMPLATE_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> LeaseAnalysis:
+    from app.api.deps import assert_in_org
+
+    template = assert_in_org(await db.get(LeaseTemplate, template_id), context, label="template")
+    try:
+        return await ai_service.analyze_template(db, context, template, request)
+    except AiServiceError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+
+@lease_templates_router.get("/{template_id}/analyses", response_model=list[LeaseAnalysisRead])
+async def list_lease_analyses(
+    template_id: uuid.UUID,
+    context: OrgContext = Depends(require(Permission.LEASE_TEMPLATE_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> list[LeaseAnalysis]:
+    from app.api.deps import assert_in_org
+
+    assert_in_org(await db.get(LeaseTemplate, template_id), context, label="template")
+    return await ai_service.list_analyses(db, context, template_id)
+
+
+@lease_templates_router.patch("/suggestions/{suggestion_id}", response_model=LeaseSuggestionRead)
+async def resolve_lease_suggestion(
+    suggestion_id: uuid.UUID,
+    payload: ResolveSuggestionRequest,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.LEASE_TEMPLATE_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> LeaseSuggestion:
+    return await ai_service.resolve_suggestion(
+        db, context, suggestion_id, new_status=payload.status, request=request
+    )

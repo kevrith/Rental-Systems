@@ -79,6 +79,12 @@ class Tenant(OrgScopedMixin, ArchivableMixin, UUIDPrimaryKeyMixin, TimestampMixi
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, unique=True
     )
 
+    # Set once an erasure request (Sprint 25, US-106) has redacted this tenant's
+    # PII. Financial records (tenancies, invoices, payments) are untouched — only
+    # this row's own personal fields are blanked. A tenant erased twice is a
+    # no-op, which this timestamp is what makes checkable.
+    erased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     tenancies: Mapped[list["Tenancy"]] = relationship(back_populates="tenant", lazy="selectin")
 
     __table_args__ = (
@@ -131,6 +137,31 @@ class Tenancy(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
     payments: Mapped[list["Payment"]] = relationship(back_populates="tenancy")
 
     __table_args__ = (UniqueConstraint("organization_id", "reference_code", name="uq_tenancy_ref_per_org"),)
+
+
+class TenancyCoTenant(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """An additional tenant on a tenancy, beyond its primary `Tenancy.tenant_id`
+    (Sprint 25, US-107).
+
+    Deliberately additive: every financial flow (invoices, payments, arrears)
+    keys off `Tenancy.tenant_id` alone, so adding a co-tenant here can never
+    duplicate a charge or split a balance. What it does change is who can see
+    the tenancy in the portal and who is asked to sign the lease.
+    """
+
+    __tablename__ = "tenancy_co_tenants"
+
+    tenancy_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenancies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    added_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    __table_args__ = (UniqueConstraint("tenancy_id", "tenant_id", name="uq_co_tenant_per_tenancy"),)
 
 
 class LeaseTemplate(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):

@@ -71,7 +71,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     deletion_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    organization: Mapped["Organization"] = relationship(back_populates="users")
+    organization: Mapped["Organization"] = relationship(
+        back_populates="users", foreign_keys=[organization_id]
+    )
     sessions: Mapped[list["UserSession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     caretaker_assignments: Mapped[list["CaretakerAssignment"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", foreign_keys="CaretakerAssignment.user_id"

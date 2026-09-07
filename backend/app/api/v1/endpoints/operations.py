@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import select
@@ -17,6 +17,7 @@ from app.models.operations import (
     MeterReading,
     MeterType,
     VacateNotice,
+    VisitorLog,
 )
 from app.models.property import Property, Unit
 from app.models.tenant import Tenancy, Tenant
@@ -40,17 +41,23 @@ from app.schemas.operations import (
     MaintenanceRead,
     MaintenanceUpdate,
     MeterContext,
+    MeterPhotoReadRequest,
+    MeterPhotoReadResult,
     MeterReadingCreate,
     MeterReadingDetail,
     MeterReadingRead,
     VacateNoticeCreate,
     VacateNoticeDetail,
     VacateNoticeRead,
+    VisitorLogCreate,
+    VisitorLogDetail,
+    VisitorLogRead,
 )
 from app.services import (
     caretaker_performance_service,
     file_service,
     maintenance_service,
+    ocr_service,
     operations_service,
 )
 
@@ -58,6 +65,7 @@ meters_router = APIRouter()
 maintenance_router = APIRouter()
 notices_router = APIRouter()
 caretaker_router = APIRouter()
+visitor_logs_router = APIRouter()
 
 
 async def _reading_detail(db: AsyncSession, reading: MeterReading) -> MeterReadingDetail:
@@ -202,6 +210,23 @@ async def readings_due(
     db: AsyncSession = Depends(get_db),
 ) -> list[MeterContext]:
     return await operations_service.readings_due(db, context, limit)
+
+
+@meters_router.post("/read-photo", response_model=MeterPhotoReadResult)
+async def read_meter_photo(
+    payload: MeterPhotoReadRequest,
+    context: OrgContext = Depends(require(Permission.METER_READING_RECORD)),
+    db: AsyncSession = Depends(get_db),
+) -> MeterPhotoReadResult:
+    """Suggest a reading from the meter photo just uploaded (Module 5).
+
+    Read-permission gated rather than `require_write`: nothing is written, and
+    an expired trial should still be able to look at its own photograph.
+    """
+    result = await ocr_service.read_meter_photo(
+        db, context, photo_file_id=payload.photo_file_id, meter_type=payload.meter_type
+    )
+    return MeterPhotoReadResult(**result)
 
 
 @meters_router.post("", response_model=MeterReadingDetail, status_code=status.HTTP_201_CREATED)
@@ -451,6 +476,66 @@ async def acknowledge_notice(
 ) -> VacateNoticeDetail:
     notice = await operations_service.acknowledge_vacate_notice(db, context, notice_id, request)
     return await _notice_detail(db, notice)
+
+
+# --------------------------------------------------------------------- visitor log
+
+
+async def _visitor_log_detail(db: AsyncSession, entry: VisitorLog) -> VisitorLogDetail:
+    unit = await db.get(Unit, entry.unit_id)
+    property_record = await db.get(Property, entry.property_id)
+    recorded_by = await db.get(User, entry.recorded_by_id) if entry.recorded_by_id else None
+
+    return VisitorLogDetail(
+        **VisitorLogRead.model_validate(entry).model_dump(),
+        unit_number=unit.unit_number if unit else None,
+        property_name=property_record.name if property_record else None,
+        recorded_by_name=recorded_by.full_name if recorded_by else None,
+    )
+
+
+@visitor_logs_router.post("", response_model=VisitorLogDetail, status_code=status.HTTP_201_CREATED)
+async def log_visitor(
+    payload: VisitorLogCreate,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.VISITOR_LOG_RECORD)),
+    db: AsyncSession = Depends(get_db),
+) -> VisitorLogDetail:
+    entry = await operations_service.log_visitor(db, context, payload, request)
+    return await _visitor_log_detail(db, entry)
+
+
+@visitor_logs_router.get("", response_model=list[VisitorLogDetail])
+async def list_visitor_logs(
+    unit_id: uuid.UUID | None = None,
+    property_id: uuid.UUID | None = None,
+    since: date | None = None,
+    open_only: bool = False,
+    limit: int = Query(default=100, ge=1, le=500),
+    context: OrgContext = Depends(require(Permission.VISITOR_LOG_VIEW)),
+    db: AsyncSession = Depends(get_db),
+) -> list[VisitorLogDetail]:
+    rows = await operations_service.list_visitor_logs(
+        db,
+        context,
+        unit_id=unit_id,
+        property_id=property_id,
+        since=since,
+        open_only=open_only,
+        limit=limit,
+    )
+    return [await _visitor_log_detail(db, entry) for entry in rows]
+
+
+@visitor_logs_router.post("/{visitor_log_id}/check-out", response_model=VisitorLogDetail)
+async def check_out_visitor(
+    visitor_log_id: uuid.UUID,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.VISITOR_LOG_RECORD)),
+    db: AsyncSession = Depends(get_db),
+) -> VisitorLogDetail:
+    entry = await operations_service.check_out_visitor(db, context, visitor_log_id, request)
+    return await _visitor_log_detail(db, entry)
 
 
 # ------------------------------------------------------------------ caretaker home

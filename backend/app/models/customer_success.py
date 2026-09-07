@@ -83,6 +83,17 @@ class HelpArticle(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str] = mapped_column(String(100), nullable=False)
     is_published: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+
+    # Video tutorial (US-090, Module 24). An article may be text, video, or both
+    # — `body` stays required so a video article is still searchable and still
+    # usable on a metered connection, which is most of this product's audience.
+    video_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    video_duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    video_thumbnail_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # Where the video is hosted, e.g. "youtube" or "vimeo" — the player the
+    # frontend embeds is chosen from this rather than parsed out of the URL.
+    video_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

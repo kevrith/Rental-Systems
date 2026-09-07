@@ -42,6 +42,11 @@ PUBLIC_PREFIXES: dict[str, str] = {
     "/api/v1/renew": "The tenant's renewal link. Authenticated by a single-use token.",
     "/api/v1/files/local": "Development storage. Authenticated by a signed, expiring URL.",
     "/api/v1/portal/setup": "Tenant portal setup before the account exists.",
+    # Sprint 26. A tenant who cannot remember their portal password has no
+    # session by definition. The request endpoint answers identically whether
+    # or not the number is a tenant, so it cannot be used to enumerate a
+    # landlord's book, and it is rate-limited per number.
+    "/api/v1/portal/magic-link": "Tenant sign-in link. Authenticated by a single-use token.",
     # Phase 3. Screening and vacancy marketing reach four people who have no
     # account and never will: a prospective tenant, their guarantor, their
     # previous landlord, and whoever the listing link was forwarded to.
@@ -49,6 +54,10 @@ PUBLIC_PREFIXES: dict[str, str] = {
     "/api/v1/guarantee": "The guarantor's acknowledgement. Authenticated by a single-use token.",
     "/api/v1/reference": "The previous landlord's answer. Authenticated by a single-use token.",
     "/api/v1/listings": "The shareable vacancy listing and its enquiry form.",
+    # Sprint 23. A connected portal reporting an enquiry, and Intuit/Xero
+    # redirecting the landlord's browser back after they grant access.
+    "/api/v1/portal-webhooks": "A connected property portal reporting an inbound enquiry.",
+    "/api/v1/oauth": "Accounting OAuth callback. Authenticated by the signed `state` alone.",
 }
 
 # Strings that must never appear in any response body.

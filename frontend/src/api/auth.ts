@@ -38,6 +38,14 @@ export interface LoginChallengeResponse {
   expires_in: number | null
   message: string
   tokens: TokenResponse | null
+  webauthn_options: string | null
+}
+
+export interface WebauthnCredentialRow {
+  id: string
+  device_name: string
+  created_at: string
+  last_used_at: string | null
 }
 
 export const authApi = {
@@ -96,4 +104,25 @@ export const authApi = {
 
   revokeOtherSessions: async () =>
     (await apiClient.post<{ message: string }>('/auth/sessions/revoke-others')).data,
+
+  exportOwnData: async () =>
+    (await apiClient.post<{ download_url: string | null }>('/auth/me/data-export')).data,
+
+  verifyLoginWebauthn: async (payload: {
+    challenge_token: string
+    credential: unknown
+    remember_device?: boolean
+  }) => (await apiClient.post<TokenResponse>('/auth/login/verify-webauthn', payload)).data,
+
+  webauthnRegisterOptions: async () =>
+    (await apiClient.post<{ options: string }>('/auth/webauthn/register/options')).data,
+
+  webauthnRegisterVerify: async (payload: { credential: unknown; device_name: string }) =>
+    (await apiClient.post<WebauthnCredentialRow>('/auth/webauthn/register/verify', payload)).data,
+
+  webauthnCredentials: async () =>
+    (await apiClient.get<WebauthnCredentialRow[]>('/auth/webauthn/credentials')).data,
+
+  webauthnDeleteCredential: async (id: string) =>
+    (await apiClient.delete<{ message: string }>(`/auth/webauthn/credentials/${id}`)).data,
 }

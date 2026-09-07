@@ -14,11 +14,16 @@ from app.models.user import User
 from app.schemas.customer_success import HelpArticleWrite
 
 
-async def search(db: AsyncSession, query: str | None) -> list[HelpArticle]:
+async def search(db: AsyncSession, query: str | None, *, video_only: bool = False) -> list[HelpArticle]:
     stmt = select(HelpArticle).where(HelpArticle.is_published.is_(True))
     if query:
         like = f"%{query}%"
         stmt = stmt.where(or_(HelpArticle.title.ilike(like), HelpArticle.body.ilike(like)))
+    if video_only:
+        # The "video tutorials" view (Module 24) is the same knowledge base
+        # filtered, not a second content type — an article gains a video by
+        # having one attached, and keeps its text either way.
+        stmt = stmt.where(HelpArticle.video_url.is_not(None))
     rows = await db.scalars(stmt.order_by(HelpArticle.category, HelpArticle.title))
     return list(rows)
 
@@ -48,6 +53,10 @@ async def create(db: AsyncSession, staff: User, payload: HelpArticleWrite) -> He
         body=payload.body,
         category=payload.category,
         is_published=payload.is_published,
+        video_url=payload.video_url,
+        video_duration_seconds=payload.video_duration_seconds,
+        video_thumbnail_url=payload.video_thumbnail_url,
+        video_provider=payload.video_provider,
         created_by_id=staff.id,
         updated_by_id=staff.id,
     )
@@ -68,6 +77,10 @@ async def update(
     row.body = payload.body
     row.category = payload.category
     row.is_published = payload.is_published
+    row.video_url = payload.video_url
+    row.video_duration_seconds = payload.video_duration_seconds
+    row.video_thumbnail_url = payload.video_thumbnail_url
+    row.video_provider = payload.video_provider
     row.updated_by_id = staff.id
     await db.commit()
     await db.refresh(row)

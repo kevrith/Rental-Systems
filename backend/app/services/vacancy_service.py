@@ -72,6 +72,12 @@ async def ensure_listing(
     )
     db.add(listing)
     await db.flush()
+
+    if listing.status == ListingStatus.PUBLISHED:
+        from app.services import portal_integration_service
+
+        await portal_integration_service.publish_listing(db, listing)
+
     return listing
 
 
@@ -109,6 +115,14 @@ async def update_listing(
     if was == ListingStatus.CLOSED and listing.status != ListingStatus.CLOSED:
         listing.closed_at = None
 
+    if was != listing.status:
+        from app.services import portal_integration_service
+
+        if listing.status == ListingStatus.PUBLISHED:
+            await portal_integration_service.publish_listing(db, listing)
+        elif listing.status == ListingStatus.CLOSED:
+            await portal_integration_service.deactivate_listing(db, listing)
+
     audit_service.record(
         db,
         organization_id=context.organization_id,
@@ -140,6 +154,10 @@ async def close_listing_for_unit(db: AsyncSession, unit_id: uuid.UUID) -> None:
         return
     listing.status = ListingStatus.CLOSED
     listing.closed_at = datetime.now(UTC)
+
+    from app.services import portal_integration_service
+
+    await portal_integration_service.deactivate_listing(db, listing)
 
 
 async def public_listing(db: AsyncSession, slug: str) -> dict:
@@ -202,7 +220,24 @@ async def capture_inquiry(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="This listing is no longer available"
         )
+    return await capture_inquiry_for_listing(
+        db, listing, full_name=full_name, phone_number=phone_number, email=email, message=message
+    )
 
+
+async def capture_inquiry_for_listing(
+    db: AsyncSession,
+    listing: VacancyListing,
+    *,
+    full_name: str,
+    phone_number: str,
+    email: str | None,
+    message: str | None,
+    source: str = "direct",
+) -> Inquiry:
+    """The shared core of `capture_inquiry`, also used for a lead a connected
+    property portal reports on our behalf (Sprint 23, US-099) — `source`
+    records which channel it came through."""
     phone = normalize_phone(phone_number)
     existing = await db.scalar(
         select(Inquiry).where(
@@ -230,6 +265,7 @@ async def capture_inquiry(
         email=email,
         message=message,
         stage=LeadStage.INQUIRED,
+        source=source,
     )
     db.add(inquiry)
     await db.flush()

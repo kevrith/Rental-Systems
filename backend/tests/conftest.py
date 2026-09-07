@@ -102,9 +102,26 @@ def fake_redis(monkeypatch: pytest.MonkeyPatch) -> fakeredis.FakeAsyncRedis:
         "app.services.auth_service",
         "app.services.mpesa_service",
         "app.services.api_key_service",
+        "app.services.ai_service",
+        "app.services.webauthn_service",
+        "app.services.ocr_service",
+        "app.api.v1.endpoints.portal",
+        "app.core.rate_limit",
     ):
         monkeypatch.setattr(f"{module}.redis_client", client, raising=False)
     return client
+
+
+@pytest.fixture(autouse=True)
+def no_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Turn off the application rate limiter for the suite.
+
+    Tests fire hundreds of requests a second at the app on purpose, and several
+    deliberately hammer one endpoint to prove a lockout or a duplicate guard
+    works. Leaving the limiter on would make those fail for the wrong reason.
+    `tests/test_rate_limit.py` switches it back on for its own cases.
+    """
+    monkeypatch.setattr(settings, "RATE_LIMIT_ENABLED", False)
 
 
 @pytest.fixture(autouse=True)

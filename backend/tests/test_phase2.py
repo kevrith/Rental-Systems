@@ -2010,9 +2010,23 @@ async def test_etims_credentials_are_stored_encrypted_and_never_returned(
     assert "test-cmc-key-value" not in stored.api_key_encrypted
     assert "KRACU0300000001" not in stored.device_serial_encrypted
 
-    from app.core.crypto import decrypt
+    from app.core.crypto import decrypt, decrypt_for_org
+    from app.models.organization import OrganizationEncryptionKey
 
-    assert decrypt(stored.api_key_encrypted) == "test-cmc-key-value"
+    # Sealed under this organisation's own key, not the platform master key
+    # (Sprint 26). The `orgk:<version>:` prefix is what tells the two apart.
+    assert stored.api_key_encrypted.startswith("orgk:1:")
+    assert await decrypt_for_org(db, stored.organization_id, stored.api_key_encrypted) == "test-cmc-key-value"
+    # The legacy master key cannot open it, which is the point of the change:
+    # ciphertext lifted from one tenant is inert against the platform key.
+    assert decrypt(stored.api_key_encrypted) is None
+
+    key_row = await db.scalar(
+        sa_select(OrganizationEncryptionKey).where(
+            OrganizationEncryptionKey.organization_id == stored.organization_id
+        )
+    )
+    assert key_row is not None and key_row.is_active
 
     removed = await client.delete("/api/v1/etims/credentials", headers=headers)
     assert removed.json() == {"removed": True}

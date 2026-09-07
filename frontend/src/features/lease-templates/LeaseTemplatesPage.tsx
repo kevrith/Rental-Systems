@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Eye, FilePlus2, FileText, Plus, Save, Star } from 'lucide-react'
+import { CheckCircle2, Eye, FilePlus2, FileText, Plus, Save, Sparkles, Star, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { leaseTemplatesApi } from '@/api'
@@ -22,7 +22,7 @@ import {
   Textarea,
 } from '@/components/ui'
 import { RichTextEditor } from '@/features/lease-templates/RichTextEditor'
-import { errorMessage, shortDate } from '@/lib/format'
+import { errorMessage, humanize, shortDate } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
 
 const BLANK = {
@@ -118,6 +118,46 @@ export function LeaseTemplatesPage() {
     onSuccess: (url) => {
       setError(null)
       setPreviewUrl(url)
+    },
+    onError: (err) => setError(errorMessage(err)),
+  })
+
+  const analyses = useQuery({
+    queryKey: draft?.id ? queryKeys.leaseAnalyses(draft.id) : ['lease-templates', 'analyses', 'none'],
+    queryFn: () => leaseTemplatesApi.analyses(draft?.id ?? ''),
+    enabled: Boolean(draft?.id),
+  })
+
+  const analyze = useMutation({
+    mutationFn: () => {
+      if (!draft?.id) throw new Error('Save the template before analyzing it.')
+      return leaseTemplatesApi.analyze(draft.id)
+    },
+    onSuccess: async () => {
+      setError(null)
+      if (draft?.id) await queryClient.invalidateQueries({ queryKey: queryKeys.leaseAnalyses(draft.id) })
+    },
+    onError: (err) => setError(errorMessage(err)),
+  })
+
+  const resolveSuggestion = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'accepted' | 'dismissed' }) =>
+      leaseTemplatesApi.resolveSuggestion(id, status),
+    onSuccess: async (_result, variables) => {
+      if (draft?.id) {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.leaseAnalyses(draft.id) })
+      }
+      if (variables.status === 'accepted' && draft?.id) {
+        // Accepting appends the clause and bumps the version server-side — pull
+        // the fresh template so the editor reflects what was actually saved.
+        const updated = await leaseTemplatesApi.list()
+        const match = updated.find((item) => item.id === draft.id)
+        if (match) {
+          setDraft(toDraft(match))
+          setNotice(`Suggestion accepted — template is now version ${match.version}.`)
+        }
+        await queryClient.invalidateQueries({ queryKey: queryKeys.leaseTemplates })
+      }
     },
     onError: (err) => setError(errorMessage(err)),
   })
@@ -331,6 +371,108 @@ export function LeaseTemplatesPage() {
                 </div>
               </CardBody>
             </Card>
+
+            {draft.id !== '' && (
+              <Card>
+                <CardHeader>
+                  <div>
+                    <CardTitle className="text-base">AI review</CardTitle>
+                    <p className="text-sm text-slate-500">
+                      Flags missing clauses, problematic terms and unclear language. Nothing is
+                      changed until you accept a suggestion.
+                    </p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<Sparkles className="h-4 w-4" />}
+                    loading={analyze.isPending}
+                    onClick={() => analyze.mutate()}
+                  >
+                    Analyze with AI
+                  </Button>
+                </CardHeader>
+                <CardBody>
+                  {analyses.isPending ? (
+                    <p className="text-sm text-slate-500">Loading...</p>
+                  ) : !analyses.data || analyses.data.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      No analysis yet — run one to check this template against standard Kenyan
+                      lease clauses.
+                    </p>
+                  ) : (
+                    (() => {
+                      const latest = analyses.data[0]
+                      return (
+                        <div className="space-y-4">
+                          <p className="text-sm text-slate-700">{latest.summary}</p>
+                          <div className="space-y-3">
+                            {latest.suggestions.map((suggestion) => (
+                              <div
+                                key={suggestion.id}
+                                className="rounded-md border border-slate-200 p-3"
+                              >
+                                <div className="mb-1 flex flex-wrap items-center gap-2">
+                                  <Badge tone="brand">{humanize(suggestion.category)}</Badge>
+                                  <span className="text-sm font-medium text-slate-800">
+                                    {suggestion.title}
+                                  </span>
+                                  {suggestion.status !== 'pending' && (
+                                    <Badge
+                                      tone={suggestion.status === 'accepted' ? 'success' : 'neutral'}
+                                    >
+                                      {humanize(suggestion.status)}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm text-slate-600">{suggestion.issue}</p>
+                                {suggestion.suggested_text && (
+                                  <p className="mt-2 rounded bg-slate-50 p-2 text-xs text-slate-600">
+                                    {suggestion.suggested_text}
+                                  </p>
+                                )}
+                                {suggestion.status === 'pending' && (
+                                  <div className="mt-2 flex gap-2">
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+                                      loading={resolveSuggestion.isPending}
+                                      onClick={() =>
+                                        resolveSuggestion.mutate({
+                                          id: suggestion.id,
+                                          status: 'accepted',
+                                        })
+                                      }
+                                    >
+                                      Accept
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      icon={<X className="h-3.5 w-3.5" />}
+                                      loading={resolveSuggestion.isPending}
+                                      onClick={() =>
+                                        resolveSuggestion.mutate({
+                                          id: suggestion.id,
+                                          status: 'dismissed',
+                                        })
+                                      }
+                                    >
+                                      Dismiss
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })()
+                  )}
+                </CardBody>
+              </Card>
+            )}
 
             {previewUrl && (
               <Card>

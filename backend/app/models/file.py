@@ -42,12 +42,36 @@ class FileCategory(str, enum.Enum):
     RENEWAL_AGREEMENT = "renewal_agreement"
     # Phase 3
     GUARANTEE = "guarantee"
+    # Sprint 21 — custom report exports and the monthly summary.
+    REPORT = "report"
+    # Sprint 25 — a subject access request export bundle (US-106).
+    DATA_REQUEST_EXPORT = "data_request_export"
+    # Sprint 26 — the signed owner-agency management agreement.
+    MANAGEMENT_AGREEMENT = "management_agreement"
 
 
 class UploadStatus(str, enum.Enum):
     PENDING = "pending"
     UPLOADED = "uploaded"
     FAILED = "failed"
+
+
+class ScanStatus(str, enum.Enum):
+    """Virus-scan outcome for an uploaded file (Sprint 25, US-105).
+
+    `SKIPPED` means no ClamAV daemon is configured — the same degrade-gracefully
+    treatment every other optional integration in this codebase gets. `FAILED`
+    means a daemon is configured but was unreachable at scan time; that does not
+    block the upload (scanning is defence in depth, not the thing standing
+    between a landlord and a working upload button), but it does mark the file
+    for the retry sweep.
+    """
+
+    PENDING = "pending"
+    CLEAN = "clean"
+    INFECTED = "infected"
+    FAILED = "failed"
+    SKIPPED = "skipped"
 
 
 class StoredFile(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -96,3 +120,11 @@ class StoredFile(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     uploaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Virus scan outcome (Sprint 25, US-105). Server-generated documents (leases,
+    # receipts, reports) never pass through this — only user-supplied uploads do.
+    scan_status: Mapped[ScanStatus] = mapped_column(
+        Enum(ScanStatus, name="scan_status"), default=ScanStatus.PENDING, nullable=False
+    )
+    scanned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scan_detail: Mapped[str | None] = mapped_column(String(255), nullable=True)

@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Enum,
@@ -13,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -146,12 +148,33 @@ class Payment(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
     phone_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
+    # Bank transfer / cheque reference, for reconciling against a statement
+    # (Sprint 23, US-101). Not globally unique like `mpesa_receipt` — different
+    # banks issue overlapping reference formats, so any uniqueness is the
+    # caller's job, scoped to the organisation.
+    bank_reference: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     payment_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     recorded_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # --- dual approval for large cash (masterplan, Fraud Prevention) ---
+    # Set when the amount cleared the organisation's
+    # `cash_dual_approval_threshold`. Such a payment is created PENDING and is
+    # never allocated, receipted or announced to the tenant until a *different*
+    # person approves it — one person must not be able to both take the money
+    # and declare it banked.
+    requires_approval: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False, index=True
+    )
+    approved_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approval_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     tenancy: Mapped["Tenancy"] = relationship(back_populates="payments")
     invoice: Mapped["Invoice | None"] = relationship(back_populates="payments")

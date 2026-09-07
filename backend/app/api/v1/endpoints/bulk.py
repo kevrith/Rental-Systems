@@ -7,11 +7,11 @@ that list. Nothing sends a message or changes a rent on the preview call.
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import OrgContext, require, require_write
+from app.api.deps import OrgContext, assert_can_write, get_org_context, require, require_write
 from app.core.database import get_db
 from app.core.permissions import Permission
 from app.models.bulk import BulkOperationKind
@@ -148,39 +148,66 @@ async def cancel_operation(
     return BulkOperationRead.model_validate(operation)
 
 
-# ------------------------------------------------------------- tenant import
+# ------------------------------------------------------------------- import
+#
+# Four sheets — properties, units, tenants, payments — behind one set of
+# routes. `kind` defaults to tenants so the original single-sheet URLs keep
+# working unchanged for any client that has not been updated.
+#
+# Permissions follow what each sheet actually creates: importing a building is
+# PROPERTY_MANAGE, importing money is PAYMENT_RECORD. A caretaker who may
+# record a payment at the door has no business bulk-loading a portfolio, so
+# the routes are gated on the narrower right, not a single blanket one.
+
+IMPORT_PERMISSIONS: dict[import_service.ImportKind, Permission] = {
+    import_service.ImportKind.PROPERTIES: Permission.PROPERTY_MANAGE,
+    import_service.ImportKind.UNITS: Permission.UNIT_MANAGE,
+    import_service.ImportKind.TENANTS: Permission.TENANT_MANAGE,
+    import_service.ImportKind.PAYMENTS: Permission.PAYMENT_RECORD,
+}
+
+
+def _assert_may_import(context: OrgContext, kind: import_service.ImportKind) -> None:
+    required = IMPORT_PERMISSIONS[kind]
+    if not context.can(required):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Your role ({context.role.value}) lacks: {required.value}",
+        )
 
 
 @router.get("/import/template")
 async def download_import_template(
-    context: OrgContext = Depends(require(Permission.TENANT_MANAGE)),
+    kind: import_service.ImportKind = import_service.ImportKind.TENANTS,
+    context: OrgContext = Depends(get_org_context),
 ) -> Response:
     """The blank spreadsheet, generated from the same column list the parser uses."""
+    _assert_may_import(context, kind)
     return Response(
-        content=import_service.build_template(),
+        content=import_service.build_template(kind),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": 'attachment; filename="rentflow-tenant-import.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="rentflow-{kind.value}-import.xlsx"'},
     )
 
 
 @router.post("/import/preview", response_model=ImportPreview)
 async def preview_import(
     file: UploadFile = File(...),
-    context: OrgContext = Depends(require_write(Permission.TENANT_MANAGE)),
+    kind: import_service.ImportKind = import_service.ImportKind.TENANTS,
+    context: OrgContext = Depends(get_org_context),
     db: AsyncSession = Depends(get_db),
 ) -> ImportPreview:
     """Parse and validate the upload. Nothing is written."""
+    _assert_may_import(context, kind)
     data = await file.read()
     if len(data) > MAX_IMPORT_BYTES:
-        from fastapi import HTTPException
-
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="That file is larger than 5 MB — split it into smaller batches",
         )
 
-    parsed, parse_errors = import_service.parse(data)
-    ready, db_errors = await import_service.validate_against_database(db, context, parsed)
+    parsed, parse_errors = import_service.parse(data, kind)
+    ready, db_errors = await import_service.validate_against_database(db, context, parsed, kind)
     errors = sorted(parse_errors + db_errors, key=lambda item: item["row"])
 
     return ImportPreview(
@@ -195,10 +222,15 @@ async def preview_import(
 @router.post("/import/commit", response_model=ImportResult)
 async def commit_import(
     payload: ImportCommit,
-    context: OrgContext = Depends(require_write(Permission.TENANT_MANAGE)),
+    kind: import_service.ImportKind = import_service.ImportKind.TENANTS,
+    context: OrgContext = Depends(get_org_context),
     db: AsyncSession = Depends(get_db),
 ) -> ImportResult:
     """Create the rows the operator confirmed. Rows are independent — a late
-    failure does not undo the tenants already created."""
-    created, failures = await import_service.commit_rows(db, context, payload.rows)
+    failure does not undo what was already created."""
+    _assert_may_import(context, kind)
+    # A write, so the read-only and expired-trial gates that `require_write`
+    # would have applied have to be applied by hand here instead.
+    assert_can_write(context)
+    created, failures = await import_service.commit_rows(db, context, payload.rows, kind)
     return ImportResult(created=created, failed=len(failures), failures=failures)

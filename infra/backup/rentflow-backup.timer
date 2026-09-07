@@ -1,0 +1,14 @@
+[Unit]
+Description=Nightly RentFlow database backup
+
+[Timer]
+# 02:15 UTC — 05:15 in Nairobi, the quietest hour for a Kenyan rent platform and
+# safely clear of the 06:00 invoice generation run.
+OnCalendar=*-*-* 02:15:00 UTC
+# Run on the next boot if the droplet was down at 02:15. A skipped backup is the
+# failure mode that only shows up when you need the backup.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

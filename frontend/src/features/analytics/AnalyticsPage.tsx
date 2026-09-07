@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDownRight, ArrowUpRight, Table2, TrendingUp } from 'lucide-react'
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Percent, Table2, TrendingUp } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -20,6 +20,7 @@ import { analyticsApi } from '@/api'
 import { PageHeader, StatCard } from '@/components/PageHeader'
 import {
   Alert,
+  Badge,
   Card,
   CardBody,
   CardHeader,
@@ -33,6 +34,7 @@ import {
   Th,
 } from '@/components/ui'
 import { AXIS, REFERENCE, SERIES, TOOLTIP_STYLE } from '@/features/analytics/chart-theme'
+import { PortfolioIntelligence } from '@/features/analytics/PortfolioIntelligence'
 import { amount, errorMessage, kes } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
 
@@ -44,6 +46,18 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: 'collected_this_month', label: 'Collected this month' },
   { value: 'total_maintenance_cost', label: 'Maintenance spend' },
 ]
+
+const RENEWAL_STATE_LABEL: Record<string, string> = {
+  none: 'No renewal offer',
+  declined: 'Renewal declined',
+  lapsed: 'Offer lapsed',
+}
+
+const RENEWAL_STATE_TONE: Record<string, 'warn' | 'danger'> = {
+  none: 'warn',
+  declined: 'danger',
+  lapsed: 'danger',
+}
 
 /** A percentage bar that reads without needing the number decoded from colour. */
 function RateBar({ value, tone }: { value: number; tone: string }) {
@@ -84,6 +98,14 @@ export function AnalyticsPage() {
   const maintenance = useQuery({
     queryKey: queryKeys.analyticsMaintenance,
     queryFn: analyticsApi.maintenance,
+  })
+  const vacancyRisk = useQuery({
+    queryKey: queryKeys.analyticsVacancyRisk,
+    queryFn: () => analyticsApi.vacancyRisk(),
+  })
+  const rentReview = useQuery({
+    queryKey: queryKeys.analyticsRentReview,
+    queryFn: () => analyticsApi.rentReview(),
   })
 
   if (revenue.isPending) return <PageLoader />
@@ -481,6 +503,91 @@ export function AnalyticsPage() {
           )}
         </CardBody>
       </Card>
+
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Vacancy risk</CardTitle>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Leases ending within 90 days with no renewal offer on record.
+            </p>
+          </CardHeader>
+          <CardBody>
+            {vacancyRisk.data && vacancyRisk.data.length > 0 ? (
+              <ul className="divide-y divide-slate-100">
+                {vacancyRisk.data.slice(0, 8).map((row) => (
+                  <li key={row.tenancy_id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-800">{row.tenant_name}</p>
+                      <p className="truncate text-xs text-slate-500">
+                        {row.property_name} · Unit {row.unit_number} · {kes(row.monthly_rent)}/mo
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-medium text-slate-800">
+                        {row.days_until_expiry}d left
+                      </p>
+                      <Badge tone={RENEWAL_STATE_TONE[row.renewal_state]} className="mt-0.5">
+                        {RENEWAL_STATE_LABEL[row.renewal_state]}
+                      </Badge>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState
+                icon={<AlertTriangle className="h-6 w-6" />}
+                title="Nothing at risk"
+                description="Every lease ending soon has a renewal offer out."
+              />
+            )}
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Rent review suggestions</CardTitle>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Units unchanged for 12+ months, against the average for similar units in your own
+              portfolio — an estimate, not market data.
+            </p>
+          </CardHeader>
+          <CardBody>
+            {rentReview.data && rentReview.data.length > 0 ? (
+              <ul className="divide-y divide-slate-100">
+                {rentReview.data.slice(0, 8).map((row) => (
+                  <li key={row.tenancy_id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-800">{row.tenant_name}</p>
+                      <p className="truncate text-xs text-slate-500">
+                        {row.property_name} · Unit {row.unit_number} ·{' '}
+                        {row.months_since_last_change} months unchanged
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-medium text-slate-800">{kes(row.monthly_rent)}</p>
+                      <p
+                        className={`text-xs ${row.percent_vs_portfolio_average < 0 ? 'text-amber-600' : 'text-slate-500'}`}
+                      >
+                        {row.percent_vs_portfolio_average >= 0 ? '+' : ''}
+                        {row.percent_vs_portfolio_average}% vs. avg
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState
+                icon={<Percent className="h-6 w-6" />}
+                title="Nothing to review"
+                description="Every unit has had a rent review within the last year."
+              />
+            )}
+          </CardBody>
+        </Card>
+      </div>
+
+      <PortfolioIntelligence />
     </div>
   )
 }

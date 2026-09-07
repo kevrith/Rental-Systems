@@ -1,0 +1,11 @@
+# Fallback for hosts without systemd timers. Prefer the .timer units: they give
+# you Persistent=true (a missed run fires at boot) and journal integration.
+#
+#   sudo crontab -u rentflow -e
+#
+# Cron's environment is nearly empty, so point the script at its env file and
+# send output to the log — a silent cron job is an unmonitored one.
+BACKUP_ENV_FILE=/opt/rentflow/infra/backup/backup.env
+
+15 2 * * *   /opt/rentflow/infra/backup/backup.sh >> /var/log/rentflow-backup.log 2>&1
+30 3 * * 0   /opt/rentflow/infra/backup/restore.sh --latest --verify >> /var/log/rentflow-backup.log 2>&1

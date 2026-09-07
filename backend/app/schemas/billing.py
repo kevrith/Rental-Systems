@@ -88,11 +88,18 @@ class PaymentRead(BaseModel):
     method: PaymentMethod
     status: PaymentStatus
     mpesa_receipt: str | None
+    bank_reference: str | None = None
     phone_number: str | None
     failure_reason: str | None
     paid_at: datetime | None
     payment_date: date | None
     notes: str | None
+    # Dual approval (masterplan, Fraud Prevention). `requires_approval` is true
+    # only while the payment is held; it clears whichever way the decision goes.
+    requires_approval: bool = False
+    approved_by_id: uuid.UUID | None = None
+    approved_at: datetime | None = None
+    approval_note: str | None = None
     created_at: datetime
 
 
@@ -107,7 +114,79 @@ class PaymentDetail(PaymentRead):
 
 class StkPushResponse(BaseModel):
     payment: PaymentRead
+
     message: str
+
+
+# ----------------------------------------------------------- bank transfer (US-101)
+
+
+class BankInstructions(BaseModel):
+    configured: bool
+    bank_name: str | None = None
+    account_name: str | None = None
+    account_number: str | None = None
+    branch: str | None = None
+
+
+class BankStatementRow(BaseModel):
+    row: int
+    entry_date: date
+    description: str
+    amount: Decimal
+    reference_guess: str | None = None
+    matched_tenancy_id: uuid.UUID | None = None
+
+
+class BankStatementPreview(BaseModel):
+    rows: list[BankStatementRow]
+    errors: list[dict]
+    matched_count: int
+    unmatched_count: int
+
+
+class BankStatementCommitRow(BaseModel):
+    row: int
+    entry_date: date
+    description: str = Field(max_length=512)
+    amount: Decimal = Field(gt=0)
+    tenancy_id: uuid.UUID | None = None
+    record_payment: bool = False
+
+
+class BankStatementCommitRequest(BaseModel):
+    rows: list[BankStatementCommitRow] = Field(min_length=1, max_length=1000)
+
+
+class BankStatementEntryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    entry_date: date
+    description: str
+    amount: Decimal
+    matched_tenancy_id: uuid.UUID | None
+    matched_payment_id: uuid.UUID | None
+    is_matched: bool
+
+
+class BankStatementUploadRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    row_count: int
+    matched_count: int
+    unmatched_count: int
+    created_at: datetime
+
+
+class BankStatementUploadDetail(BankStatementUploadRead):
+    entries: list[BankStatementEntryRead] = []
+
+
+class BankStatementCommitResult(BaseModel):
+    upload: BankStatementUploadRead
+    payment_failures: list[dict] = []
 
 
 # ------------------------------------------------------------------------ arrears

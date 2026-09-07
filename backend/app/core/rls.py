@@ -107,12 +107,65 @@ PHASE_4_ORG_SCOPED_TABLES: Sequence[str] = (
     "milestone_events",
 )
 
+# Sprint 21: scheduled monthly reports and the custom report builder.
+PHASE_5_ORG_SCOPED_TABLES: Sequence[str] = (
+    "report_definitions",
+    "monthly_reports",
+)
+
+# Sprint 22: AI lease analysis, fraud detection and security hardening.
+PHASE_6_ORG_SCOPED_TABLES: Sequence[str] = (
+    "lease_analyses",
+    "lease_suggestions",
+    "security_events",
+    "fraud_alerts",
+    "fraud_suppressions",
+)
+
+# Sprint 23: property portal sync, accounting software sync, and bank statement
+# reconciliation.
+PHASE_7_ORG_SCOPED_TABLES: Sequence[str] = (
+    "portal_connections",
+    "portal_listing_syncs",
+    "accounting_connections",
+    "accounting_sync_records",
+    "bank_statement_uploads",
+    "bank_statement_entries",
+)
+
+# Sprint 25: security, privacy and compliance closeout — the caretaker visitor
+# log, co-tenancy, subject access/erasure requests and WebAuthn credentials.
+PHASE_8_ORG_SCOPED_TABLES: Sequence[str] = (
+    "visitor_logs",
+    "tenancy_co_tenants",
+    "data_requests",
+    "webauthn_credentials",
+)
+
+# Sprint 26: the gaps between the masterplan and what had actually been built —
+# management agreements, editable message templates and demo datasets.
+# `security_breaches` and `organization_encryption_keys` are deliberately
+# absent. A breach routinely spans several customers and is RentFlow's own
+# incident to notify on, so it is platform-level like `task_runs`; the
+# encryption keys are touched only by the server's crypto path, never by a
+# request-scoped query made on a tenant's behalf.
+PHASE_9_ORG_SCOPED_TABLES: Sequence[str] = (
+    "management_agreements",
+    "communication_templates",
+    "demo_datasets",
+)
+
 ORG_SCOPED_TABLES: Sequence[str] = (
     *PHASE_1_ORG_SCOPED_TABLES,
     *PHASE_2_ORG_SCOPED_TABLES,
     *ETIMS_ORG_SCOPED_TABLES,
     *PHASE_3_ORG_SCOPED_TABLES,
     *PHASE_4_ORG_SCOPED_TABLES,
+    *PHASE_5_ORG_SCOPED_TABLES,
+    *PHASE_6_ORG_SCOPED_TABLES,
+    *PHASE_7_ORG_SCOPED_TABLES,
+    *PHASE_8_ORG_SCOPED_TABLES,
+    *PHASE_9_ORG_SCOPED_TABLES,
 )
 
 SETTING = "app.current_org_id"

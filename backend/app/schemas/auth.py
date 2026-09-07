@@ -49,12 +49,35 @@ class LoginChallengeResponse(BaseModel):
     expires_in: int | None = None
     message: str
     tokens: TokenResponse | None = None
+    # Set only when this user has a passkey registered (US-108) — the frontend
+    # offers it as an alternative to the SMS code, never a replacement for it.
+    webauthn_options: str | None = None
 
 
 class VerifyLoginOtpRequest(BaseModel):
     challenge_token: str
     otp_code: str = Field(min_length=4, max_length=8)
     remember_device: bool = False
+
+
+class VerifyLoginWebauthnRequest(BaseModel):
+    challenge_token: str
+    credential: dict
+    remember_device: bool = False
+
+
+class WebauthnRegistrationVerify(BaseModel):
+    credential: dict
+    device_name: str = Field(default="Passkey", max_length=255)
+
+
+class WebauthnCredentialRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    device_name: str
+    created_at: datetime
+    last_used_at: datetime | None
 
 
 class VerifyPhoneRequest(BaseModel):

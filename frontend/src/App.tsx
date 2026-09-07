@@ -7,6 +7,7 @@ import { AcceptInvitePage, PortalSetupPage } from '@/features/auth/AcceptInviteP
 import { LoginPage } from '@/features/auth/LoginPage'
 import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from '@/features/auth/PasswordPages'
 import { RegisterPage } from '@/features/auth/RegisterPage'
+import { PortalLoginPage } from '@/features/portal/PortalLoginPage'
 import { PortalShell } from '@/features/portal/PortalShell'
 import { HomeRedirect } from '@/pages/HomeRedirect'
 import { NotFoundPage } from '@/pages/NotFoundPage'
@@ -39,6 +40,15 @@ const GuaranteeResponsePage = lazy(() =>
   import('@/features/applications/PublicResponsePages').then((m) => ({
     default: m.GuaranteeResponsePage,
   })),
+)
+const PrivacyPolicyPage = lazy(() =>
+  import('@/features/legal/LegalPages').then((m) => ({ default: m.PrivacyPolicyPage })),
+)
+const TermsOfServicePage = lazy(() =>
+  import('@/features/legal/LegalPages').then((m) => ({ default: m.TermsOfServicePage })),
+)
+const CookiePolicyPage = lazy(() =>
+  import('@/features/legal/LegalPages').then((m) => ({ default: m.CookiePolicyPage })),
 )
 const ReferenceResponsePage = lazy(() =>
   import('@/features/applications/PublicResponsePages').then((m) => ({
@@ -90,8 +100,17 @@ const ServiceChargePage = lazy(() =>
 const AnalyticsPage = lazy(() =>
   import('@/features/analytics/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })),
 )
+const ReportsListPage = lazy(() =>
+  import('@/features/reports/ReportsListPage').then((m) => ({ default: m.ReportsListPage })),
+)
+const ReportBuilderPage = lazy(() =>
+  import('@/features/reports/ReportBuilderPage').then((m) => ({ default: m.ReportBuilderPage })),
+)
 const ArrearsPage = lazy(() =>
   import('@/features/arrears/ArrearsPage').then((m) => ({ default: m.ArrearsPage })),
+)
+const FraudAlertsPage = lazy(() =>
+  import('@/features/security/FraudAlertsPage').then((m) => ({ default: m.FraudAlertsPage })),
 )
 const BulkUnitsPage = lazy(() =>
   import('@/features/units/UnitFormPage').then((m) => ({ default: m.BulkUnitsPage })),
@@ -159,6 +178,12 @@ const VendorDetailPage = lazy(() =>
 const MeterReadingsPage = lazy(() =>
   import('@/features/meters/MeterReadingsPage').then((m) => ({ default: m.MeterReadingsPage })),
 )
+const VisitorLogPage = lazy(() =>
+  import('@/features/visitors/VisitorLogPage').then((m) => ({ default: m.VisitorLogPage })),
+)
+const LogVisitorPage = lazy(() =>
+  import('@/features/visitors/VisitorLogPage').then((m) => ({ default: m.LogVisitorPage })),
+)
 const NotificationSettings = lazy(() =>
   import('@/features/settings/SettingsPage').then((m) => ({ default: m.NotificationSettings })),
 )
@@ -198,6 +223,9 @@ const PortalMaintenancePage = lazy(() =>
 const PortalPaymentsPage = lazy(() =>
   import('@/features/portal/PortalPages').then((m) => ({ default: m.PortalPaymentsPage })),
 )
+const PortalPrivacyPage = lazy(() =>
+  import('@/features/portal/PortalPages').then((m) => ({ default: m.PortalPrivacyPage })),
+)
 const ProfileSettings = lazy(() =>
   import('@/features/settings/SettingsPage').then((m) => ({ default: m.ProfileSettings })),
 )
@@ -219,8 +247,31 @@ const RecordMeterReadingPage = lazy(() =>
 const RecordPaymentPage = lazy(() =>
   import('@/features/payments/RecordPaymentPage').then((m) => ({ default: m.RecordPaymentPage })),
 )
+const BankReconciliationPage = lazy(() =>
+  import('@/features/payments/BankReconciliationPage').then((m) => ({
+    default: m.BankReconciliationPage,
+  })),
+)
+const BankStatementDetailPage = lazy(() =>
+  import('@/features/payments/BankReconciliationPage').then((m) => ({
+    default: m.BankStatementDetailPage,
+  })),
+)
 const RenewalPage = lazy(() =>
   import('@/features/automation/RenewalPage').then((m) => ({ default: m.RenewalPage })),
+)
+const MessageTemplatesPage = lazy(() =>
+  import('@/features/settings/MessageTemplatesPage').then((m) => ({
+    default: m.MessageTemplatesPage,
+  })),
+)
+const PortalsSettingsPage = lazy(() =>
+  import('@/features/settings/PortalsSettingsPage').then((m) => ({ default: m.PortalsSettingsPage })),
+)
+const AccountingSettingsPage = lazy(() =>
+  import('@/features/settings/AccountingSettingsPage').then((m) => ({
+    default: m.AccountingSettingsPage,
+  })),
 )
 const SecuritySettings = lazy(() =>
   import('@/features/settings/SettingsPage').then((m) => ({ default: m.SecuritySettings })),
@@ -292,6 +343,8 @@ function App() {
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/accept-invite" element={<AcceptInvitePage />} />
         <Route path="/portal/setup" element={<PortalSetupPage />} />
+        {/* Public: a tenant signing in by link has no session yet. */}
+        <Route path="/portal/login" element={<PortalLoginPage />} />
         {/* The renewal link is the tenant's whole authentication — no account. */}
         <Route path="/renew/:token" element={<RenewalPage />} />
         {/* Screening reaches three people who have no login: the applicant, their
@@ -301,6 +354,9 @@ function App() {
         <Route path="/listing/:slug" element={<PublicListingPage />} />
         <Route path="/guarantee/:token" element={<GuaranteeResponsePage />} />
         <Route path="/reference/:token" element={<ReferenceResponsePage />} />
+        <Route path="/legal/privacy" element={<PrivacyPolicyPage />} />
+        <Route path="/legal/terms" element={<TermsOfServicePage />} />
+        <Route path="/legal/cookies" element={<CookiePolicyPage />} />
 
         {/* Tenant portal */}
         <Route element={<ProtectedRoute allowRoles={['tenant']} />}>
@@ -309,6 +365,7 @@ function App() {
             <Route path="/portal/payments" element={<PortalPaymentsPage />} />
             <Route path="/portal/documents" element={<PortalDocumentsPage />} />
             <Route path="/portal/maintenance" element={<PortalMaintenancePage />} />
+            <Route path="/portal/privacy" element={<PortalPrivacyPage />} />
           </Route>
         </Route>
 
@@ -345,14 +402,21 @@ function App() {
 
             <Route path="/payments" element={<PaymentsPage />} />
             <Route path="/payments/new" element={<RecordPaymentPage />} />
+            <Route path="/payments/bank-statements" element={<BankReconciliationPage />} />
+            <Route path="/payments/bank-statements/:uploadId" element={<BankStatementDetailPage />} />
             <Route path="/payments/:paymentId" element={<PaymentDetailPage />} />
 
             <Route path="/invoices" element={<InvoicesPage />} />
             <Route path="/invoices/:invoiceId" element={<InvoiceDetailPage />} />
 
             <Route path="/arrears" element={<ArrearsPage />} />
+            <Route path="/security/fraud-alerts" element={<FraudAlertsPage />} />
             <Route path="/finances" element={<DashboardPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
+
+            <Route path="/reports" element={<ReportsListPage />} />
+            <Route path="/reports/new" element={<ReportBuilderPage />} />
+            <Route path="/reports/:id/edit" element={<ReportBuilderPage />} />
 
             <Route path="/maintenance" element={<MaintenancePage />} />
             <Route path="/maintenance/new" element={<MaintenanceFormPage />} />
@@ -394,6 +458,8 @@ function App() {
 
             <Route path="/meter-readings" element={<MeterReadingsPage />} />
             <Route path="/meter-readings/new" element={<RecordMeterReadingPage />} />
+            <Route path="/visitor-log" element={<VisitorLogPage />} />
+            <Route path="/visitor-log/new" element={<LogVisitorPage />} />
 
             {/* Agency mode (Phase 2) */}
             <Route path="/agency" element={<AgencyDashboardPage />} />
@@ -427,7 +493,10 @@ function App() {
               <Route path="sessions" element={<SessionsSettings />} />
               <Route path="notifications" element={<NotificationSettings />} />
               <Route path="organization" element={<OrganizationSettings />} />
+              <Route path="messages" element={<MessageTemplatesPage />} />
               <Route path="etims" element={<EtimsSettingsPage />} />
+              <Route path="portals" element={<PortalsSettingsPage />} />
+              <Route path="accounting" element={<AccountingSettingsPage />} />
             </Route>
           </Route>
         </Route>

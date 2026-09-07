@@ -4,6 +4,7 @@
 !.env.example
 *.pem
 *.key
+infra/backup/backup.env
 
 # --- Python / Backend ---
 __pycache__/
@@ -55,3 +56,10 @@ logs/
 
 # --- Uploads / local storage stub ---
 /backend/storage/
+
+# --- Coverage artefacts (Sprint 26) ---
+# The floors live in pyproject.toml / vitest.config.ts; the reports themselves
+# are regenerated on every run and are uploaded by CI as build artefacts.
+coverage.xml
+coverage/
+.coverage.*

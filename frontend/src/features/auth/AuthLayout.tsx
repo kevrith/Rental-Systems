@@ -1,5 +1,6 @@
 import { Building2 } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 
 /** Shared frame for every unauthenticated screen. */
 export function AuthLayout({
@@ -22,13 +23,25 @@ export function AuthLayout({
         <span className="text-lg font-semibold text-slate-900">RentFlow Kenya</span>
       </div>
 
-      <div className="w-full max-w-md rounded-card border border-slate-200 bg-white p-7 shadow-sm">
+      <main className="w-full max-w-md rounded-card border border-slate-200 bg-white p-7 shadow-sm">
         <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
         <div className="mt-6">{children}</div>
-      </div>
+      </main>
 
       {footer && <div className="mt-5 text-center text-sm text-slate-500">{footer}</div>}
+
+      <div className="mt-4 flex gap-4 text-xs text-slate-500">
+        <Link to="/legal/privacy" className="hover:text-slate-700">
+          Privacy
+        </Link>
+        <Link to="/legal/terms" className="hover:text-slate-700">
+          Terms
+        </Link>
+        <Link to="/legal/cookies" className="hover:text-slate-700">
+          Cookies
+        </Link>
+      </div>
     </div>
   )
 }

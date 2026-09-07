@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, Camera, Check, Droplets, Gauge, Plus, Zap } from 'lucide-react'
+import { AlertCircle, Camera, Check, Droplets, Gauge, Plus, ScanLine, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { metersApi, unitsApi } from '@/api'
+import type { MeterPhotoRead } from '@/api/types'
 import { SinglePhotoUpload, type UploadedFile } from '@/components/FileUpload'
 import { PageHeader } from '@/components/PageHeader'
 import {
@@ -19,6 +20,7 @@ import {
   Input,
   Select,
   Skeleton,
+  Spinner,
   Table,
   Td,
   Th,
@@ -184,6 +186,9 @@ export function RecordMeterReadingPage() {
   const [notes, setNotes] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [queued, setQueued] = useState(false)
+  // What the OCR pass proposed, kept alongside whatever the caretaker ends up
+  // submitting so the record shows whether they accepted it or corrected it.
+  const [ocr, setOcr] = useState<MeterPhotoRead | null>(null)
 
   const units = useQuery({
     queryKey: queryKeys.units({ occupied: true }),
@@ -205,6 +210,27 @@ export function RecordMeterReadingPage() {
   const estimated = consumption * rate
   const belowPrevious = currentReading !== '' && current < previous
 
+  /**
+   * Read the dial off the photo (Module 5).
+   *
+   * Only ever pre-fills the field when the reader is confident. Below the
+   * threshold the number is shown but the caretaker still has to type it —
+   * a misread meter becomes a wrong bill, and a bill nobody looked at is
+   * exactly the failure this is meant to prevent.
+   */
+  const readPhoto = useMutation({
+    mutationFn: (fileId: string) =>
+      metersApi.readPhoto({ photo_file_id: fileId, meter_type: meterType }),
+    onSuccess: (result) => {
+      setOcr(result)
+      if (result.reading && result.high_confidence && !currentReading) {
+        setCurrentReading(result.reading)
+      }
+    },
+    // Never fatal: the caretaker types the reading as they always have.
+    onError: () => setOcr(null),
+  })
+
   const record = useMutation({
     mutationFn: async () => {
       const position = await currentPosition()
@@ -217,6 +243,8 @@ export function RecordMeterReadingPage() {
         notes: notes || null,
         gps_latitude: position?.coords.latitude ?? null,
         gps_longitude: position?.coords.longitude ?? null,
+        ocr_reading: ocr?.reading ?? null,
+        ocr_confidence: ocr?.confidence ?? null,
       }
       return submitOrQueue({
         run: () => metersApi.record(body),
@@ -356,12 +384,52 @@ export function RecordMeterReadingPage() {
 
           <SinglePhotoUpload
             value={photo}
-            onChange={setPhoto}
+            onChange={(next) => {
+              setPhoto(next)
+              setOcr(null)
+              // Asked for explicitly on upload rather than fired on every
+              // photo the app ever stores: this is a billed model call.
+              if (next) readPhoto.mutate(next.id)
+            }}
             category="meter_reading"
             label="Photo of the meter"
             required
             hint="Required — this is the evidence behind the charge."
           />
+
+          {readPhoto.isPending && (
+            <p className="flex items-center gap-2 text-sm text-slate-500">
+              <Spinner className="h-4 w-4" />
+              Reading the meter from your photo…
+            </p>
+          )}
+
+          {ocr && (
+            <Alert
+              tone={ocr.reading && ocr.high_confidence ? 'info' : 'warn'}
+              icon={<ScanLine className="h-4 w-4" />}
+            >
+              {ocr.reading ? (
+                <>
+                  <span className="font-medium">The photo reads {ocr.reading}.</span>{' '}
+                  {ocr.high_confidence
+                    ? 'Filled in for you — check it against the meter before saving.'
+                    : 'Not clear enough to fill in automatically. Type what you can see.'}
+                  {!ocr.high_confidence && ocr.reading !== currentReading && (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentReading(ocr.reading ?? '')}
+                      className="ml-1 font-medium underline"
+                    >
+                      Use {ocr.reading} anyway
+                    </button>
+                  )}
+                </>
+              ) : (
+                (ocr.message ?? 'The meter could not be read from that photo. Type it in.')
+              )}
+            </Alert>
+          )}
 
           <Field label="Notes">
             <Textarea

@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ChevronLeft, LifeBuoy, Search, Send } from 'lucide-react'
+import { ChevronLeft, LifeBuoy, PlayCircle, Search, Send } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { customerSuccessApi } from '@/api'
@@ -61,6 +61,13 @@ export function HelpPanel({ open, onClose }: { open: boolean; onClose: () => voi
           ) : article.data ? (
             <div>
               <h3 className="text-base font-semibold text-slate-900">{article.data.title}</h3>
+              {article.data.video_url && (
+                <TutorialVideo
+                  url={article.data.video_url}
+                  provider={article.data.video_provider}
+                  seconds={article.data.video_duration_seconds}
+                />
+              )}
               <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{article.data.body}</p>
             </div>
           ) : (
@@ -91,8 +98,18 @@ export function HelpPanel({ open, onClose }: { open: boolean; onClose: () => voi
                   onClick={() => setSelectedSlug(article.slug)}
                   className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50"
                 >
-                  <p className="font-medium text-slate-900">{article.title}</p>
-                  <p className="text-xs text-slate-400">{article.category}</p>
+                  <p className="flex items-center gap-1.5 font-medium text-slate-900">
+                    {article.has_video && (
+                      <PlayCircle className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
+                    )}
+                    {article.title}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {article.category}
+                    {article.video_duration_seconds
+                      ? ` · ${Math.round(article.video_duration_seconds / 60)} min video`
+                      : ''}
+                  </p>
                 </button>
               ))
             ) : (
@@ -172,4 +189,71 @@ function ContactSupportForm({ onDone }: { onDone: () => void }) {
       </div>
     </form>
   )
+}
+
+
+/**
+ * A tutorial video (Module 24), shown above the text rather than instead of it.
+ *
+ * The player is chosen from the stored provider, never parsed out of the URL:
+ * the src of an iframe is not something to derive from customer-supplied text,
+ * and the backend already restricts the provider to a known list. Anything it
+ * does not recognise degrades to a plain link, which still works and cannot
+ * embed anything.
+ */
+function TutorialVideo({
+  url,
+  provider,
+  seconds,
+}: {
+  url: string
+  provider: string | null
+  seconds: number | null
+}) {
+  const embed = toEmbedUrl(url, provider)
+
+  if (!embed) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:underline"
+      >
+        <PlayCircle className="h-4 w-4" />
+        Watch the video
+        {seconds ? ` (${Math.round(seconds / 60)} min)` : ''}
+      </a>
+    )
+  }
+
+  return (
+    <div className="mt-3 aspect-video overflow-hidden rounded-lg bg-slate-900">
+      <iframe
+        src={embed}
+        title="Tutorial video"
+        className="h-full w-full"
+        allow="accelerometer; clipboard-write; encrypted-media; picture-in-picture"
+        allowFullScreen
+      />
+    </div>
+  )
+}
+
+function toEmbedUrl(url: string, provider: string | null): string | null {
+  if (!url.startsWith('https://')) return null
+  try {
+    const parsed = new URL(url)
+    if (provider === 'youtube') {
+      const id = parsed.searchParams.get('v') ?? parsed.pathname.split('/').pop()
+      return id ? `https://www.youtube-nocookie.com/embed/${id}` : null
+    }
+    if (provider === 'vimeo') {
+      const id = parsed.pathname.split('/').filter(Boolean).pop()
+      return id ? `https://player.vimeo.com/video/${id}` : null
+    }
+  } catch {
+    return null
+  }
+  return null
 }

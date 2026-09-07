@@ -1,0 +1,142 @@
+{% extends "pdf_base.html" %}
+{% block title %}Property Management Agreement — {{ agreement.reference_code }}{% endblock %}
+
+{% block content %}
+  <div class="doc-title">Property Management Agreement</div>
+
+  <div class="ref-bar">
+    <div><span>Agreement No.</span> <strong>{{ agreement.reference_code }}</strong></div>
+    <div><span>Date</span> <strong>{{ generated_at|longdate }}</strong></div>
+  </div>
+
+  <p>
+    THIS AGREEMENT is made on {{ generated_at|longdate }} BETWEEN
+    <strong>{{ agency.name }}</strong> (hereinafter "the Agent") of
+    {{ agency.address or "the address on record" }}{% if agency.kra_pin %}, KRA PIN {{ agency.kra_pin }}{% endif %},
+    AND <strong>{{ owner.full_name }}</strong> (hereinafter "the Owner") of National ID
+    {{ owner.national_id or "—" }}, telephone {{ owner.phone_number }}{% if owner.kra_pin %}, KRA PIN {{ owner.kra_pin }}{% endif %}.
+  </p>
+
+  <h2>1. Appointment</h2>
+  <p>
+    The Owner appoints the Agent, and the Agent accepts appointment, as sole managing agent of the
+    property or properties listed at clause 2 for the term set out at clause 3, on the terms below.
+  </p>
+
+  <h2>2. Properties Under Management</h2>
+  {% if properties %}
+    <table class="kv">
+      {% for property in properties %}
+        <tr>
+          <td class="label">{{ property.name }}</td>
+          <td class="value">
+            {{ property.address }}{% if property.county %}, {{ property.county }} County{% endif %}
+            {% if property.unit_count %} — {{ property.unit_count }} unit(s){% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+  {% else %}
+    <p>All properties registered to the Owner with the Agent from time to time.</p>
+  {% endif %}
+
+  <h2>3. Term</h2>
+  <table class="kv">
+    <tr><td class="label">Commencement date</td><td class="value">{{ agreement.start_date|longdate }}</td></tr>
+    <tr>
+      <td class="label">Expiry date</td>
+      <td class="value">{% if agreement.end_date %}{{ agreement.end_date|longdate }}{% else %}Open-ended{% endif %}</td>
+    </tr>
+    <tr><td class="label">Initial term</td><td class="value">{{ agreement.term_months }} months</td></tr>
+    <tr><td class="label">Notice period</td><td class="value">{{ agreement.notice_period_days }} days</td></tr>
+  </table>
+
+  <h2>4. Management Fee</h2>
+  <table class="kv">
+    <tr>
+      <td class="label">Fee</td>
+      <td class="value">{{ agreement.management_fee_percent }}% of gross rent collected</td>
+    </tr>
+    <tr>
+      <td class="label">Disbursement date</td>
+      <td class="value">Day {{ agreement.disbursement_day }} of each month</td>
+    </tr>
+  </table>
+  <p>
+    The fee is charged on rent actually collected, not on rent invoiced. The Agent shall remit the
+    balance, after the fee and any authorised expenditure under clause 5, to the Owner by the
+    disbursement date, together with a statement itemising every receipt and deduction.
+  </p>
+
+  <h2>5. Authority Limits</h2>
+  <table class="kv">
+    <tr>
+      <td class="label">Repairs the Agent may authorise alone</td>
+      <td class="value">Up to KES {{ agreement.maintenance_auto_approve_limit|kes }} per item</td>
+    </tr>
+    <tr>
+      <td class="label">Repairs requiring notice to the Owner</td>
+      <td class="value">Above KES {{ agreement.maintenance_notify_limit|kes }} per item</td>
+    </tr>
+  </table>
+  <p>
+    Expenditure between these figures may be incurred by the Agent and is reported on the next
+    monthly statement. Expenditure above the upper figure requires the Owner's prior written
+    approval, except where an emergency threatens the safety of occupants or the fabric of the
+    building, in which case the Agent shall act and inform the Owner within 24 hours.
+  </p>
+
+  <h2>6. Scope of Management</h2>
+  {% if agreement.scope_of_management %}
+    <p>{{ agreement.scope_of_management }}</p>
+  {% else %}
+    <p>
+      The Agent shall market vacant units, screen and select tenants, prepare and execute tenancy
+      agreements, collect rent and deposits, issue receipts, pursue arrears, arrange routine repairs
+      and maintenance, hold and account for deposits, conduct move-in and move-out inspections, and
+      render monthly statements to the Owner.
+    </p>
+  {% endif %}
+
+  <h2>7. Owner's Obligations</h2>
+  <p>
+    The Owner warrants that they are entitled to let the properties, shall keep them insured, shall
+    meet all rates, land rent and statutory outgoings, and shall put the Agent in funds where
+    authorised expenditure exceeds rent collected in any month.
+  </p>
+
+  <h2>8. Termination</h2>
+  <p>
+    Either party may terminate this Agreement by giving {{ agreement.notice_period_days }} days'
+    written notice to the other. On termination the Agent shall render a final statement, remit all
+    money held for the Owner less any fee properly due, and hand over all tenancy agreements,
+    deposit records, keys and correspondence. Tenancies granted by the Agent before termination
+    survive it and bind the Owner.
+  </p>
+
+  <h2>9. Governing Law</h2>
+  <p>
+    This Agreement is governed by the laws of Kenya. It is executed electronically, and the parties
+    agree that an electronic signature verified by one-time password has the same effect as a
+    manuscript signature under the Kenya Information and Communications Act.
+  </p>
+
+  <p style="margin-top:5mm">
+    IN WITNESS WHEREOF the parties have executed this Agreement on the date first written above.
+  </p>
+
+  <div class="signatures">
+    <div>
+      <div class="sig-line">Owner — {{ owner.full_name }}</div>
+      <div style="font-size:8.5pt;color:#64748b">
+        {% if owner_signed_at %}Signed electronically {{ owner_signed_at|longdate }}{% else %}Date: ____________________{% endif %}
+      </div>
+    </div>
+    <div>
+      <div class="sig-line">For the Agent — {{ agency.name }}</div>
+      <div style="font-size:8.5pt;color:#64748b">
+        {% if agency_signed_at %}Signed electronically {{ agency_signed_at|longdate }}{% else %}Date: ____________________{% endif %}
+      </div>
+    </div>
+  </div>
+{% endblock %}

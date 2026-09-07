@@ -2,8 +2,9 @@
 
 Sprint 19 (developer platform) shipped without this file — `PHASE_4_ORG_SCOPED_TABLES`
 existed in `app.core.rls` with nothing checking it stayed in sync. This closes that
-gap and extends it with what Sprint 20 (customer success) added, following the
-same template `test_phase3.py` established: every new table carries RLS and an
+gap and extends it with what every later Phase 4 sprint (20 customer success, 21
+advanced reporting, 22 AI/fraud/security, 23 partner integrations) added, following
+the same template `test_phase3.py` established: every new table carries RLS and an
 `organization_id`, and every new Celery task is actually on the beat schedule.
 
 `help_articles`, `feature_requests`, `feature_votes` and `changelog_entries` are
@@ -11,7 +12,13 @@ deliberately absent from `PHASE_4_TABLES` — like `task_runs`, they hold the sa
 content for every organisation and have no `organization_id` to scope by.
 """
 
-from app.core.rls import ORG_SCOPED_TABLES, PHASE_4_ORG_SCOPED_TABLES
+from app.core.rls import (
+    ORG_SCOPED_TABLES,
+    PHASE_4_ORG_SCOPED_TABLES,
+    PHASE_5_ORG_SCOPED_TABLES,
+    PHASE_6_ORG_SCOPED_TABLES,
+    PHASE_7_ORG_SCOPED_TABLES,
+)
 from app.models.base import Base
 
 # Everything Phase 4 added that belongs to one organisation.
@@ -29,6 +36,22 @@ PHASE_4_TABLES = {
     "support_requests",
     "nps_survey_prompts",
     "milestone_events",
+    # Sprint 21
+    "report_definitions",
+    "monthly_reports",
+    # Sprint 22
+    "lease_analyses",
+    "lease_suggestions",
+    "security_events",
+    "fraud_alerts",
+    "fraud_suppressions",
+    # Sprint 23
+    "portal_connections",
+    "portal_listing_syncs",
+    "accounting_connections",
+    "accounting_sync_records",
+    "bank_statement_uploads",
+    "bank_statement_entries",
 }
 
 # Platform-wide tables Phase 4 added — same content for every organisation, so
@@ -42,14 +65,30 @@ PHASE_4_SHARED_TABLES = {
 
 # The scheduled work Phase 4 introduced. Sprint 19's webhook delivery is
 # push-triggered (`.delay(...)` from `webhook_service.dispatch`), not polled, so
-# it has nothing on the beat schedule.
+# it has nothing on the beat schedule — and Sprint 22's fraud detection is the
+# same shape: evaluated inline from `payment_service._confirm` on every
+# confirmed payment, not swept on a schedule. Sprint 23's portal publish/
+# deactivate is the same again, triggered from `vacancy_service` on a listing's
+# own status change rather than polled — only the accounting sync is a sweep.
 PHASE_4_TASKS = {
     "rentflow.compute_health_scores",
+    "rentflow.monthly_owner_report",
+    "rentflow.run_scheduled_custom_reports",
+    "rentflow.send_failed_login_digest",
+    "rentflow.remind_api_key_rotation",
+    "rentflow.sync_accounting_connections",
 }
 
 
 def test_every_phase_4_table_is_covered_by_row_level_security():
-    declared = set(PHASE_4_ORG_SCOPED_TABLES)
+    # Declared across four constants because each Phase 4 sprint's migration
+    # only ever enables RLS for the tables that existed when it ran.
+    declared = (
+        set(PHASE_4_ORG_SCOPED_TABLES)
+        | set(PHASE_5_ORG_SCOPED_TABLES)
+        | set(PHASE_6_ORG_SCOPED_TABLES)
+        | set(PHASE_7_ORG_SCOPED_TABLES)
+    )
     missing = PHASE_4_TABLES - declared
     assert not missing, f"Phase 4 tables with no RLS policy: {sorted(missing)}"
     assert PHASE_4_TABLES <= set(ORG_SCOPED_TABLES)

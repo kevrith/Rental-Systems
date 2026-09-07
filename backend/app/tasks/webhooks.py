@@ -49,7 +49,7 @@ def deliver_webhook(self, delivery_id: str) -> dict[str, object]:
             await db.commit()
             return True
 
-        secret = crypto.decrypt(endpoint.secret_encrypted)
+        secret = await crypto.decrypt_for_org(db, endpoint.organization_id, endpoint.secret_encrypted)
         body = json.dumps(
             {"event": delivery.event_type, "data": delivery.payload, "delivery_id": str(delivery.id)}
         ).encode("utf-8")

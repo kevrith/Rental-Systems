@@ -18,8 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OrgContext
 from app.core.config import settings
-from app.models.file import FileCategory, StoredFile, UploadStatus
-from app.services import storage_service
+from app.models.file import FileCategory, ScanStatus, StoredFile, UploadStatus
+from app.services import audit_service, storage_service, virus_scan_service
 
 
 async def request_upload(
@@ -88,6 +88,33 @@ async def confirm_upload(
     record.uploaded_at = datetime.now(UTC)
     if size_bytes:
         record.size_bytes = size_bytes
+
+    outcome = virus_scan_service.scan_bytes(storage_service.get_storage().read(record.storage_key))
+    record.scan_status = outcome.status
+    record.scan_detail = outcome.detail
+    record.scanned_at = datetime.now(UTC)
+
+    if outcome.status == ScanStatus.INFECTED:
+        # Never confirmed as UPLOADED, so it never becomes visible or attachable
+        # anywhere in the app — the file exists on disk/R2 only long enough to be
+        # scanned, then removed.
+        storage_service.get_storage().delete(record.storage_key)
+        record.status = UploadStatus.FAILED
+        audit_service.record(
+            db,
+            organization_id=context.organization_id,
+            action="file.infected_upload_rejected",
+            entity_type="stored_file",
+            entity_id=record.id,
+            actor=context.user,
+            summary=f"Rejected infected upload '{record.filename}' ({outcome.detail})",
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This file failed a virus scan and was not stored.",
+        )
+
     await db.commit()
     await db.refresh(record)
     return record

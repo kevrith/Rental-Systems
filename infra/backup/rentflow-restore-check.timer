@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly RentFlow restore drill
+
+[Timer]
+# Sunday 03:30 UTC, after that morning's backup has landed. Weekly, not daily:
+# the drill costs a full restore's worth of I/O.
+OnCalendar=Sun *-*-* 03:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

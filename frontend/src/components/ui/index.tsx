@@ -52,12 +52,27 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { className, variant = 'primary', size = 'md', loading, icon, children, disabled, ...props },
+  {
+    className,
+    variant = 'primary',
+    size = 'md',
+    loading,
+    icon,
+    children,
+    disabled,
+    // HTML defaults a bare <button> inside a form to type="submit", so a
+    // Cancel or Close button in a dialog form would silently submit it. Every
+    // real submit button in this app declares itself, so the safe default here
+    // is the inert one.
+    type = 'button',
+    ...props
+  },
   ref,
 ) {
   return (
     <button
       ref={ref}
+      type={type}
       disabled={disabled || loading}
       className={cn(
         'inline-flex items-center rounded-lg font-medium transition-colors',

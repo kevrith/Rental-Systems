@@ -79,10 +79,11 @@ async def dismiss_onboarding(
 @router.get("/help/articles", response_model=list[HelpArticleRead])
 async def search_help_articles(
     q: str | None = Query(default=None, max_length=200),
+    video_only: bool = Query(default=False, description="Only articles with a tutorial video"),
     context: OrgContext = Depends(get_org_context),
     db: AsyncSession = Depends(get_db),
 ) -> list[HelpArticleRead]:
-    rows = await help_service.search(db, q)
+    rows = await help_service.search(db, q, video_only=video_only)
     return [HelpArticleRead.model_validate(row) for row in rows]
 
 
