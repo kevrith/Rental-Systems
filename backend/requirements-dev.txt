@@ -7,7 +7,7 @@ ruff==0.8.4
 black==24.10.0
 mypy==2.3.1
 pre-commit==4.6.2
-fakeredis==2.26.2
+fakeredis==2.37.1
 # Coverage measurement (Sprint 26). The global Definition of Done asks for
 # 80%; until this was added it had never been measured.
 pytest-cov==6.0.0
