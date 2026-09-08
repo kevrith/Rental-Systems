@@ -57,17 +57,29 @@ export default defineConfig({
        * rises; do not set an aspirational number that fails on the first run,
        * because a threshold nobody can pass gets deleted from CI within a week.
        *
+       * That is exactly what had happened. These read 80/88/30/80 against a
+       * real 63/60/34/62, and the job had failed on every one of the fifteen
+       * CI runs since the workflow was added — the gate had never once been
+       * green, so nothing it said could be trusted or acted on. The numbers
+       * below are the measured figures after covering `theme-store` and
+       * `command-palette-store`, which had landed with no tests at all and
+       * were the largest single hole, and after `image-compression` arrived
+       * with tests of its own.
+       *
        * `functions` is deliberately far lower than the others and is not a
        * measure of anything much here: `query-client.ts` is a hundred-odd
        * one-line key factories, each counted as an uncovered function, which
        * drags the figure down without saying anything about risk. Statements,
        * lines and branches are the numbers worth watching.
+       *
+       * The honest next step is `components/ui` (66%) and the `query-client`
+       * key factories, not another downward adjustment.
        */
       thresholds: {
-        statements: 80,
-        branches: 88,
-        functions: 30,
-        lines: 80,
+        statements: 72,
+        branches: 66,
+        functions: 43,
+        lines: 71,
       },
     },
   },

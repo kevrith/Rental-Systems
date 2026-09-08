@@ -183,7 +183,11 @@ jobs:
         working-directory: backend
         run: |
           nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > ../backend.log 2>&1 &
-          npx --yes wait-on@8 -t 30000 http://localhost:8000/api/v1/health
+          # `http-get://`, not `http://`: wait-on probes with HEAD by default and
+          # the health route declares only GET, so the default probe polls a
+          # perfectly healthy server for the full 30s on 405s and then fails the
+          # step. Verified: GET returns 200, HEAD returns 405.
+          npx --yes wait-on@8 -t 30000 http-get://localhost:8000/api/v1/health
 
       - uses: actions/setup-node@v7
         with:
@@ -207,7 +211,7 @@ jobs:
         working-directory: frontend
         run: |
           nohup npx vite preview --port 4173 --host > ../frontend.log 2>&1 &
-          npx --yes wait-on@8 -t 30000 http://localhost:4173
+          npx --yes wait-on@8 -t 30000 http-get://localhost:4173
 
       - name: Install Playwright browsers
         working-directory: frontend
