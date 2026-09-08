@@ -30,7 +30,7 @@ jinja2==3.1.6
 # renderer; 70.0 is the current release on that line.
 weasyprint==70.0
 # Pure-Python QR codes for the eTIMS receipt stamp (US-053).
-segno==1.6.1
+segno==1.6.6
 # Excel import/export for bulk onboarding and data migration (US-072, US-076, US-077).
 openpyxl==3.1.5
 pyarrow==25.0.1
