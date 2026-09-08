@@ -18,7 +18,7 @@
     "axios": "^1.20.0",
     "date-fns": "^4.4.0",
     "idb": "^8.0.3",
-    "lucide-react": "^1.39.0",
+    "lucide-react": "^1.41.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-hook-form": "^7.87.0",
