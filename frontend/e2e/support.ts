@@ -23,7 +23,12 @@ export function uniquePhone(): string {
 
 export function uniqueEmail(prefix: string): string {
   counter += 1
-  return `${prefix}-${Date.now()}-${counter}@e2e.rentflow.test`
+  // `example.com`, not `.test`: RFC 6761 reserves `.test` as a special-use
+  // name and email-validator rejects it outright, so every registration these
+  // fixtures made came back 422 and took the whole spec with it. `example.com`
+  // is reserved by IANA for exactly this, resolves nowhere, and needs no DNS
+  // lookup to validate — so it cannot deliver mail and cannot flake in CI.
+  return `${prefix}-${Date.now()}-${counter}@e2e.example.com`
 }
 
 interface Registered {
