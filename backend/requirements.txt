@@ -44,7 +44,7 @@ clamd==1.0.2
 # WebAuthn / biometric login (Sprint 25, US-108).
 webauthn==2.6.0
 # Error tracking (Sprint 26). Inert without SENTRY_DSN.
-sentry-sdk[fastapi,celery,sqlalchemy]==2.20.0
+sentry-sdk[fastapi,celery,sqlalchemy]==2.68.1
 # Distributed tracing (Sprint 26). Inert without OTEL_EXPORTER_OTLP_ENDPOINT.
 # These move in lockstep: opentelemetry-sdk X.Y.Z pins opentelemetry-api to the
 # exact same version, and every instrumentation package pins
