@@ -548,6 +548,7 @@ async def storage_usage(db: AsyncSession, context: OrgContext) -> dict:
     return {
         "total_documents": sum(row["document_count"] for row in by_category),
         "total_bytes": sum(row["bytes"] for row in by_category),
+        "limit_bytes": file_service.effective_storage_limit_bytes(context.organization),
         "by_category": by_category,
     }
 

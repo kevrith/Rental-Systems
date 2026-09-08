@@ -64,6 +64,10 @@ PUBLIC_PREFIXES: dict[str, str] = {
     # redirecting the landlord's browser back after they grant access.
     "/api/v1/portal-webhooks": "A connected property portal reporting an inbound enquiry.",
     "/api/v1/oauth": "Accounting OAuth callback. Authenticated by the signed `state` alone.",
+    # The help centre. Read-only, and the rows carry no organisation: the whole
+    # point is that it is readable before an account exists, and by anyone stuck
+    # on the sign-in screen. Only published articles are served.
+    "/api/v1/help": "The public help centre. Platform-wide content, identical for every tenant.",
 }
 
 # Strings that must never appear in any response body.

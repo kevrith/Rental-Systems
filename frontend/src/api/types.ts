@@ -819,6 +819,7 @@ export interface PropertyVault {
 export interface VaultUsage {
   total_documents: number
   total_bytes: number
+  limit_bytes: number | null
   by_category: { category: string; document_count: number; bytes: number }[]
 }
 
@@ -2145,6 +2146,10 @@ export interface HelpArticle {
   body: string
   category: string
   is_published: boolean
+  // Reading order across the whole knowledge base. Articles in a category are
+  // contiguous in the numbering, so the server's ordering carries both the
+  // category order and the order within it.
+  sort_order: number
   // Video tutorial (Sprint 26, Module 24). `body` stays required either way:
   // text is searchable and works on a metered connection, which most of this
   // product's audience is on.

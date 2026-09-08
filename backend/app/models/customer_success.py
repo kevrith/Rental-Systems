@@ -84,6 +84,13 @@ class HelpArticle(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     category: Mapped[str] = mapped_column(String(100), nullable=False)
     is_published: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
 
+    # Reading order across the whole knowledge base, not within a category:
+    # articles in a category are contiguous in the numbering, so grouping by
+    # category and ordering by this gives both the category order and the
+    # order inside it from one editable field. Spaced in tens so an article
+    # can be slotted between two others without renumbering the rest.
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, index=True)
+
     # Video tutorial (US-090, Module 24). An article may be text, video, or both
     # — `body` stays required so a video article is still searchable and still
     # usable on a metered connection, which is most of this product's audience.

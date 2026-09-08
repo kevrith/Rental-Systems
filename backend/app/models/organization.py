@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     Enum,
@@ -175,6 +176,15 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     bi_export_enabled: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("false"), nullable=False
     )
+
+    # Document vault storage cap, in bytes. Null means "use the plan default"
+    # (see `vault_service.PLAN_STORAGE_LIMITS_GB`) — this column exists only
+    # to hold Enterprise's negotiated custom figure, which has no single
+    # platform-wide default to fall back to. Platform-staff-set only
+    # (`PATCH /internal/organizations/{id}/plan`); never exposed on the
+    # customer-facing organization-settings update, since a customer setting
+    # their own storage cap would defeat the point of having one.
+    storage_limit_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     # `foreign_keys` is explicit because `suspended_by_id` above adds a second
     # foreign key between these two tables, and without it SQLAlchemy cannot

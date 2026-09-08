@@ -9,6 +9,7 @@ from tests.conftest import TEST_PASSWORD, Actor, register_owner, unique_phone
 
 BASE = "/api/v1/customer-success"
 INTERNAL = "/api/v1/internal"
+PUBLIC_HELP = "/api/v1/help"
 
 
 async def make_platform_staff(db, actor: Actor) -> None:
@@ -96,6 +97,201 @@ async def test_non_platform_staff_cannot_write_help_articles(owner: Actor) -> No
         json={"slug": "x", "title": "X", "body": "x", "category": "x"},
     )
     assert response.status_code == 403
+
+
+# --------------------------------------------------------- public help centre
+
+
+async def test_public_help_centre_needs_no_login(client, owner: Actor, db) -> None:
+    """`client` carries no bearer token — this is the prospect on the landing
+    page, who has no account to log into yet."""
+    await make_platform_staff(db, owner)
+    await owner.post(
+        f"{INTERNAL}/help-articles",
+        json={
+            "slug": "collect-rent-through-mpesa",
+            "title": "Collect rent through M-Pesa",
+            "body": "M-Pesa collection runs through Safaricom's Daraja API.",
+            "category": "Rent and payments",
+        },
+    )
+
+    listed = await client.get(f"{PUBLIC_HELP}/articles")
+    assert listed.status_code == 200
+    assert any(a["slug"] == "collect-rent-through-mpesa" for a in listed.json())
+
+    fetched = await client.get(f"{PUBLIC_HELP}/articles/collect-rent-through-mpesa")
+    assert fetched.status_code == 200
+    assert fetched.json()["category"] == "Rent and payments"
+
+
+async def test_public_help_centre_searches_title_and_body(client, owner: Actor, db) -> None:
+    await make_platform_staff(db, owner)
+    for slug, title, body in [
+        ("arrears-worklist", "Work the arrears list", "Ranked by how long it has been outstanding."),
+        ("meter-readings", "Record meter readings", "Water and power, billed onto the next invoice."),
+    ]:
+        await owner.post(
+            f"{INTERNAL}/help-articles",
+            json={"slug": slug, "title": title, "body": body, "category": "Guides"},
+        )
+
+    by_title = await client.get(f"{PUBLIC_HELP}/articles", params={"q": "arrears"})
+    assert [a["slug"] for a in by_title.json()] == ["arrears-worklist"]
+
+    by_body = await client.get(f"{PUBLIC_HELP}/articles", params={"q": "invoice"})
+    assert [a["slug"] for a in by_body.json()] == ["meter-readings"]
+
+
+async def test_public_help_centre_hides_unpublished_drafts(client, owner: Actor, db) -> None:
+    await make_platform_staff(db, owner)
+    await owner.post(
+        f"{INTERNAL}/help-articles",
+        json={
+            "slug": "half-written",
+            "title": "Half written",
+            "body": "Not ready.",
+            "category": "Guides",
+            "is_published": False,
+        },
+    )
+
+    listed = await client.get(f"{PUBLIC_HELP}/articles")
+    assert all(a["slug"] != "half-written" for a in listed.json())
+    assert (await client.get(f"{PUBLIC_HELP}/articles/half-written")).status_code == 404
+
+
+async def test_public_help_centre_404s_on_unknown_slug(client) -> None:
+    assert (await client.get(f"{PUBLIC_HELP}/articles/no-such-article")).status_code == 404
+
+
+# ------------------------------------------------- help search and ordering
+#
+# `help_articles` is platform-wide — no `organization_id`, and so no per-test
+# tenant to scope rows to. Each test below starts from an empty table rather
+# than asserting around whatever earlier tests left behind, which is what lets
+# them assert exact orderings instead of `any(...)`.
+
+
+async def clear_help_articles(db) -> None:
+    await db.execute(text("DELETE FROM help_articles"))
+    await db.commit()
+
+
+async def write_article(owner: Actor, **overrides) -> dict:
+    payload = {
+        "slug": "an-article",
+        "title": "An article",
+        "body": "Some body text.",
+        "category": "Guides",
+    } | overrides
+    response = await owner.post(f"{INTERNAL}/help-articles", json=payload)
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+async def test_search_folds_punctuation_out_of_the_query(client, owner: Actor, db) -> None:
+    """ "mpesa" has to find "M-Pesa" — it is the most searched term in this
+    product, and the bare LIKE never matched it."""
+    await make_platform_staff(db, owner)
+    await clear_help_articles(db)
+    await write_article(
+        owner,
+        slug="collect-rent-through-mpesa",
+        title="Collect rent through M-Pesa",
+        body="STK push, paybill and till payments.",
+    )
+
+    for query in ("mpesa", "M-Pesa", "MPESA", "m-pesa"):
+        found = await client.get(f"{PUBLIC_HELP}/articles", params={"q": query})
+        assert [a["slug"] for a in found.json()] == ["collect-rent-through-mpesa"], query
+
+
+async def test_search_folds_punctuation_in_the_body_too(client, owner: Actor, db) -> None:
+    await make_platform_staff(db, owner)
+    await clear_help_articles(db)
+    await write_article(
+        owner,
+        slug="ending-a-tenancy",
+        title="Ending a tenancy",
+        body="Run a move-out inspection before releasing the deposit.",
+    )
+
+    found = await client.get(f"{PUBLIC_HELP}/articles", params={"q": "moveout"})
+    assert [a["slug"] for a in found.json()] == ["ending-a-tenancy"]
+
+
+async def test_search_still_finds_what_the_plain_like_found(client, owner: Actor, db) -> None:
+    """Folding is additive: it widens the result set, never narrows it."""
+    await make_platform_staff(db, owner)
+    await clear_help_articles(db)
+    await write_article(owner, slug="arrears", title="Work the arrears list", body="A ranked worklist.")
+
+    for query in ("arrears", "Arrears", "ranked worklist"):
+        found = await client.get(f"{PUBLIC_HELP}/articles", params={"q": query})
+        assert [a["slug"] for a in found.json()] == ["arrears"], query
+
+
+async def test_search_does_not_fold_away_word_boundaries(client, owner: Actor, db) -> None:
+    """Spaces survive folding. Collapsing them too would make "rent day" a
+    substring of "diffe(rent day)"."""
+    await make_platform_staff(db, owner)
+    await clear_help_articles(db)
+    await write_article(owner, slug="a-different-day", body="On a different day the rent clears.")
+
+    found = await client.get(f"{PUBLIC_HELP}/articles", params={"q": "rentday"})
+    assert found.json() == []
+
+
+async def test_search_of_pure_punctuation_does_not_match_everything(client, owner: Actor, db) -> None:
+    await make_platform_staff(db, owner)
+    await clear_help_articles(db)
+    await write_article(owner, slug="a-guide", body="Nothing special here.")
+
+    found = await client.get(f"{PUBLIC_HELP}/articles", params={"q": "---"})
+    assert found.json() == []
+
+
+async def test_articles_come_back_in_reading_order(client, owner: Actor, db) -> None:
+    await make_platform_staff(db, owner)
+    await clear_help_articles(db)
+    await write_article(owner, slug="third", title="Third", sort_order=30)
+    await write_article(owner, slug="first", title="First", sort_order=10)
+    await write_article(owner, slug="second", title="Second", sort_order=20)
+
+    listed = await client.get(f"{PUBLIC_HELP}/articles")
+    assert [a["slug"] for a in listed.json()] == ["first", "second", "third"]
+
+
+async def test_a_new_article_is_appended_not_promoted(client, owner: Actor, db) -> None:
+    """An unplaced article at the top of the help centre is a content bug only
+    readers see; at the bottom it is visible to the author who created it."""
+    await make_platform_staff(db, owner)
+    await clear_help_articles(db)
+    await write_article(owner, slug="placed", title="Placed", sort_order=10)
+    appended = await write_article(owner, slug="unplaced", title="Unplaced")
+
+    assert appended["sort_order"] > 10
+    listed = await client.get(f"{PUBLIC_HELP}/articles")
+    assert [a["slug"] for a in listed.json()] == ["placed", "unplaced"]
+
+
+async def test_editing_an_article_keeps_its_position(owner: Actor, db) -> None:
+    await make_platform_staff(db, owner)
+    await clear_help_articles(db)
+    created = await write_article(owner, slug="placed", title="Placed", sort_order=40)
+
+    edited = await owner.patch(
+        f"{INTERNAL}/help-articles/{created['id']}",
+        json={
+            "slug": "placed",
+            "title": "Placed, retitled",
+            "body": "Some body text.",
+            "category": "Guides",
+        },
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["sort_order"] == 40
 
 
 # ------------------------------------------------------------------ support

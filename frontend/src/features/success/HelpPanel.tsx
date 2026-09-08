@@ -7,6 +7,8 @@ import { Alert, Button, Dialog, EmptyState, Field, Input, Spinner, Textarea } fr
 import { errorMessage } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
 
+import { TutorialVideo } from './TutorialVideo'
+
 /** Contextual help side panel (US-090). Built on the existing `Dialog` rather
  * than a new slide-in primitive — one fewer component to introduce for a
  * panel that only needs to show search results and article text. */
@@ -189,71 +191,4 @@ function ContactSupportForm({ onDone }: { onDone: () => void }) {
       </div>
     </form>
   )
-}
-
-
-/**
- * A tutorial video (Module 24), shown above the text rather than instead of it.
- *
- * The player is chosen from the stored provider, never parsed out of the URL:
- * the src of an iframe is not something to derive from customer-supplied text,
- * and the backend already restricts the provider to a known list. Anything it
- * does not recognise degrades to a plain link, which still works and cannot
- * embed anything.
- */
-function TutorialVideo({
-  url,
-  provider,
-  seconds,
-}: {
-  url: string
-  provider: string | null
-  seconds: number | null
-}) {
-  const embed = toEmbedUrl(url, provider)
-
-  if (!embed) {
-    return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noreferrer"
-        className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:underline"
-      >
-        <PlayCircle className="h-4 w-4" />
-        Watch the video
-        {seconds ? ` (${Math.round(seconds / 60)} min)` : ''}
-      </a>
-    )
-  }
-
-  return (
-    <div className="mt-3 aspect-video overflow-hidden rounded-lg bg-slate-900">
-      <iframe
-        src={embed}
-        title="Tutorial video"
-        className="h-full w-full"
-        allow="accelerometer; clipboard-write; encrypted-media; picture-in-picture"
-        allowFullScreen
-      />
-    </div>
-  )
-}
-
-function toEmbedUrl(url: string, provider: string | null): string | null {
-  if (!url.startsWith('https://')) return null
-  try {
-    const parsed = new URL(url)
-    if (provider === 'youtube') {
-      const id = parsed.searchParams.get('v') ?? parsed.pathname.split('/').pop()
-      return id ? `https://www.youtube-nocookie.com/embed/${id}` : null
-    }
-    if (provider === 'vimeo') {
-      const id = parsed.pathname.split('/').filter(Boolean).pop()
-      return id ? `https://player.vimeo.com/video/${id}` : null
-    }
-  } catch {
-    return null
-  }
-  return null
 }

@@ -45,6 +45,7 @@ class HelpArticleRead(BaseModel):
     body: str
     category: str
     is_published: bool
+    sort_order: int
     video_url: str | None = None
     video_duration_seconds: int | None = None
     video_thumbnail_url: str | None = None
@@ -66,6 +67,10 @@ class HelpArticleWrite(BaseModel):
     body: str = Field(min_length=1)
     category: str = Field(min_length=2, max_length=100)
     is_published: bool = True
+    # Omitted means "the server decides": a new article is appended to the end
+    # of the knowledge base, an edited one keeps the position it already has.
+    # A caller that sends a number is placing the article deliberately.
+    sort_order: int | None = Field(default=None, ge=0, le=1_000_000)
 
     video_url: str | None = Field(default=None, max_length=1024)
     video_duration_seconds: int | None = Field(default=None, ge=1, le=36000)
@@ -121,6 +126,12 @@ class ReferralSummary(BaseModel):
 
 class OrganizationPlanUpdate(BaseModel):
     plan: SubscriptionPlan
+    # Enterprise's negotiated document-vault storage cap, in bytes — every
+    # other plan's cap comes from a fixed table
+    # (`file_service.PLAN_STORAGE_LIMITS_GB`) and has no per-org override.
+    # Omit to leave the existing value alone; pass null to clear it back to
+    # the plan default.
+    storage_limit_bytes: int | None = Field(default=None)
 
 
 class NpsPendingRead(BaseModel):

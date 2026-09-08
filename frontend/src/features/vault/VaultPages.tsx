@@ -78,19 +78,45 @@ export function PropertyVaultPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              <HardDrive className="mr-1.5 inline h-4 w-4 text-slate-400" />
+              <HardDrive className="mr-1.5 inline h-4 w-4 text-slate-400 dark:text-slate-500" />
               Storage across the account
             </CardTitle>
           </CardHeader>
           <CardBody>
-            <p className="mb-3 text-sm text-slate-600">
-              {usage.data.total_documents} documents · {fileSize(usage.data.total_bytes)} in total
-            </p>
+            {usage.data.limit_bytes ? (
+              <>
+                <div className="mb-1.5 flex items-baseline justify-between text-sm">
+                  <span className="text-slate-600 dark:text-slate-300">
+                    {fileSize(usage.data.total_bytes)} of {fileSize(usage.data.limit_bytes)} used
+                  </span>
+                  <span className="text-slate-500 dark:text-slate-400">
+                    {usage.data.total_documents} documents
+                  </span>
+                </div>
+                <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                  <div
+                    className={
+                      usage.data.total_bytes / usage.data.limit_bytes >= 0.9
+                        ? 'h-full rounded-full bg-danger-500'
+                        : 'h-full rounded-full bg-brand-500'
+                    }
+                    style={{
+                      width: `${Math.min(100, (usage.data.total_bytes / usage.data.limit_bytes) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </>
+            ) : (
+              <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+                {usage.data.total_documents} documents · {fileSize(usage.data.total_bytes)} in total ·
+                unlimited plan
+              </p>
+            )}
             <ul className="space-y-1.5">
               {usage.data.by_category.slice(0, 8).map((row) => (
                 <li key={row.category} className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">{humanize(row.category)}</span>
-                  <span className="text-slate-500">
+                  <span className="text-slate-600 dark:text-slate-300">{humanize(row.category)}</span>
+                  <span className="text-slate-500 dark:text-slate-400">
                     {row.document_count} · {fileSize(row.bytes)}
                   </span>
                 </li>

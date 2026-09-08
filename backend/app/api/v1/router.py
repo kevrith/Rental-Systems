@@ -151,6 +151,9 @@ api_router.include_router(external.router, prefix="/external", tags=["external-a
 # changelog (Sprint 20), plus the cross-organization view for RentFlow's own
 # customer-success team.
 api_router.include_router(customer_success.router, prefix="/customer-success", tags=["customer-success"])
+# The help centre is public: it has to be readable before there is an account
+# to log into, and by anyone stuck on the sign-in screen.
+api_router.include_router(customer_success.public_router, prefix="/help", tags=["help"])
 api_router.include_router(internal.router, prefix="/internal", tags=["internal"])
 
 # Sprint 21 — the custom report builder and the automatic monthly summary.

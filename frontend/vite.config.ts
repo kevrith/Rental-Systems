@@ -38,7 +38,10 @@ export default defineConfig({
         background_color: '#f8fafc',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
+        // `/` is the public landing page now, which an installed app has no
+        // use for — `/dashboard` resolves to the signed-in home screen, or
+        // bounces to the login form when there is no session.
+        start_url: '/dashboard',
         scope: '/',
         categories: ['business', 'finance', 'productivity'],
         icons: [

@@ -7,6 +7,7 @@ import { AcceptInvitePage, PortalSetupPage } from '@/features/auth/AcceptInviteP
 import { LoginPage } from '@/features/auth/LoginPage'
 import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from '@/features/auth/PasswordPages'
 import { RegisterPage } from '@/features/auth/RegisterPage'
+import { LandingPage } from '@/features/marketing/LandingPage'
 import { PortalLoginPage } from '@/features/portal/PortalLoginPage'
 import { PortalShell } from '@/features/portal/PortalShell'
 import { HomeRedirect } from '@/pages/HomeRedirect'
@@ -41,6 +42,12 @@ const GuaranteeResponsePage = lazy(() =>
     default: m.GuaranteeResponsePage,
   })),
 )
+const HelpCenterPage = lazy(() =>
+  import('@/features/help/HelpCenterPage').then((m) => ({ default: m.HelpCenterPage })),
+)
+const HelpArticlePage = lazy(() =>
+  import('@/features/help/HelpCenterPage').then((m) => ({ default: m.HelpArticlePage })),
+)
 const PrivacyPolicyPage = lazy(() =>
   import('@/features/legal/LegalPages').then((m) => ({ default: m.PrivacyPolicyPage })),
 )
@@ -55,9 +62,7 @@ const ReferenceResponsePage = lazy(() =>
     default: m.ReferenceResponsePage,
   })),
 )
-const FleetPage = lazy(() =>
-  import('@/features/rentals/FleetPage').then((m) => ({ default: m.FleetPage })),
-)
+const FleetPage = lazy(() => import('@/features/rentals/FleetPage').then((m) => ({ default: m.FleetPage })))
 const AssetDetailPage = lazy(() =>
   import('@/features/rentals/AssetDetailPage').then((m) => ({ default: m.AssetDetailPage })),
 )
@@ -339,6 +344,7 @@ function App() {
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         {/* Public */}
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -357,6 +363,10 @@ function App() {
         <Route path="/listing/:slug" element={<PublicListingPage />} />
         <Route path="/guarantee/:token" element={<GuaranteeResponsePage />} />
         <Route path="/reference/:token" element={<ReferenceResponsePage />} />
+        {/* The help centre is public on purpose: it has to be readable before
+            there is an account, and by anyone stuck on the sign-in screen. */}
+        <Route path="/help" element={<HelpCenterPage />} />
+        <Route path="/help/:slug" element={<HelpArticlePage />} />
         <Route path="/legal/privacy" element={<PrivacyPolicyPage />} />
         <Route path="/legal/terms" element={<TermsOfServicePage />} />
         <Route path="/legal/cookies" element={<CookiePolicyPage />} />
@@ -375,7 +385,6 @@ function App() {
         {/* Staff app */}
         <Route element={<ProtectedRoute allowRoles={STAFF_ROLES} />}>
           <Route element={<AppShell />}>
-            <Route path="/" element={<HomeRedirect />} />
             <Route path="/dashboard" element={<HomeRedirect />} />
             <Route path="/overview" element={<DashboardPage />} />
             <Route path="/today" element={<CaretakerHomePage />} />
@@ -440,10 +449,7 @@ function App() {
             <Route path="/settings/exports" element={<DataExportPage />} />
 
             {/* Phase 3 — service charges and bulk actions */}
-            <Route
-              path="/properties/:propertyId/service-charge"
-              element={<ServiceChargePage />}
-            />
+            <Route path="/properties/:propertyId/service-charge" element={<ServiceChargePage />} />
             <Route path="/bulk" element={<BulkOperationsPage />} />
             <Route path="/bulk/import" element={<TenantImportPage />} />
 

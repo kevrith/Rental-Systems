@@ -32,13 +32,27 @@ import {
 import { fileSize } from '@/features/vault/file-size'
 import { API_BASE_URL } from '@/lib/api-client'
 import { dateTime, errorMessage, humanize } from '@/lib/format'
+import { SCAN_COMPRESSION, compressImage } from '@/lib/image-compression'
 
-/** The three-step direct-to-storage upload, without the photo-grid chrome. */
-async function uploadDocument(file: File, category: string): Promise<string> {
+/**
+ * The three-step direct-to-storage upload, without the photo-grid chrome.
+ *
+ * Photographed paperwork is the bulk of what an agency uploads by hand, and a
+ * phone shot of a title deed is 5MB of resolution nobody reads — so images are
+ * shrunk here before they count against the plan's storage. PDFs and Word files
+ * go up as they are; `compressImage` passes anything it cannot decode straight
+ * through. Scans get a longer edge than field photos so the small print holds.
+ */
+async function uploadDocument(
+  file: File,
+  category: string,
+): Promise<{ fileId: string; savingNote: string | null }> {
+  const image = await compressImage(file, SCAN_COMPRESSION)
+
   const ticket = await filesApi.requestUpload({
-    filename: file.name,
-    content_type: file.type || 'application/octet-stream',
-    size_bytes: file.size,
+    filename: image.filename,
+    content_type: image.contentType,
+    size_bytes: image.bytes,
     category,
   })
   const destination = ticket.upload_url.startsWith('http')
@@ -48,12 +62,17 @@ async function uploadDocument(file: File, category: string): Promise<string> {
   const response = await fetch(destination, {
     method: ticket.method,
     headers: ticket.headers,
-    body: file,
+    body: image.blob,
   })
   if (!response.ok) throw new Error(`Upload failed (${response.status})`)
 
-  await filesApi.confirm(ticket.file_id, file.size)
-  return ticket.file_id
+  await filesApi.confirm(ticket.file_id, image.bytes)
+  return {
+    fileId: ticket.file_id,
+    savingNote: image.compressed
+      ? `Compressed from ${fileSize(image.originalBytes)} to ${fileSize(image.bytes)} before storing.`
+      : null,
+  }
 }
 
 export interface VaultData {
@@ -131,8 +150,8 @@ export function DocumentVault({
   const upload = useMutation({
     mutationFn: async () => {
       if (!uploadFile) throw new Error('Choose a file first.')
-      const fileId = await uploadDocument(uploadFile, uploadCategory)
-      return vaultApi.file({
+      const { fileId, savingNote } = await uploadDocument(uploadFile, uploadCategory)
+      const document = await vaultApi.file({
         file_id: fileId,
         entity_type: entityType,
         entity_id: entityId,
@@ -143,10 +162,11 @@ export function DocumentVault({
           .filter(Boolean),
         description: uploadDescription || null,
       })
+      return { document, savingNote }
     },
-    onSuccess: async (document) => {
+    onSuccess: async ({ document, savingNote }) => {
       setError(null)
-      setNotice(`${document.filename} added to the vault.`)
+      setNotice(`${document.filename} added to the vault.${savingNote ? ` ${savingNote}` : ''}`)
       setUploadOpen(false)
       setUploadFile(null)
       setUploadTags('')
@@ -159,12 +179,17 @@ export function DocumentVault({
   const replace = useMutation({
     mutationFn: async () => {
       if (!replaceFor || !replaceFile) throw new Error('Choose a replacement file.')
-      const fileId = await uploadDocument(replaceFile, replaceFor.category)
-      return vaultApi.addVersion(replaceFor.id, { file_id: fileId })
+      const { fileId, savingNote } = await uploadDocument(replaceFile, replaceFor.category)
+      const document = await vaultApi.addVersion(replaceFor.id, { file_id: fileId })
+      return { document, savingNote }
     },
-    onSuccess: async (document) => {
+    onSuccess: async ({ document, savingNote }) => {
       setError(null)
-      setNotice(`Saved as version ${document.version}. The previous one is still in the history.`)
+      setNotice(
+        `Saved as version ${document.version}. The previous one is still in the history.${
+          savingNote ? ` ${savingNote}` : ''
+        }`,
+      )
       setReplaceFor(null)
       setReplaceFile(null)
       await refresh()
@@ -241,7 +266,7 @@ export function DocumentVault({
           </Button>
         </CardHeader>
         <CardBody className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_auto]">
             <Field label="Search">
               <Input
                 value={search}
@@ -417,7 +442,11 @@ export function DocumentVault({
         }
       >
         <div className="space-y-4">
-          <Field label="File" required hint="JPG, PNG, PDF, DOC or DOCX · up to 10MB">
+          <Field
+            label="File"
+            required
+            hint="JPG, PNG, PDF, DOC or DOCX · up to 10MB · photos are shrunk before upload"
+          >
             <Input
               type="file"
               accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx"

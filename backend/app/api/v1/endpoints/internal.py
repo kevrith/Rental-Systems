@@ -108,6 +108,8 @@ async def update_organization_plan(
     if organization is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
     organization.subscription_plan = payload.plan
+    if "storage_limit_bytes" in payload.model_fields_set:
+        organization.storage_limit_bytes = payload.storage_limit_bytes
     await db.flush()
     await referral_service.handle_plan_upgraded(db, organization)
     await db.commit()
