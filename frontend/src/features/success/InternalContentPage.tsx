@@ -70,6 +70,7 @@ function HelpArticlesTab() {
             <Table>
               <thead>
                 <tr>
+                  <Th className="w-16">Order</Th>
                   <Th>Title</Th>
                   <Th>Category</Th>
                   <Th>Status</Th>
@@ -79,6 +80,7 @@ function HelpArticlesTab() {
               <tbody>
                 {articles.data.map((article) => (
                   <tr key={article.id}>
+                    <Td className="tabular-nums text-slate-400">{article.sort_order}</Td>
                     <Td className="font-medium text-slate-900">{article.title}</Td>
                     <Td>{article.category}</Td>
                     <Td>
@@ -116,6 +118,9 @@ function HelpArticleDialog({ article, onClose }: { article: HelpArticle | null; 
   const [category, setCategory] = useState(article?.category ?? '')
   const [body, setBody] = useState(article?.body ?? '')
   const [isPublished, setIsPublished] = useState(article?.is_published ?? true)
+  // Blank means "leave it to the server": appended to the end on create, kept
+  // as-is on edit. Sending 0 instead would move an edited article to the top.
+  const [sortOrder, setSortOrder] = useState(article ? String(article.sort_order) : '')
   const [videoUrl, setVideoUrl] = useState(article?.video_url ?? '')
   const [videoProvider, setVideoProvider] = useState(article?.video_provider ?? 'youtube')
   const [videoSeconds, setVideoSeconds] = useState(
@@ -130,6 +135,7 @@ function HelpArticleDialog({ article, onClose }: { article: HelpArticle | null; 
         category,
         body,
         is_published: isPublished,
+        sort_order: sortOrder.trim() === '' ? null : Number(sortOrder),
         // An empty URL clears the video rather than saving an empty string.
         video_url: videoUrl.trim() || null,
         video_provider: videoUrl.trim() ? videoProvider : null,
@@ -152,7 +158,7 @@ function HelpArticleDialog({ article, onClose }: { article: HelpArticle | null; 
           save.mutate()
         }}
       >
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Title">
             <Input value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={255} />
           </Field>
@@ -166,9 +172,23 @@ function HelpArticleDialog({ article, onClose }: { article: HelpArticle | null; 
             />
           </Field>
         </div>
-        <Field label="Category">
-          <Input value={category} onChange={(event) => setCategory(event.target.value)} required maxLength={100} />
-        </Field>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Category">
+            <Input value={category} onChange={(event) => setCategory(event.target.value)} required maxLength={100} />
+          </Field>
+          <Field
+            label="Reading order"
+            hint="Position in the help centre, low to high. Categories are grouped by where their first article sits, so keep a category's articles together. Leave blank to append."
+          >
+            <Input
+              type="number"
+              min={0}
+              step={10}
+              value={sortOrder}
+              onChange={(event) => setSortOrder(event.target.value)}
+            />
+          </Field>
+        </div>
         <Field label="Body" hint="Required even for a video article — this is what search finds.">
           <Textarea value={body} onChange={(event) => setBody(event.target.value)} required rows={8} />
         </Field>
@@ -185,7 +205,7 @@ function HelpArticleDialog({ article, onClose }: { article: HelpArticle | null; 
           />
         </Field>
         {videoUrl.trim() && (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Provider">
               <Select
                 value={videoProvider}
