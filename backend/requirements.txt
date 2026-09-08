@@ -5,14 +5,14 @@ fastapi==0.141.1
 # (request.form() size limits silently ignored) and CVE-2025-62727 (Range
 # header DoS). Dropping below it reopens all three.
 starlette==1.6.0
-uvicorn[standard]==0.34.0
-sqlalchemy[asyncio]==2.0.36
-asyncpg==0.30.0
+uvicorn[standard]==0.52.4
+sqlalchemy[asyncio]==2.0.52
+asyncpg==0.31.0
 psycopg2-binary==2.9.12
-alembic==1.14.0
-pydantic==2.10.4
-pydantic-settings==2.7.0
-email-validator==2.2.0
+alembic==1.19.2
+pydantic==2.13.5
+pydantic-settings==2.15.0
+email-validator==2.3.0
 # 3.5.0 is the first release to allow pyasn1>=0.5.0; 3.4.0 capped it at
 # <0.5.0, which held pyasn1 on a line with four unfixed DoS advisories.
 python-jose[cryptography]==3.5.0
@@ -22,7 +22,7 @@ python-jose[cryptography]==3.5.0
 pyasn1==0.6.4
 bcrypt==5.0.0
 python-multipart==0.0.32
-celery==5.4.0
+celery==5.6.3
 redis==5.2.1
 httpx==0.28.1
 jinja2==3.1.6
@@ -30,13 +30,13 @@ jinja2==3.1.6
 # renderer; 70.0 is the current release on that line.
 weasyprint==70.0
 # Pure-Python QR codes for the eTIMS receipt stamp (US-053).
-segno==1.6.1
+segno==1.6.6
 # Excel import/export for bulk onboarding and data migration (US-072, US-076, US-077).
 openpyxl==3.1.5
 pyarrow==25.0.1
 boto3==1.43.89
-pywebpush==2.0.0
-resend==2.10.0
+pywebpush==2.5.0
+resend==2.43.0
 # AI lease analysis (US-096).
 anthropic==1.4.0
 # Virus scanning on upload (Sprint 25, US-105) — talks to a clamd daemon.
@@ -44,7 +44,7 @@ clamd==1.0.2
 # WebAuthn / biometric login (Sprint 25, US-108).
 webauthn==2.6.0
 # Error tracking (Sprint 26). Inert without SENTRY_DSN.
-sentry-sdk[fastapi,celery,sqlalchemy]==2.20.0
+sentry-sdk[fastapi,celery,sqlalchemy]==2.68.1
 # Distributed tracing (Sprint 26). Inert without OTEL_EXPORTER_OTLP_ENDPOINT.
 # These move in lockstep: opentelemetry-sdk X.Y.Z pins opentelemetry-api to the
 # exact same version, and every instrumentation package pins
@@ -61,7 +61,7 @@ opentelemetry-instrumentation-sqlalchemy==0.65b0
 opentelemetry-instrumentation-celery==0.65b0
 opentelemetry-instrumentation-httpx==0.65b0
 # Prometheus metrics at /metrics (Sprint 26).
-prometheus-client==0.21.1
+prometheus-client==0.26.0
 # 8.x is the line that accepts starlette 1.x; every 7.x release caps at
 # starlette<1.0.0 and would hold the pin above on the vulnerable line.
 prometheus-fastapi-instrumentator==8.1.0
