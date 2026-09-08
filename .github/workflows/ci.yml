@@ -156,6 +156,14 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       E2E_BASE_URL: http://localhost:4173
       E2E_API_URL: http://localhost:8000/api/v1
+      # The browser loads the app from :4173, so that is the Origin the API
+      # sees. CORS_ORIGINS defaults to :5173 — the dev server port — which
+      # made every API call from an E2E test fail preflight and surface in the
+      # UI as "Network Error", with the backend itself perfectly healthy. It
+      # went unnoticed because the tests had never actually run: the readiness
+      # probe above failed first. Parsed as JSON by pydantic-settings, so the
+      # brackets and double quotes are required.
+      CORS_ORIGINS: '["http://localhost:4173"]'
     steps:
       - uses: actions/checkout@v7
 
