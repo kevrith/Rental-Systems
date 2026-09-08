@@ -4,12 +4,12 @@ pytest==9.1.1
 # pytest<9, which is what made this file unresolvable.
 pytest-asyncio==1.4.0
 ruff==0.8.4
-black==24.10.0
+black==26.5.1
 mypy==2.3.1
 pre-commit==4.6.2
 fakeredis==2.26.2
 # Coverage measurement (Sprint 26). The global Definition of Done asks for
 # 80%; until this was added it had never been measured.
-pytest-cov==6.0.0
+pytest-cov==7.1.0
 # Dependency vulnerability scanning, run in CI (Sprint 26).
 pip-audit==2.7.3
