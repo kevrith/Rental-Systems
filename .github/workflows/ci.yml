@@ -41,7 +41,7 @@ jobs:
       DATABASE_URL_SYNC: postgresql+psycopg2://rentflow:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/rentflow_test
       REDIS_URL: redis://localhost:6379/0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -87,7 +87,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
         with:
@@ -151,7 +151,7 @@ jobs:
       E2E_BASE_URL: http://localhost:4173
       E2E_API_URL: http://localhost:8000/api/v1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -236,7 +236,7 @@ jobs:
     name: Supply chain (pip-audit, npm audit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -279,7 +279,7 @@ jobs:
           - image: rentflow-frontend
             context: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build image
         run: docker build -t ${{ matrix.image }}:ci ${{ matrix.context }}
@@ -324,7 +324,7 @@ jobs:
       matrix:
         language: [python, javascript-typescript]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
