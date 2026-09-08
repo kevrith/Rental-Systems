@@ -4,15 +4,54 @@ updates:
     directory: /backend
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 3
+    groups:
+      # OpenTelemetry ships api/sdk/exporter and the instrumentation betas as
+      # one release train that cross-pins on exact versions, so a per-package
+      # PR produces a requirements.txt no resolver can satisfy. Grouped, it is
+      # the whole train or nothing.
+      opentelemetry:
+        patterns:
+          - "opentelemetry-*"
+      # Everything else, in two PRs rather than ten. Ungrouped, a single weekly
+      # run opened eleven PRs and eleven branches at once, each spending a full
+      # CI matrix to bump one pin.
+      backend-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      backend-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 3
+    groups:
+      frontend-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      frontend-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns:
+          - "*"

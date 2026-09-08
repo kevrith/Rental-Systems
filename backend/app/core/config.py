@@ -236,9 +236,29 @@ class Settings(BaseSettings):
 
     @property
     def sync_database_url(self) -> str:
-        return self.DATABASE_URL_SYNC or self.DATABASE_URL.replace(
-            "postgresql+asyncpg", "postgresql+psycopg2"
-        )
+        """
+        Alembic is synchronous, so this has to name a sync driver whatever it
+        was handed.
+
+        Both URLs are typed by hand into the Render dashboard — render.yaml
+        marks them `sync: false` — and pasting the asyncpg one into both
+        fields is the obvious slip. Returning DATABASE_URL_SYNC verbatim
+        turned that slip into `MissingGreenlet: greenlet_spawn has not been
+        called` thrown out of the connection pool during `alembic upgrade
+        head` at boot: an error that talks about greenlets and await, names
+        neither the setting nor the URL, and sends you reading SQLAlchemy's
+        async internals instead of the dashboard field that is actually
+        wrong.
+
+        Forcing the driver costs nothing and cannot itself be got wrong. Only
+        the scheme is rewritten; everything after `://` is left byte for byte
+        alone, so a percent-encoded password still arrives intact.
+        """
+        url = self.DATABASE_URL_SYNC or self.DATABASE_URL
+        scheme, separator, rest = url.partition("://")
+        if not separator or not scheme.startswith("postgres"):
+            return url
+        return f"postgresql+psycopg2://{rest}"
 
     @property
     def celery_broker(self) -> str:

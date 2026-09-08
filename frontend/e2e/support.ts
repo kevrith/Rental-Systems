@@ -21,12 +21,14 @@ export function uniquePhone(): string {
   return `+2547${Date.now().toString().slice(-6)}${counter.toString().padStart(2, '0')}`
 }
 
-/** `example.com`, not a `.test` domain: `.test` is a reserved TLD and the
- *  backend's email validator rejects it outright, which failed every spec in
- *  setup rather than in the assertion it meant to make. */
 export function uniqueEmail(prefix: string): string {
   counter += 1
-  return `${prefix}-${Date.now()}-${counter}@example.com`
+  // `example.com`, not `.test`: RFC 6761 reserves `.test` as a special-use
+  // name and email-validator rejects it outright, so every registration these
+  // fixtures made came back 422 and took the whole spec with it. `example.com`
+  // is reserved by IANA for exactly this, resolves nowhere, and needs no DNS
+  // lookup to validate — so it cannot deliver mail and cannot flake in CI.
+  return `${prefix}-${Date.now()}-${counter}@e2e.example.com`
 }
 
 interface Registered {

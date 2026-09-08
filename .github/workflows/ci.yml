@@ -16,11 +16,16 @@ jobs:
     services:
       postgres:
         image: postgres:15-alpine
-        # CI_DB_PASSWORD is a repository secret (Settings -> Secrets and variables -> Actions).
-        # Any value works — this database only ever exists for the lifetime of this job.
+        # No password, by design. The entrypoint refuses to initialise unless it
+        # is given either a password or an explicit auth method, and a password
+        # here can only come from a repository secret — which is empty on a
+        # fork's pull request and empty again the day the secret is rotated
+        # away, taking every job that needs a database down with it. `trust` has
+        # nothing to leak: this server is reachable only from inside the
+        # runner's own container network and is destroyed with the job.
         env:
           POSTGRES_USER: rentflow
-          POSTGRES_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: rentflow_test
         ports: ["5432:5432"]
         options: >-
@@ -37,11 +42,11 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql+asyncpg://rentflow:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/rentflow_test
-      DATABASE_URL_SYNC: postgresql+psycopg2://rentflow:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/rentflow_test
+      DATABASE_URL: postgresql+asyncpg://rentflow@localhost:5432/rentflow_test
+      DATABASE_URL_SYNC: postgresql+psycopg2://rentflow@localhost:5432/rentflow_test
       REDIS_URL: redis://localhost:6379/0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -74,7 +79,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-coverage
           path: backend/coverage.xml
@@ -87,9 +92,9 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
@@ -109,7 +114,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-coverage
           path: frontend/coverage
@@ -126,9 +131,10 @@ jobs:
     services:
       postgres:
         image: postgres:15-alpine
+        # Passwordless for the same reason as the backend job above.
         env:
           POSTGRES_USER: rentflow
-          POSTGRES_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: rentflow_e2e
         ports: ["5432:5432"]
         options: >-
@@ -145,13 +151,21 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql+asyncpg://rentflow:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/rentflow_e2e
-      DATABASE_URL_SYNC: postgresql+psycopg2://rentflow:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/rentflow_e2e
+      DATABASE_URL: postgresql+asyncpg://rentflow@localhost:5432/rentflow_e2e
+      DATABASE_URL_SYNC: postgresql+psycopg2://rentflow@localhost:5432/rentflow_e2e
       REDIS_URL: redis://localhost:6379/0
       E2E_BASE_URL: http://localhost:4173
       E2E_API_URL: http://localhost:8000/api/v1
+      # The browser loads the app from :4173, so that is the Origin the API
+      # sees. CORS_ORIGINS defaults to :5173 — the dev server port — which
+      # made every API call from an E2E test fail preflight and surface in the
+      # UI as "Network Error", with the backend itself perfectly healthy. It
+      # went unnoticed because the tests had never actually run: the readiness
+      # probe above failed first. Parsed as JSON by pydantic-settings, so the
+      # brackets and double quotes are required.
+      CORS_ORIGINS: '["http://localhost:4173"]'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -177,9 +191,13 @@ jobs:
         working-directory: backend
         run: |
           nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > ../backend.log 2>&1 &
-          npx --yes wait-on@8 -t 30000 http://localhost:8000/api/v1/health
+          # `http-get://`, not `http://`: wait-on probes with HEAD by default and
+          # the health route declares only GET, so the default probe polls a
+          # perfectly healthy server for the full 30s on 405s and then fails the
+          # step. Verified: GET returns 200, HEAD returns 405.
+          npx --yes wait-on@8 -t 30000 http-get://localhost:8000/api/v1/health
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
@@ -201,7 +219,7 @@ jobs:
         working-directory: frontend
         run: |
           nohup npx vite preview --port 4173 --host > ../frontend.log 2>&1 &
-          npx --yes wait-on@8 -t 30000 http://localhost:4173
+          npx --yes wait-on@8 -t 30000 http-get://localhost:4173
 
       - name: Install Playwright browsers
         working-directory: frontend
@@ -213,7 +231,7 @@ jobs:
 
       - name: Upload Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: frontend/playwright-report
@@ -221,7 +239,7 @@ jobs:
 
       - name: Upload service logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-service-logs
           path: |
@@ -236,7 +254,7 @@ jobs:
     name: Supply chain (pip-audit, npm audit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -247,11 +265,28 @@ jobs:
 
       # Audits the pinned set rather than a resolved environment, so the result
       # matches what actually ships.
+      #
+      # PYSEC-2026-1325 (CVE-2024-23342) is the Minerva timing attack on P-256
+      # in python-ecdsa. It is ignored on two counts, and both have to hold:
+      #
+      #   * There is nothing to upgrade to. python-ecdsa considers side channel
+      #     attacks out of scope and has said there is no planned fix, so the
+      #     advisory has no fix version and never will.
+      #   * Nothing here reaches the affected code. ecdsa arrives only because
+      #     python-jose declares it unconditionally; this service signs with
+      #     HS256 (app/core/config.py), which is HMAC — no curve operations, no
+      #     sign_digest(), no key generation, no ECDH. Signature verification is
+      #     unaffected even on the curve.
+      #
+      # Revisit if JWT_ALGORITHM ever moves to an ES* algorithm, or if the JWT
+      # library changes to one that does not drag in ecdsa.
       - name: Audit Python dependencies
         working-directory: backend
-        run: pip-audit --requirement requirements.txt --strict --progress-spinner off
+        run: |
+          pip-audit --requirement requirements.txt --strict --progress-spinner off \
+            --ignore-vuln PYSEC-2026-1325
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
@@ -279,7 +314,7 @@ jobs:
           - image: rentflow-frontend
             context: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build image
         run: docker build -t ${{ matrix.image }}:ci ${{ matrix.context }}
@@ -288,7 +323,7 @@ jobs:
       # still reach the code-scanning tab even when findings exist, and the
       # second one is the actual gate — `exit-code: 1` is what fails the job.
       - name: Scan for vulnerabilities (report)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.image }}:ci
           format: sarif
@@ -297,14 +332,18 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload results to code scanning
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        # Only if the scan actually produced a file. When the image build fails
+        # there is no SARIF, and an unconditional upload reports a second
+        # "path does not exist" error that reads like the cause and buries the
+        # real one further up the log.
+        if: always() && hashFiles(format('trivy-{0}.sarif', matrix.image)) != ''
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-${{ matrix.image }}.sarif
           category: trivy-${{ matrix.image }}
 
       - name: Scan for vulnerabilities (gate)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.image }}:ci
           format: table
@@ -324,10 +363,10 @@ jobs:
       matrix:
         language: [python, javascript-typescript]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           language: ${{ matrix.language }}
           # `security-and-quality` over the default `security` set: this is a
@@ -338,6 +377,6 @@ jobs:
           config-file: ./.github/codeql/codeql-config.yml
 
       - name: Analyze
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: /language:${{ matrix.language }}

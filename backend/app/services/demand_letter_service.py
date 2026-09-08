@@ -68,18 +68,24 @@ async def arrears_for_tenancy(db: AsyncSession, tenancy: Tenancy, as_at: date) -
 
     rows = []
     total = ZERO
+    # Carried alongside the rows rather than read back out of them: the rows are
+    # heterogeneous dicts, so their values are only `object` to a type checker
+    # and nothing there proves the age is a number you can compare.
+    oldest_days_overdue = 0
     for invoice in invoices:
         balance = Decimal(invoice.total) - Decimal(invoice.amount_paid)
         if balance <= ZERO:
             continue
         total += balance
+        days_overdue = (as_at - invoice.due_date).days
+        oldest_days_overdue = max(oldest_days_overdue, days_overdue)
         rows.append(
             {
                 "id": invoice.id,
                 "reference_code": invoice.reference_code,
                 "period_start": invoice.period_start,
                 "due_date": invoice.due_date,
-                "days_overdue": (as_at - invoice.due_date).days,
+                "days_overdue": days_overdue,
                 "balance": balance,
             }
         )
@@ -87,7 +93,7 @@ async def arrears_for_tenancy(db: AsyncSession, tenancy: Tenancy, as_at: date) -
     return {
         "invoices": rows,
         "total_owed": total,
-        "days_overdue": max((row["days_overdue"] for row in rows), default=0),
+        "days_overdue": oldest_days_overdue,
     }
 
 
