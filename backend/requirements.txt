@@ -39,7 +39,7 @@ opentelemetry-instrumentation==0.65b0
 opentelemetry-instrumentation-fastapi==0.54b1
 opentelemetry-instrumentation-sqlalchemy==0.54b1
 opentelemetry-instrumentation-celery==0.65b0
-opentelemetry-instrumentation-httpx==0.54b1
+opentelemetry-instrumentation-httpx==0.65b0
 # Prometheus metrics at /metrics (Sprint 26).
 prometheus-client==0.21.1
 prometheus-fastapi-instrumentator==7.1.0
