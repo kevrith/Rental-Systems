@@ -196,7 +196,7 @@ export function LeaseTemplatesPage() {
         </Alert>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[18rem_1fr]">
         <Card className="self-start">
           <CardHeader>
             <CardTitle className="text-base">Your templates</CardTitle>
@@ -262,7 +262,7 @@ export function LeaseTemplatesPage() {
           <div className="space-y-4">
             <Card>
               <CardBody className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Field label="Template name" required>
                     <Input
                       value={draft.name}

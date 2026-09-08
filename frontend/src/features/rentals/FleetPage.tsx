@@ -96,7 +96,7 @@ export function FleetPage() {
         </Alert>
       )}
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Out on hire"
           value={String(data.on_hire)}
@@ -139,7 +139,7 @@ export function FleetPage() {
       </div>
 
       {assets.data?.length ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {assets.data.map((asset) => (
             <Card key={asset.id}>
               <CardBody className="space-y-3">
@@ -331,7 +331,7 @@ function AddAssetDialog({ kind, onClose }: { kind: AssetKind | null; onClose: ()
       }
     >
       <div className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Name" required>
             <Input
               placeholder={isVehicle ? 'Toyota Fielder' : 'Honda generator 5kVA'}
@@ -360,7 +360,7 @@ function AddAssetDialog({ kind, onClose }: { kind: AssetKind | null; onClose: ()
         </div>
 
         {isVehicle ? (
-          <div className="grid gap-4 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
             <Field label="Make">
               <Input
                 value={form.make}
@@ -389,7 +389,7 @@ function AddAssetDialog({ kind, onClose }: { kind: AssetKind | null; onClose: ()
             </Field>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label="Category">
               <Input
                 placeholder="Power, lifting, compaction"
@@ -416,7 +416,7 @@ function AddAssetDialog({ kind, onClose }: { kind: AssetKind | null; onClose: ()
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
           <Field label="Daily rate (KES)" required>
             <Input
               type="number"
@@ -453,7 +453,7 @@ function AddAssetDialog({ kind, onClose }: { kind: AssetKind | null; onClose: ()
 
         {isVehicle && (
           <>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label="Fuel policy">
                 <Select
                   value={form.fuel_policy}
@@ -488,7 +488,7 @@ function AddAssetDialog({ kind, onClose }: { kind: AssetKind | null; onClose: ()
               </Field>
             </div>
 
-            <div className="grid gap-4 rounded-lg bg-slate-50 p-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 rounded-lg bg-slate-50 p-3 sm:grid-cols-3">
               <Field label="Insurance to">
                 <Input
                   type="date"

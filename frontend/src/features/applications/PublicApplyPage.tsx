@@ -208,7 +208,7 @@ export function PublicApplyPage() {
                 onChange={(event) => setForm({ ...form, phone_number: event.target.value })}
               />
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="National ID">
                 <Input
                   value={form.national_id}
@@ -251,7 +251,7 @@ export function PublicApplyPage() {
                 onChange={(event) => setForm({ ...form, current_address: event.target.value })}
               />
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Current landlord's name">
                 <Input
                   value={form.current_landlord_name}
@@ -272,7 +272,7 @@ export function PublicApplyPage() {
                 />
               </Field>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Years there">
                 <Input
                   type="number"
@@ -325,7 +325,7 @@ export function PublicApplyPage() {
                 onChange={(event) => setForm({ ...form, employer_name: event.target.value })}
               />
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Your role">
                 <Input
                   value={form.job_title}
@@ -377,7 +377,7 @@ export function PublicApplyPage() {
                 onChange={(event) => setForm({ ...form, guarantor_name: event.target.value })}
               />
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Relationship to you">
                 <Input
                   placeholder="Father, employer, sibling"

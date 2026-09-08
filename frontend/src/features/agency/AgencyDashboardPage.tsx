@@ -172,7 +172,7 @@ export function AgencyDashboardPage() {
         }
       />
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Owner clients"
           value={String(stats.owner_count)}
@@ -235,7 +235,7 @@ export function AgencyDashboardPage() {
               }
             />
           ) : (
-            <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               {ownerRows.map((owner) => (
                 <OwnerCard key={owner.owner_profile_id} owner={owner} />
               ))}

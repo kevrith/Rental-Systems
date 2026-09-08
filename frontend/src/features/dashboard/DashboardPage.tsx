@@ -96,7 +96,7 @@ export function DashboardPage() {
       {canSeeFinancials && (
         <>
           {financial.isPending ? (
-            <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {Array.from({ length: 4 }).map((_, index) => (
                 <Skeleton key={index} className="h-24" />
               ))}
@@ -107,7 +107,7 @@ export function DashboardPage() {
             </Alert>
           ) : financial.data ? (
             <>
-              <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <StatCard
                   label="Expected this month"
                   value={kes(financial.data.expected_rent, { compact: true })}
@@ -139,7 +139,7 @@ export function DashboardPage() {
 
               <AttentionRow attention={financial.data.attention} />
 
-              <div className="mb-5 grid gap-5 lg:grid-cols-3">
+              <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
                   <CardHeader>
                     <div>
@@ -199,7 +199,7 @@ export function DashboardPage() {
                 </Card>
               </div>
 
-              <div className="grid gap-5 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                 <Card>
                   <CardHeader>
                     <CardTitle>Top defaulters</CardTitle>

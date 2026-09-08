@@ -207,7 +207,7 @@ export function DisbursementsPage() {
               </CardDescription>
             </CardHeader>
             <CardBody className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Field label="Owner client" required>
                   <Select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>
                     <option value="">Choose an owner…</option>

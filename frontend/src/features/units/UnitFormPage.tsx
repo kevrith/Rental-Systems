@@ -166,7 +166,7 @@ export function UnitFormPage() {
           <CardHeader>
             <CardTitle>Unit details</CardTitle>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-2">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Property" required error={errors.property_id?.message} className="sm:col-span-2">
               <Select disabled={isEdit} invalid={Boolean(errors.property_id)} {...register('property_id')}>
                 <option value="">Choose a property</option>
@@ -233,7 +233,7 @@ export function UnitFormPage() {
           <CardHeader>
             <CardTitle>Rent and deposit</CardTitle>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-2">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Monthly rent (KES)" required error={errors.monthly_rent?.message}>
               <Input
                 type="number"
@@ -401,7 +401,7 @@ export function BulkUnitsPage() {
           <CardHeader>
             <CardTitle>Naming</CardTitle>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-2">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Property" required error={errors.property_id?.message} className="sm:col-span-2">
               <Select invalid={Boolean(errors.property_id)} {...register('property_id')}>
                 <option value="">Choose a property</option>
@@ -450,7 +450,7 @@ export function BulkUnitsPage() {
             <CardTitle>Shared details</CardTitle>
             <span className="text-xs text-slate-500">Applied to every unit</span>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-2">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Type">
               <Select {...register('unit_type')}>
                 <option value="">Not specified</option>

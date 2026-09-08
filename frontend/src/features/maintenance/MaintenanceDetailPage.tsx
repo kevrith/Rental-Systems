@@ -140,7 +140,7 @@ export function MaintenanceDetailPage() {
           <CardBody className="space-y-4">
             <p className="whitespace-pre-wrap text-sm text-slate-700">{record.description}</p>
 
-            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <Detail label="Category" value={humanize(record.category)} />
               <Detail label="Reported by" value={record.reported_by_name ?? '—'} />
               <Detail label="Reported" value={dateTime(record.created_at)} />
@@ -163,7 +163,7 @@ export function MaintenanceDetailPage() {
             </dl>
 
             {(record.estimated_cost || record.cost) && (
-              <div className="grid gap-3 rounded-lg bg-slate-50 p-3 text-sm sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 rounded-lg bg-slate-50 p-3 text-sm sm:grid-cols-3">
                 <Detail
                   label="Estimate"
                   value={record.estimated_cost ? kes(record.estimated_cost) : '—'}
@@ -549,7 +549,7 @@ function ApproveDialog({ open, record, onClose, onDone }: DialogProps) {
       }
     >
       <div className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Cost estimate (KES)" hint="What you expect this to cost">
             <Input
               type="number"
@@ -692,7 +692,7 @@ function AssignDialog({ open, record, onClose, onDone }: DialogProps) {
           <VendorSelect category={record.category} value={vendorId} onChange={setVendorId} />
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Cost estimate (KES)">
             <Input
               type="number"

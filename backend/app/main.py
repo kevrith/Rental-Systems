@@ -1,3 +1,5 @@
+import traceback
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -80,6 +82,23 @@ async def external_api_error_handler(request: Request, exc: ExternalApiError) ->
         status_code=exc.status_code,
         content={"status": "error", "data": None, "errors": [exc.detail]},
         headers=exc.headers,
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    # Log the full traceback so Render/Sentry captures it.
+    traceback.print_exc()
+    origin = request.headers.get("origin", "")
+    cors_headers = (
+        {"Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true"}
+        if origin in settings.CORS_ORIGINS
+        else {}
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"status": "error", "data": None, "errors": ["Internal server error"]},
+        headers=cors_headers,
     )
 
 

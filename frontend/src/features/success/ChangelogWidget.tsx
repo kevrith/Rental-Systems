@@ -29,7 +29,7 @@ export function ChangelogWidget() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+        className="relative rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 sm:p-2"
         aria-label="What's new"
       >
         <Megaphone className="h-5 w-5" />

@@ -9,10 +9,12 @@ import { z } from 'zod'
 import { authApi, type TokenResponse } from '@/api/auth'
 import { Alert, Button, Field, Input } from '@/components/ui'
 import { errorMessage } from '@/lib/format'
+import { GOOGLE_CLIENT_ID } from '@/lib/google-identity'
 import { getPasskeyAssertion, isWebauthnSupported } from '@/lib/webauthn'
 import { useAuthStore } from '@/store/auth-store'
 
 import { AuthLayout } from './AuthLayout'
+import { GoogleSignIn } from './GoogleSignIn'
 
 const credentialsSchema = z.object({
   email: z.string().email('Enter a valid email address'),
@@ -255,19 +257,30 @@ export function LoginPage() {
           <ShieldCheck className="h-3.5 w-3.5" />
           Protected by two-factor authentication
         </p>
-
-        {/*
-          Tenants sign in perhaps twice a year, often on a borrowed phone, and
-          most have no email address on file — so the reset flow above is not a
-          route back in for them. The link sign-in is (Sprint 26).
-        */}
-        <p className="text-center text-sm text-slate-500">
-          Are you a tenant?{' '}
-          <Link to="/portal/login" className="font-medium text-brand-600 hover:underline">
-            Get a sign-in link
-          </Link>
-        </p>
       </form>
+
+      {GOOGLE_CLIENT_ID && (
+        <>
+          <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
+            <span className="h-px flex-1 bg-slate-200" />
+            or
+            <span className="h-px flex-1 bg-slate-200" />
+          </div>
+          <GoogleSignIn onSuccess={finishLogin} />
+        </>
+      )}
+
+      {/*
+        Tenants sign in perhaps twice a year, often on a borrowed phone, and
+        most have no email address on file — so the reset flow above is not a
+        route back in for them. The link sign-in is (Sprint 26).
+      */}
+      <p className="mt-4 text-center text-sm text-slate-500">
+        Are you a tenant?{' '}
+        <Link to="/portal/login" className="font-medium text-brand-600 hover:underline">
+          Get a sign-in link
+        </Link>
+      </p>
     </AuthLayout>
   )
 }

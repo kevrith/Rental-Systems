@@ -123,7 +123,7 @@ export function EtimsSettingsPage() {
       )}
 
       {report.data && report.data.total > 0 && (
-        <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Receipts filed" value={String(report.data.submitted)} />
           <StatCard
             label="Success rate"
@@ -181,7 +181,7 @@ export function EtimsSettingsPage() {
             </Alert>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="KRA PIN" required>
               <Input
                 value={kraPin}

@@ -155,7 +155,7 @@ export function OwnerProfileFormPage() {
           <CardHeader>
             <CardTitle>Who they are</CardTitle>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-2">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Full name" required error={errors.full_name?.message}>
               <Input {...register('full_name')} placeholder="Margaret Wanjiku" />
             </Field>
@@ -188,7 +188,7 @@ export function OwnerProfileFormPage() {
               Used when you disburse their net rent. M-Pesa is usually fastest.
             </CardDescription>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-2">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="M-Pesa number" error={errors.mpesa_phone?.message}>
               <Input {...register('mpesa_phone')} placeholder="0712345678" />
             </Field>
@@ -212,7 +212,7 @@ export function OwnerProfileFormPage() {
               can spend on repairs without asking.
             </CardDescription>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-2">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
               label="Management fee (%)"
               required

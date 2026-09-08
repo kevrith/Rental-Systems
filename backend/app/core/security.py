@@ -18,7 +18,13 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain_password: str, password_hash: str) -> bool:
-    return bcrypt.checkpw(plain_password.encode("utf-8"), password_hash.encode("utf-8"))
+    try:
+        return bcrypt.checkpw(plain_password.encode("utf-8"), password_hash.encode("utf-8"))
+    except ValueError:
+        # Portal invitees and Google-only accounts carry the unusable "!"
+        # sentinel until they set a real password — bcrypt rejects it as a
+        # malformed hash rather than just failing the comparison.
+        return False
 
 
 def _create_token(

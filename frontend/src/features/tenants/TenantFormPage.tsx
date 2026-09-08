@@ -154,7 +154,7 @@ export function TenantFormPage() {
           <CardHeader>
             <CardTitle>Identity</CardTitle>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-2">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
               label="Full name"
               required
@@ -202,7 +202,7 @@ export function TenantFormPage() {
             <CardTitle>KYC documents</CardTitle>
             <span className="text-xs text-slate-500">Stored securely in the tenant vault</span>
           </CardHeader>
-          <CardBody className="grid gap-5 sm:grid-cols-3">
+          <CardBody className="grid grid-cols-1 gap-5 sm:grid-cols-3">
             <SinglePhotoUpload
               value={idFront}
               onChange={setIdFront}
@@ -228,7 +228,7 @@ export function TenantFormPage() {
           <CardHeader>
             <CardTitle>Employment</CardTitle>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-3">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label="Employer">
               <Input placeholder="Safaricom PLC" {...register('employer_name')} />
             </Field>
@@ -245,7 +245,7 @@ export function TenantFormPage() {
           <CardHeader>
             <CardTitle>Emergency contact</CardTitle>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-3">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label="Name">
               <Input placeholder="Mary Otieno" {...register('emergency_contact_name')} />
             </Field>

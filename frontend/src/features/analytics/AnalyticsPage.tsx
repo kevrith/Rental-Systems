@@ -144,7 +144,7 @@ export function AnalyticsPage() {
         description="Where the money came from, where it is going, and which properties carry the portfolio."
       />
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label={`Collected · last ${months} months`}
           value={kes(totalCollected, { compact: true })}
@@ -214,7 +214,7 @@ export function AnalyticsPage() {
         </button>
       </div>
 
-      <div className="mb-5 grid gap-5 lg:grid-cols-2">
+      <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Invoiced against collected</CardTitle>
@@ -336,7 +336,7 @@ export function AnalyticsPage() {
         </Card>
       )}
 
-      <div className="mb-5 grid gap-5 lg:grid-cols-3">
+      <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Cash flow forecast</CardTitle>
@@ -504,7 +504,7 @@ export function AnalyticsPage() {
         </CardBody>
       </Card>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Vacancy risk</CardTitle>

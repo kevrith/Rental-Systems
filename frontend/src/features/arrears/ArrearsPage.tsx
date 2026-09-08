@@ -150,7 +150,7 @@ export function ArrearsPage() {
         </Alert>
       )}
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Total arrears"
           value={kes(data.total_arrears, { compact: true })}
@@ -189,7 +189,7 @@ export function ArrearsPage() {
           </Select>
         </CardHeader>
         <CardBody>
-          <div className="grid gap-2 sm:grid-cols-5">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-5">
             {BUCKETS.map((bucket) => (
               <div key={bucket.key} className={cn('rounded-lg p-3', bucket.className)}>
                 <p className="text-xs font-medium">{bucket.label}</p>

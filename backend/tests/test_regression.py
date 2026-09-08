@@ -38,6 +38,8 @@ PUBLIC_PREFIXES: dict[str, str] = {
     "/api/v1/auth/login": "Obtaining a session.",
     "/api/v1/auth/refresh": "Rotating a session on the refresh token alone.",
     "/api/v1/auth/login/verify-otp": "Second factor, before a session exists.",
+    "/api/v1/auth/google": "Sign in with Google, authenticated by Google's own signed ID token.",
+    "/api/v1/auth/google/register": "Creating an account via Google, same as /auth/register.",
     "/api/v1/auth/forgot-password": "Password reset request.",
     "/api/v1/auth/reset-password": "Password reset, authenticated by the emailed token.",
     "/api/v1/auth/verify-email": "Email confirmation link.",

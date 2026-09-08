@@ -186,7 +186,7 @@ export function PropertyFormPage() {
           <CardHeader>
             <CardTitle>Basics</CardTitle>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-2">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Property name" required error={errors.name?.message} className="sm:col-span-2">
               <Input
                 placeholder="Kilimani Heights"
@@ -271,7 +271,7 @@ export function PropertyFormPage() {
               WhatsApp when a fee is added, and you can waive one at any time.
             </p>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-3">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field
               label="How it is charged"
               hint="Leave as “No late fee” to charge nothing here."
@@ -325,7 +325,7 @@ export function PropertyFormPage() {
           <CardHeader>
             <CardTitle>Utility rates</CardTitle>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-2">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
               label="Water rate (KES per unit)"
               hint="Leave blank if water is not metered here."

@@ -48,7 +48,7 @@ export function InspectionsPage() {
       />
 
       {compliance.data && (
-        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <StatCard
             label="Move-in coverage"
             value={`${compliance.data.coverage_percent}%`}

@@ -110,7 +110,7 @@ function ParkingTab({ propertyId }: { propertyId: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Bays" value={String(data.total_bays)} icon={<Car className="h-4 w-4" />} />
         <StatCard
           label="Available"
@@ -273,7 +273,7 @@ function AddBayDialog({
       }
     >
       <div className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Bay number" required>
             <Input
               placeholder="P12"
@@ -294,7 +294,7 @@ function AddBayDialog({
             </Select>
           </Field>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Level or location">
             <Input
               placeholder="Basement 1"
@@ -411,7 +411,7 @@ function AllocateDialog({
             </Select>
           </Field>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Visitor name" required>
               <Input
                 value={form.guest_name}
@@ -427,7 +427,7 @@ function AllocateDialog({
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Vehicle registration">
             <Input
               placeholder="KDA 123X"
@@ -665,7 +665,7 @@ function AddAmenityDialog({
       }
     >
       <div className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Name" required>
             <Input
               placeholder="Rooftop terrace"
@@ -694,7 +694,7 @@ function AddAmenityDialog({
           />
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Max hours per booking">
             <Input
               type="number"
@@ -726,7 +726,7 @@ function AddAmenityDialog({
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Opens at">
             <Input
               type="number"
@@ -806,7 +806,7 @@ function UtilitiesTab({ propertyId }: { propertyId: string }) {
             tenants&apos; meters. A disconnection affects everyone in the building, so an overdue
             one raises an alert.
           </p>
-          <div className="grid gap-4 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
             <Field label="Type">
               <Select
                 value={form.account_type}

@@ -54,7 +54,7 @@ export function VacancyDeskPage() {
         description="Every empty unit, what it is costing you, and everyone who has asked about it."
       />
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Empty units"
           value={String(report.vacant_units)}

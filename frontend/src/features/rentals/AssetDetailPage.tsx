@@ -107,7 +107,7 @@ export function AssetDetailPage() {
         </Alert>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_1.4fr]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.4fr]">
         <div className="space-y-5">
           <Card>
             <CardHeader>
@@ -117,7 +117,7 @@ export function AssetDetailPage() {
               </Badge>
             </CardHeader>
             <CardBody>
-              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <Detail label="Daily rate" value={kes(record.daily_rate)} />
                 <Detail
                   label="Weekly rate"
@@ -392,7 +392,7 @@ function BookDialog({
           </Select>
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="From" required>
             <Input
               type="date"
@@ -508,7 +508,7 @@ function CheckOutDialog({
         )}
 
         {isVehicle && (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Odometer (km)" required>
               <Input
                 type="number"
@@ -711,7 +711,7 @@ function CheckInDialog({
         )}
 
         {isVehicle && (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Odometer now (km)" required>
               <Input
                 type="number"

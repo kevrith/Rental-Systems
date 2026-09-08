@@ -64,7 +64,7 @@ export function VendorDetailPage() {
         }
       />
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Jobs completed"
           value={String(record.jobs_completed)}
@@ -88,7 +88,7 @@ export function VendorDetailPage() {
         />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_1.4fr]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.4fr]">
         <Card>
           <CardHeader>
             <CardTitle>Contact</CardTitle>

@@ -94,7 +94,7 @@ export function VendorsPage() {
         }
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_auto]">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
@@ -128,13 +128,13 @@ export function VendorsPage() {
       </div>
 
       {vendors.isPending ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, index) => (
             <Skeleton key={index} className="h-32" />
           ))}
         </div>
       ) : vendors.data?.length ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {vendors.data.map((vendor) => (
             <Card key={vendor.id} className={vendor.is_active ? undefined : 'opacity-60'}>
               <CardBody className="space-y-3">
@@ -319,7 +319,7 @@ export function VendorDialog({
       }
     >
       <div className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Name" required>
             <Input
               placeholder="John Mwangi"
@@ -336,7 +336,7 @@ export function VendorDialog({
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Phone" required hint="Used for the WhatsApp job alert">
             <Input
               placeholder="+2547XXXXXXXX"

@@ -162,7 +162,7 @@ function AccountingSyncSummary({ provider }: { provider: AccountingProvider }) {
   if (!report.data || report.data.synced + report.data.failed + report.data.pending === 0) return null
 
   return (
-    <div className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3">
       <StatCard label="Synced" value={String(report.data.synced)} tone="success" />
       <StatCard
         label="Failed"

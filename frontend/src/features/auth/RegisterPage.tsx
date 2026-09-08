@@ -6,13 +6,15 @@ import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 
-import { authApi } from '@/api/auth'
+import { authApi, type TokenResponse } from '@/api/auth'
 import { Alert, Button, Field, Input } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { errorMessage } from '@/lib/format'
+import { GOOGLE_CLIENT_ID } from '@/lib/google-identity'
 import { useAuthStore } from '@/store/auth-store'
 
 import { AuthLayout } from './AuthLayout'
+import { GoogleSignIn } from './GoogleSignIn'
 
 const schema = z.object({
   full_name: z.string().min(2, 'Enter your full name'),
@@ -43,6 +45,16 @@ export function RegisterPage() {
   })
 
   const accountType = watch('account_type')
+
+  const finishGoogleAuth = async (tokens: TokenResponse) => {
+    useAuthStore.getState().setTokens({
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+    })
+    const user = await authApi.me()
+    setSession({ accessToken: tokens.access_token, refreshToken: tokens.refresh_token, user })
+    navigate('/dashboard', { replace: true })
+  }
 
   const mutation = useMutation({
     mutationFn: authApi.register,
@@ -83,6 +95,17 @@ export function RegisterPage() {
         </>
       }
     >
+      {GOOGLE_CLIENT_ID && (
+        <>
+          <GoogleSignIn onSuccess={finishGoogleAuth} />
+          <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
+            <span className="h-px flex-1 bg-slate-200" />
+            or sign up with email
+            <span className="h-px flex-1 bg-slate-200" />
+          </div>
+        </>
+      )}
+
       <form
         className="space-y-4"
         onSubmit={handleSubmit((values) => {

@@ -126,7 +126,7 @@ export function CompliancePage() {
         </Alert>
       )}
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Valid"
           value={String(counts.valid)}
@@ -329,7 +329,7 @@ function AddDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
           </Select>
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Type" required>
             <Select
               value={form.compliance_type}
@@ -357,7 +357,7 @@ function AddDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Issued on">
             <Input
               type="date"
@@ -374,7 +374,7 @@ function AddDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Certificate number">
             <Input
               value={form.reference_number}
@@ -390,7 +390,7 @@ function AddDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Who chases the renewal?">
             <Input
               value={form.responsible_party}
@@ -414,7 +414,7 @@ function AddDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
                 onChange={(event) => setForm({ ...form, insurer_name: event.target.value })}
               />
             </Field>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label="Cover (KES)">
                 <Input
                   type="number"

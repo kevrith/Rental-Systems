@@ -120,7 +120,7 @@ export function OwnerProfileDetailPage() {
       />
 
       {summary && (
-        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label="Units managed"
             value={String(summary.unit_count)}
@@ -157,7 +157,7 @@ export function OwnerProfileDetailPage() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Management agreement</CardTitle>

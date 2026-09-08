@@ -166,7 +166,7 @@ export function TenancyDetailPage() {
         </Alert>
       )}
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Monthly rent" value={kes(record.monthly_rent)} />
         <StatCard
           label="Outstanding balance"
@@ -189,7 +189,7 @@ export function TenancyDetailPage() {
         />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           <Card>
             <CardHeader>

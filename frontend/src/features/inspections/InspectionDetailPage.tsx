@@ -168,7 +168,7 @@ export function InspectionDetailPage() {
       {notice && <Alert tone="success" className="mb-4">{notice}</Alert>}
 
       <Card className="mb-4">
-        <CardBody className="grid gap-3 text-sm sm:grid-cols-3">
+        <CardBody className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
           <div>
             <p className="text-slate-500">Inspector</p>
             <p className="font-medium text-slate-900">{record.inspector_name ?? '—'}</p>
@@ -232,7 +232,7 @@ export function InspectionDetailPage() {
                       <h3 className="font-medium text-slate-900">{row.name}</h3>
                       <Badge tone={CHANGE_TONE[row.change]}>{CHANGE_LABEL[row.change]}</Badge>
                     </div>
-                    <div className="grid items-start gap-3 sm:grid-cols-[1fr_auto_1fr]">
+                    <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-[1fr_auto_1fr]">
                       <RoomPanel room={row.before} label="At move-in" />
                       <ArrowRight className="mx-auto hidden h-4 w-4 self-center text-slate-300 sm:block" />
                       <RoomPanel room={row.after} label="At move-out" />
@@ -251,7 +251,7 @@ export function InspectionDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardBody className="space-y-3">
-              <dl className="grid gap-3 text-sm sm:grid-cols-3">
+              <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                 <div>
                   <dt className="text-slate-500">Deposit held</dt>
                   <dd className="font-semibold text-slate-900">
