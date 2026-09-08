@@ -21,9 +21,12 @@ export function uniquePhone(): string {
   return `+2547${Date.now().toString().slice(-6)}${counter.toString().padStart(2, '0')}`
 }
 
+/** `example.com`, not a `.test` domain: `.test` is a reserved TLD and the
+ *  backend's email validator rejects it outright, which failed every spec in
+ *  setup rather than in the assertion it meant to make. */
 export function uniqueEmail(prefix: string): string {
   counter += 1
-  return `${prefix}-${Date.now()}-${counter}@e2e.rentflow.test`
+  return `${prefix}-${Date.now()}-${counter}@example.com`
 }
 
 interface Registered {

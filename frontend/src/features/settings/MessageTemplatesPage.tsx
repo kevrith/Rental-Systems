@@ -133,7 +133,7 @@ export function MessageTemplatesPage() {
 
           {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Message" required>
               <Select
                 value={notificationType}

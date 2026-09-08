@@ -60,6 +60,30 @@ class VerifyLoginOtpRequest(BaseModel):
     remember_device: bool = False
 
 
+class GoogleAuthRequest(BaseModel):
+    credential: str = Field(description="The ID token Google Identity Services hands back on sign-in")
+
+
+class GoogleAuthResponse(BaseModel):
+    """Existing accounts (matched by Google's `sub`, or by a verified email
+    already on file) sign in immediately — Google's own auth stands in for the
+    SMS OTP step. An unrecognized Google account gets `needs_registration`
+    plus the details Google can supply, so the frontend can collect the rest
+    (org name, account type, phone) via `POST /auth/google/register`."""
+
+    status: str = Field(description="'signed_in' or 'needs_registration'")
+    tokens: TokenResponse | None = None
+    email: EmailStr | None = None
+    full_name: str | None = None
+
+
+class GoogleRegisterRequest(BaseModel):
+    credential: str
+    organization_name: str = Field(min_length=2, max_length=255)
+    phone_number: str = Field(min_length=10, max_length=32, description="E.164 format, e.g. +2547XXXXXXXX")
+    account_type: str = Field(default="owner", pattern="^(owner|agency)$")
+
+
 class VerifyLoginWebauthnRequest(BaseModel):
     challenge_token: str
     credential: dict

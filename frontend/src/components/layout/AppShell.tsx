@@ -396,8 +396,8 @@ export function AppShell() {
             aria-hidden
           />
           <aside className="relative flex h-full w-72 flex-col bg-white shadow-xl dark:bg-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-              <Brand compact />
+            <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+              <Brand compact orgName={org?.name} />
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(false)}
@@ -414,17 +414,17 @@ export function AppShell() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+        <header className="sticky top-0 z-30 flex items-center gap-1 border-b border-slate-200 bg-white px-2 py-3 sm:gap-3 sm:px-4 dark:border-slate-800 dark:bg-slate-900">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
             aria-label="Open navigation"
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden dark:text-slate-400 dark:hover:bg-slate-800"
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 sm:p-2 lg:hidden dark:text-slate-400 dark:hover:bg-slate-800"
           >
             <Menu className="h-5 w-5" />
           </button>
 
-          <div className="min-w-0 flex-1">
+          <div className="hidden min-w-0 flex-1 sm:block">
             <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
               {org?.name ?? 'RentFlow'}
             </p>
@@ -436,6 +436,8 @@ export function AppShell() {
               </p>
             )}
           </div>
+
+          <div className="flex-1 sm:hidden" aria-hidden />
 
           <button
             type="button"
@@ -450,7 +452,7 @@ export function AppShell() {
           <button
             type="button"
             onClick={() => useCommandPaletteStore.getState().setOpen(true)}
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 sm:hidden dark:text-slate-400 dark:hover:bg-slate-800"
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 sm:hidden dark:text-slate-400 dark:hover:bg-slate-800"
             aria-label="Search"
           >
             <Search className="h-5 w-5" />
@@ -461,7 +463,7 @@ export function AppShell() {
           <button
             type="button"
             onClick={() => setHelpOpen(true)}
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 sm:p-2 dark:text-slate-400 dark:hover:bg-slate-800"
             aria-label="Help"
           >
             <HelpCircle className="h-5 w-5" />
@@ -473,7 +475,7 @@ export function AppShell() {
 
           <Link
             to="/notifications"
-            className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            className="relative rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 sm:p-2 dark:text-slate-400 dark:hover:bg-slate-800"
             aria-label="Notifications"
           >
             <Bell className="h-5 w-5" />
@@ -502,13 +504,21 @@ export function AppShell() {
   )
 }
 
-function Brand({ compact = false }: { compact?: boolean }) {
+function Brand({ compact = false, orgName }: { compact?: boolean; orgName?: string }) {
   return (
-    <div className={cn('flex items-center gap-2', !compact && 'border-b border-slate-100 px-5 py-4 dark:border-slate-800')}>
-      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
-        <Building2 className="h-4 w-4" />
+    <div
+      className={cn(
+        'flex min-w-0 items-center gap-2',
+        !compact && 'border-b border-slate-100 px-5 py-4 dark:border-slate-800',
+      )}
+    >
+      <img src="/rent.png" alt="RentFlow" className="h-8 w-8 shrink-0 rounded-lg" />
+      <span className="min-w-0">
+        <span className="block font-semibold text-slate-900 dark:text-slate-100">RentFlow</span>
+        {orgName && (
+          <span className="block truncate text-xs text-slate-500 dark:text-slate-400">{orgName}</span>
+        )}
       </span>
-      <span className="font-semibold text-slate-900 dark:text-slate-100">RentFlow</span>
     </div>
   )
 }

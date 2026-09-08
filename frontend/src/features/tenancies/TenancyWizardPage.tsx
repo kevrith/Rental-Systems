@@ -268,7 +268,7 @@ export function TenancyWizardPage() {
             <CardHeader>
               <CardTitle>Tenancy terms</CardTitle>
             </CardHeader>
-            <CardBody className="grid gap-4 sm:grid-cols-2">
+            <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Start date" required>
                 <Input
                   type="date"
@@ -383,7 +383,7 @@ export function TenancyWizardPage() {
               <CardTitle>Review and confirm</CardTitle>
             </CardHeader>
             <CardBody className="space-y-4">
-              <dl className="grid gap-3 sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Summary label="Tenant" value={selectedTenant?.full_name ?? '—'} />
                 <Summary label="Phone" value={selectedTenant?.phone_number ?? '—'} />
                 <Summary

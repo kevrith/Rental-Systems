@@ -248,7 +248,7 @@ function RulesPanel() {
 
           {creating ? (
             <Card>
-              <CardBody className="grid gap-3 sm:grid-cols-2">
+              <CardBody className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Entity type" hint="A short code your team recognises, e.g. large_expense">
                   <Input value={entityType} onChange={(event) => setEntityType(event.target.value)} />
                 </Field>

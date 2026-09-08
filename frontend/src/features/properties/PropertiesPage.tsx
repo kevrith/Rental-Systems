@@ -40,7 +40,7 @@ export function PropertiesPage() {
       />
 
       {portfolio.data && (
-        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Properties" value={String(portfolio.data.stats.total_properties)} />
           <StatCard label="Total units" value={String(portfolio.data.stats.total_units)} />
           <StatCard
@@ -79,13 +79,13 @@ export function PropertiesPage() {
       </div>
 
       {properties.isPending ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }).map((_, index) => (
             <Skeleton key={index} className="h-44" />
           ))}
         </div>
       ) : properties.data?.length ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {properties.data.map((property) => (
             <PropertyCard key={property.id} property={property} />
           ))}

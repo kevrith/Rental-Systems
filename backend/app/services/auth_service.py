@@ -21,6 +21,8 @@ from app.models.security import SecurityEventType
 from app.models.session import TokenPurpose, VerificationToken
 from app.models.user import DEFAULT_INACTIVITY_TIMEOUT_MINUTES, User, UserRole
 from app.schemas.auth import (
+    GoogleAuthResponse,
+    GoogleRegisterRequest,
     LoginChallengeResponse,
     LoginRequest,
     RegisterRequest,
@@ -34,6 +36,7 @@ from app.services import (
     session_service,
     webauthn_service,
 )
+from app.services.google_oauth import verify_google_credential
 from app.services.notifications import get_email_notifier, get_sms_notifier, normalize_phone
 
 LOGIN_OTP_PURPOSE = "login"
@@ -89,6 +92,24 @@ async def _register_failed_login(email: str) -> None:
 
 async def _clear_failed_logins(email: str) -> None:
     await redis_client.delete(_login_fails_key(email), _login_lockout_key(email))
+
+
+async def _enforce_ip_policy(db: AsyncSession, user: User, request: Request | None) -> None:
+    organization = await db.get(Organization, user.organization_id)
+    client = session_service.client_ip(request)
+    if organization and not security_service.ip_allowed(organization.ip_whitelist, client):
+        await security_service.record_event(
+            db,
+            organization_id=organization.id,
+            event_type=SecurityEventType.LOGIN_BLOCKED_IP,
+            user_id=user.id,
+            request=request,
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Sign-in is not allowed from this network. Contact your administrator.",
+        )
 
 
 async def _send_phone_verification_otp(user: User) -> None:
@@ -157,6 +178,51 @@ async def _send_email_verification(db: AsyncSession, user: User) -> None:
     )
 
 
+async def _finish_registration(
+    db: AsyncSession,
+    organization: Organization,
+    user: User,
+    request: Request | None,
+    *,
+    send_email_verification: bool,
+) -> TokenResponse:
+    """Shared tail of both registration paths: open the session, welcome the
+    user, and kick off phone verification. `send_email_verification` is False
+    for Google sign-ups — Google already vouched for that email."""
+    session, tokens = await session_service.create_session(db, user, request)
+    # The registering device is implicitly trusted — they just proved control of
+    # the account by creating it.
+    await session_service.trust_device(
+        db, user, session.device_fingerprint, request.headers.get("user-agent") if request else None
+    )
+
+    if send_email_verification:
+        await _send_email_verification(db, user)
+
+    await notification_service.send(
+        db,
+        recipient=notification_service.Recipient.for_user(user),
+        notification_type=NotificationType.WELCOME,
+        title=f"Welcome to RentFlow, {user.full_name.split()[0]}",
+        body=(
+            f"{organization.name} is set up and your 30-day free trial has started — no card needed. "
+            f"Add your first property to get going: {settings.FRONTEND_URL}/properties/new"
+        ),
+        channels=[NotificationChannel.WHATSAPP],
+        organization_id=organization.id,
+    )
+
+    await referral_service.link_signup(db, email=user.email, organization_id=organization.id)
+
+    await db.commit()
+    await db.refresh(organization)
+    await db.refresh(user)
+
+    await _send_phone_verification_otp(user)
+
+    return tokens
+
+
 async def register_organization(
     db: AsyncSession, payload: RegisterRequest, request: Request | None = None
 ) -> tuple[Organization, User, TokenResponse]:
@@ -199,36 +265,122 @@ async def register_organization(
     db.add(user)
     await db.flush()
 
-    session, tokens = await session_service.create_session(db, user, request)
-    # The registering device is implicitly trusted — they just proved control of
-    # the account by creating it.
-    await session_service.trust_device(
-        db, user, session.device_fingerprint, request.headers.get("user-agent") if request else None
-    )
-
-    await _send_email_verification(db, user)
-    await notification_service.send(
-        db,
-        recipient=notification_service.Recipient.for_user(user),
-        notification_type=NotificationType.WELCOME,
-        title=f"Welcome to RentFlow, {user.full_name.split()[0]}",
-        body=(
-            f"{organization.name} is set up and your 30-day free trial has started — no card needed. "
-            f"Add your first property to get going: {settings.FRONTEND_URL}/properties/new"
-        ),
-        channels=[NotificationChannel.WHATSAPP],
-        organization_id=organization.id,
-    )
-
-    await referral_service.link_signup(db, email=payload.email, organization_id=organization.id)
-
-    await db.commit()
-    await db.refresh(organization)
-    await db.refresh(user)
-
-    await _send_phone_verification_otp(user)
+    tokens = await _finish_registration(db, organization, user, request, send_email_verification=True)
 
     return organization, user, tokens
+
+
+async def register_organization_with_google(
+    db: AsyncSession, payload: GoogleRegisterRequest, request: Request | None = None
+) -> tuple[Organization, User, TokenResponse]:
+    """New-account signup via Google — not just a login shortcut for existing users.
+
+    Google's ID token supplies a verified email and name but nothing about the
+    org/account type/phone the User and Organization models require — that's
+    what `payload` fills in, re-checked against the token server-side rather
+    than trusted from the client.
+    """
+    identity = await verify_google_credential(payload.credential)
+    if not identity.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Your Google account's email address isn't verified",
+        )
+
+    phone = normalize_phone(payload.phone_number)
+    existing = await db.scalar(
+        select(User).where(
+            (User.email == identity.email) | (User.phone_number == phone) | (User.google_sub == identity.sub)
+        )
+    )
+    if existing:
+        if existing.google_sub == identity.sub:
+            conflict = "Google account"
+        elif existing.email == identity.email:
+            conflict = "email address"
+        else:
+            conflict = "phone number"
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"That {conflict} is already registered. Try logging in instead.",
+        )
+
+    is_agency = payload.account_type == "agency"
+    role = UserRole.AGENCY_ADMIN if is_agency else UserRole.OWNER
+
+    slug = await _unique_slug(db, payload.organization_name)
+    organization = Organization(
+        name=payload.organization_name,
+        slug=slug,
+        operating_mode=OperatingMode.AGENCY if is_agency else OperatingMode.OWNER,
+        subscription_plan=SubscriptionPlan.TRIAL,
+        trial_ends_at=datetime.now(UTC) + timedelta(days=settings.TRIAL_PERIOD_DAYS),
+        contact_email=identity.email,
+        contact_phone=phone,
+    )
+    db.add(organization)
+    await db.flush()
+
+    user = User(
+        organization_id=organization.id,
+        full_name=identity.full_name,
+        email=identity.email,
+        phone_number=phone,
+        password_hash="!",  # Google-only account; unusable until they set a real password
+        google_sub=identity.sub,
+        is_email_verified=True,  # Google already verified this
+        role=role,
+        inactivity_timeout_minutes=DEFAULT_INACTIVITY_TIMEOUT_MINUTES[role],
+    )
+    db.add(user)
+    await db.flush()
+
+    tokens = await _finish_registration(db, organization, user, request, send_email_verification=False)
+
+    return organization, user, tokens
+
+
+async def authenticate_with_google(
+    db: AsyncSession, credential: str, request: Request | None = None
+) -> GoogleAuthResponse:
+    """Sign in with Google. Skips the SMS OTP step entirely — Google's own auth
+    stands in for it, the same way a trusted device skips it today.
+
+    Matches on a previously-linked `google_sub` first, falling back to a
+    verified-email match that links the Google identity to the existing
+    password account. An email Google has not verified is never trusted for
+    that link — that would let anyone claim an account just by typing its
+    owner's address into an unverified Google profile.
+    """
+    identity = await verify_google_credential(credential)
+    if not identity.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Your Google account's email address isn't verified",
+        )
+
+    user = await db.scalar(select(User).where(User.google_sub == identity.sub))
+    if user is None:
+        user = await db.scalar(select(User).where(User.email == identity.email))
+        if user is not None:
+            user.google_sub = identity.sub
+            user.is_email_verified = True
+
+    if user is None:
+        return GoogleAuthResponse(
+            status="needs_registration", email=identity.email, full_name=identity.full_name
+        )
+
+    if not user.is_active or user.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+
+    await _enforce_ip_policy(db, user, request)
+
+    fingerprint = session_service.request_fingerprint(request)
+    was_known = await session_service.is_known_device(db, user, fingerprint)
+    tokens = await _finalize_login(db, user, request, remember_device=False, device_was_known=was_known)
+
+    return GoogleAuthResponse(status="signed_in", tokens=tokens)
 
 
 async def initiate_login(
@@ -256,22 +408,7 @@ async def initiate_login(
     if not user.is_active or user.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
 
-    organization = await db.get(Organization, user.organization_id)
-    client = session_service.client_ip(request)
-    if organization and not security_service.ip_allowed(organization.ip_whitelist, client):
-        await security_service.record_event(
-            db,
-            organization_id=organization.id,
-            event_type=SecurityEventType.LOGIN_BLOCKED_IP,
-            user_id=user.id,
-            request=request,
-        )
-        await db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Sign-in is not allowed from this network. Contact your administrator.",
-        )
-
+    await _enforce_ip_policy(db, user, request)
     await _clear_failed_logins(payload.email)
 
     fingerprint = session_service.request_fingerprint(request)

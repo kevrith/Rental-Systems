@@ -41,6 +41,20 @@ export interface LoginChallengeResponse {
   webauthn_options: string | null
 }
 
+export interface GoogleAuthResponse {
+  status: 'signed_in' | 'needs_registration'
+  tokens: TokenResponse | null
+  email: string | null
+  full_name: string | null
+}
+
+export interface GoogleRegisterPayload {
+  credential: string
+  organization_name: string
+  phone_number: string
+  account_type: 'owner' | 'agency'
+}
+
 export interface WebauthnCredentialRow {
   id: string
   device_name: string
@@ -54,6 +68,12 @@ export const authApi = {
 
   login: async (payload: LoginPayload) =>
     (await apiClient.post<LoginChallengeResponse>('/auth/login', payload)).data,
+
+  googleAuth: async (credential: string) =>
+    (await apiClient.post<GoogleAuthResponse>('/auth/google', { credential })).data,
+
+  googleRegister: async (payload: GoogleRegisterPayload) =>
+    (await apiClient.post<RegisterResponse>('/auth/google/register', payload)).data,
 
   verifyLoginOtp: async (payload: {
     challenge_token: string

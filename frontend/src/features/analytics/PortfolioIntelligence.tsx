@@ -96,7 +96,7 @@ export function PortfolioIntelligence() {
       <div>
         <h2 className="mb-3 text-lg font-semibold text-slate-900">Utilities</h2>
 
-        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {utilities.isPending ? (
             <>
               <Skeleton className="h-24" />
@@ -128,7 +128,7 @@ export function PortfolioIntelligence() {
           )}
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle>Consumption over time</CardTitle>
@@ -243,7 +243,7 @@ export function PortfolioIntelligence() {
           cash-flow pain every month.
         </p>
 
-        <div className="mb-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {behaviour.isPending
             ? SEGMENT_ORDER.map((segment) => <Skeleton key={segment} className="h-20" />)
             : SEGMENT_ORDER.map((segment) => (
@@ -315,7 +315,7 @@ export function PortfolioIntelligence() {
       <div>
         <h2 className="mb-3 text-lg font-semibold text-slate-900">Turnover</h2>
 
-        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {turnover.isPending ? (
             <>
               <Skeleton className="h-24" />

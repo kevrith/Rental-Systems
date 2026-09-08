@@ -284,7 +284,7 @@ export function ReportBuilderPage() {
         </Alert>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           <Card>
             <CardHeader>
@@ -305,7 +305,7 @@ export function ReportBuilderPage() {
                 </Select>
               </Field>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <p className="mb-1.5 text-sm font-medium text-slate-700">Available fields</p>
                   <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2">
@@ -371,7 +371,7 @@ export function ReportBuilderPage() {
               </p>
             </CardHeader>
             <CardBody className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Date from">
                   <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
                 </Field>
@@ -430,7 +430,7 @@ export function ReportBuilderPage() {
                 </Select>
               </Field>
               {chartType !== 'table' && (
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Field label="Group by">
                     <Select value={groupByField} onChange={(e) => setGroupByField(e.target.value)}>
                       <option value="">Choose a column</option>

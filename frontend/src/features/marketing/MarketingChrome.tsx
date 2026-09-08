@@ -1,4 +1,3 @@
-import { Building2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { cn } from '@/lib/cn'
@@ -15,9 +14,7 @@ import { cn } from '@/lib/cn'
 export function Logo({ className, compact = false }: { className?: string; compact?: boolean }) {
   return (
     <span className={cn('flex items-center gap-2', className)}>
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white">
-        <Building2 className="h-5 w-5" />
-      </span>
+      <img src="/rent.png" alt="RentFlow" className="h-9 w-9 shrink-0 rounded-lg" />
       <span
         className={cn(
           'whitespace-nowrap text-lg font-semibold text-slate-900 dark:text-white',

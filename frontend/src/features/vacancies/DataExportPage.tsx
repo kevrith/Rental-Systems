@@ -86,7 +86,7 @@ export function DataExportPage() {
           <CardTitle>Build an export</CardTitle>
         </CardHeader>
         <CardBody className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="What do you want?" hint={dataset?.hint}>
               <Select value={kind} onChange={(event) => setKind(event.target.value as ExportKind)}>
                 {DATASETS.map((item) => (
@@ -108,7 +108,7 @@ export function DataExportPage() {
           </div>
 
           {supportsDates && (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="From" hint="Optional">
                 <Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
               </Field>

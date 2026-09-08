@@ -950,7 +950,9 @@ Tap "Pay Rent" → see exact amount due breakdown (rent + utilities + arrears + 
 | **Business** | 20,000 | 200,000 *(2 months free)* | Up to 200 units | KES 100/unit/mo | Medium agencies |
 | **Enterprise** | Custom | Custom | Unlimited | Negotiated | Large corporations |
 
-*All plans include: M-Pesa integration, WhatsApp + SMS notifications, PWA for caretakers and tenants, standard reports, 5GB document storage*
+*All plans include: M-Pesa integration, WhatsApp + SMS notifications, PWA for caretakers and tenants, standard reports, 5GB document storage, eTIMS compliance receipts*
+
+*Starter is subscription-only — no per-transaction fee (see Transaction Fees below). A landlord switching from a spreadsheet is comparing this price against free; stacking a percentage fee on top of the subscription at the smallest tier is exactly the friction that keeps that comparison in the spreadsheet's favour.*
 
 ### Plan Feature Differentiation
 
@@ -961,29 +963,48 @@ Tap "Pay Rent" → see exact amount due breakdown (rent + utilities + arrears + 
 | Caretaker accounts | 1 | 5 | 20 | Custom |
 | Agency/Owner mode | Owner only | Both | Both | Both |
 | Owner portal invites | N/A | 5 | 20 | Unlimited |
-| eTIMS receipts | Add-on | Included | Included | Included |
+| eTIMS receipts | Included | Included | Included | Included |
 | Document storage | 5GB | 20GB | 100GB | Custom |
 | API access | No | No | Yes | Yes |
 | White label | No | No | No | Yes |
 | Dedicated support | No | Email | Email + WhatsApp | Account Manager |
+
+*Document storage is an enforced cap, not a marketing figure — an upload
+that would take an organisation over its plan's limit is rejected
+(`app/services/file_service.py`, `effective_storage_limit_bytes`), with
+existing files untouched. Enterprise's "Custom" figure is a per-organisation
+override (`Organization.storage_limit_bytes`) set by platform staff; every
+other plan's cap comes from a fixed table. The Vault page shows usage
+against the limit.*
 
 ### Additional Revenue Streams
 
 **Transaction Fees**
 - 0.5% on every M-Pesa payment processed through the platform
 - Capped at KES 500 maximum per transaction
+- **Professional, Business and Enterprise only — not charged on Starter.** At
+  50+ units the fee is a rounding error against the rent roll; at 1-10 units
+  it is the difference between "cheap enough to just try" and "another
+  percentage taken off my rent," and Starter's whole job is converting a
+  landlord off a spreadsheet, not maximising revenue per customer.
 - Automatically collected — scales with customer payment volumes
-- Estimated additional revenue: KES 50–500 per unit per month at average rents
+- Estimated additional revenue: KES 50–500 per unit per month at average rents (Professional+)
 
 **Premium Add-Ons**
 | Add-On | Monthly Fee |
 |--------|------------|
-| eTIMS Compliance Module | KES 1,000/month |
 | Advanced Analytics & Predictive Intelligence | KES 2,000/month |
 | Extra SMS Bundle (500 SMS) | KES 500 |
 | Extra Document Storage (50GB) | KES 500/month |
 | Vacancy Marketing Portal | KES 1,000/month |
 | Open API Access (Starter/Professional plans) | KES 3,000/month |
+
+*eTIMS is no longer a paid add-on — it is a Kenya Revenue Authority
+compliance requirement, not a premium feature, and every plan includes it
+now (see Subscription Plans above). Advanced Analytics stays a genuine
+paid upsell: it is a predictive/insight layer on top of the standard
+reporting every plan already gets, not something a customer needs to
+operate legally.*
 
 **One-Time Fees**
 | Service | Fee |
@@ -1000,6 +1021,15 @@ Tap "Pay Rent" → see exact amount due breakdown (rent + utilities + arrears + 
 - Tenant credit scoring as a service
 
 ### Pricing Principles
+- **No paywall on compliance** — a feature required to meet a legal obligation
+  (eTIMS) is never a paid add-on, on any plan. Paid add-ons are reserved for
+  genuine enhancements (Advanced Analytics) a customer could operate
+  without.
+- **The smallest tier optimises for adoption, not margin** — Starter has no
+  per-transaction fee, because the customer it targets is comparing the
+  price against free (a spreadsheet), and a stacked subscription-plus-
+  percentage fee is friction that costs more signups than it earns in
+  revenue.
 - **Annual billing rewarded** — 2 months free for annual commitment (improves cash flow, reduces churn)
 - **30-day free trial** — full feature access, no credit card required, removes signup friction
 - **Early adopter pricing** — first 100 customers get current pricing locked for life (creates urgency and loyalty)

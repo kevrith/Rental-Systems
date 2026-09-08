@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # Google Sign-In (Identity Services). This is the OAuth *client ID*, not a
+    # secret — it's compiled into the frontend bundle same as a Stripe
+    # publishable key. Verification only needs it to check the ID token's
+    # `aud` claim against Google's own public keys; no client secret involved.
+    GOOGLE_CLIENT_ID: str | None = None
+
     # Database
     DATABASE_URL: str
     DATABASE_URL_SYNC: str | None = None

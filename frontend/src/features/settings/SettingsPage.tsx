@@ -854,7 +854,7 @@ export function OrganizationSettings() {
           <Field label="Address">
             <Input value={form.address ?? ''} onChange={set('address')} disabled={!canManage} />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Contact email">
               <Input
                 type="email"
@@ -882,7 +882,7 @@ export function OrganizationSettings() {
         <CardHeader>
           <CardTitle>Defaults</CardTitle>
         </CardHeader>
-        <CardBody className="grid gap-4 sm:grid-cols-2">
+        <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Default billing day" hint="Used when creating a new tenancy.">
             <Input
               type="number"
@@ -932,7 +932,7 @@ export function OrganizationSettings() {
             Shown to tenants as instructions for paying rent by bank transfer.
           </p>
         </CardHeader>
-        <CardBody className="grid gap-4 sm:grid-cols-2">
+        <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Bank name">
             <Input value={form.bank_name ?? ''} onChange={set('bank_name')} disabled={!canManage} />
           </Field>
@@ -989,7 +989,7 @@ export function OrganizationSettings() {
                 <p className="mb-3 text-xs text-slate-500">
                   Applies immediately to every user of that role. Leave blank to keep the default.
                 </p>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {SECURITY_POLICY_ROLES.map((role) => (
                     <Field key={role.value} label={role.label}>
                       <Input
@@ -1019,7 +1019,7 @@ export function OrganizationSettings() {
                 What counts as suspicious enough to alert you (US-097).
               </p>
             </CardHeader>
-            <CardBody className="grid gap-4 sm:grid-cols-3">
+            <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field
                 label="Max cash payments per window"
                 hint="More than this by one caretaker triggers an alert."
@@ -1064,7 +1064,7 @@ export function OrganizationSettings() {
               Who has to sign off on money, and how many devices stay signed in.
             </p>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-2">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
               label="Hold cash above (KES)"
               hint="A cash payment above this is recorded but not banked until a second person approves it. Leave blank to switch this off."
@@ -1172,7 +1172,7 @@ function SecurityAuditLogExport() {
       </CardHeader>
       <CardBody className="space-y-4">
         {error && <Alert tone="danger">{error}</Alert>}
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="From">
             <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
           </Field>

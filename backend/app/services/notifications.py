@@ -96,7 +96,11 @@ class AfricasTalkingSmsNotifier:
                 response.raise_for_status()
                 recipients = response.json().get("SMSMessageData", {}).get("Recipients", [])
                 if recipients and recipients[0].get("status") == "Success":
-                    logger.warning("AT SMS sent to %s: messageId=%s", mask(normalize_phone(phone_number)), recipients[0].get("messageId"))
+                    logger.warning(
+                        "AT SMS sent to %s: messageId=%s",
+                        mask(normalize_phone(phone_number)),
+                        recipients[0].get("messageId"),
+                    )
                     return DeliveryResult(success=True, provider_message_id=recipients[0].get("messageId"))
                 reason = recipients[0].get("status") if recipients else "No recipients accepted"
                 logger.warning("AT SMS rejected for %s: %s", mask(normalize_phone(phone_number)), reason)

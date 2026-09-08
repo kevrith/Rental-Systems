@@ -68,7 +68,7 @@ export function PaymentDetailPage() {
               {humanize(record.status)}
             </Badge>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-2">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Detail label="Amount" value={kes(record.amount)} />
             <Detail label="Method" value={humanize(record.method)} />
             <Detail label="Date received" value={shortDate(record.payment_date)} />
@@ -93,7 +93,7 @@ export function PaymentDetailPage() {
           <CardHeader>
             <CardTitle>Applied to</CardTitle>
           </CardHeader>
-          <CardBody className="grid gap-4 sm:grid-cols-2">
+          <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Detail label="Tenant" value={record.tenant_name ?? '—'} />
             <Detail
               label="Unit"
@@ -111,7 +111,7 @@ export function PaymentDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardBody className="space-y-3">
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Detail label="Receipt number" value={record.receipt.reference_code} />
                 <Detail label="Issued" value={dateTime(record.receipt.issued_at)} />
                 <Detail

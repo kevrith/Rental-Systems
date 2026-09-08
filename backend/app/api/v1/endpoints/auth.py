@@ -11,6 +11,9 @@ from app.models.user import User
 from app.schemas.auth import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
+    GoogleAuthRequest,
+    GoogleAuthResponse,
+    GoogleRegisterRequest,
     LoginChallengeResponse,
     LoginRequest,
     LogoutRequest,
@@ -50,6 +53,26 @@ async def login(
     """Step 1: verify the password. Trusted devices get tokens here; everyone else
     gets an OTP challenge."""
     return await auth_service.initiate_login(db, payload, request)
+
+
+@router.post("/google", response_model=GoogleAuthResponse)
+async def google_auth(
+    payload: GoogleAuthRequest, request: Request, db: AsyncSession = Depends(get_db)
+) -> GoogleAuthResponse:
+    """Sign in with Google. Recognized accounts get tokens immediately — no OTP
+    step. An unrecognized Google account comes back as `needs_registration` so
+    the frontend can collect the org/account details Google doesn't supply."""
+    return await auth_service.authenticate_with_google(db, payload.credential, request)
+
+
+@router.post("/google/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
+async def google_register(
+    payload: GoogleRegisterRequest, request: Request, db: AsyncSession = Depends(get_db)
+) -> RegisterResponse:
+    """Create a new organization + account from a Google identity plus the
+    org/account-type/phone details `/auth/google` couldn't get from Google."""
+    organization, user, tokens = await auth_service.register_organization_with_google(db, payload, request)
+    return RegisterResponse(organization=organization, user=user, tokens=tokens)  # type: ignore[arg-type]
 
 
 @router.post("/login/verify-otp", response_model=TokenResponse)

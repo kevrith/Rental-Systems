@@ -134,7 +134,7 @@ export function ServiceChargePage() {
       />
 
       {record && (
-        <div className="mb-5 grid gap-3 sm:grid-cols-3">
+        <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <StatCard
             label="Billed each month"
             value={kes(record.monthly_total)}
@@ -399,7 +399,7 @@ function ExpensesTab({ schemeId }: { schemeId: string }) {
           <CardTitle>Record what was spent</CardTitle>
         </CardHeader>
         <CardBody className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label="Category" required>
               <Select
                 value={form.category}
@@ -505,7 +505,7 @@ function ReconciliationTab({ schemeId }: { schemeId: string }) {
   return (
     <div className="space-y-5">
       <Card>
-        <CardBody className="grid gap-4 sm:grid-cols-2">
+        <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="From">
             <Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
           </Field>
@@ -517,7 +517,7 @@ function ReconciliationTab({ schemeId }: { schemeId: string }) {
 
       {report.data && (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Budgeted" value={kes(report.data.total_budgeted)} />
             <StatCard label="Charged to tenants" value={kes(report.data.total_charged)} />
             <StatCard label="Actually spent" value={kes(report.data.total_spent)} />
@@ -616,7 +616,7 @@ function ReserveTab({ schemeId }: { schemeId: string }) {
           <CardTitle>Move money in or out of the reserve</CardTitle>
         </CardHeader>
         <CardBody className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label="Movement" required>
               <Select
                 value={form.movement}

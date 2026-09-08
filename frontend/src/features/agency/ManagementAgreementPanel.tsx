@@ -275,7 +275,7 @@ export function ManagementAgreementPanel({ ownerProfileId }: { ownerProfileId: s
               onChange={(event) => setStartDate(event.target.value)}
             />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Initial term (months)" hint="0 for an open-ended agreement.">
               <Input
                 type="number"

@@ -51,6 +51,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     phone_number: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Set for accounts created or linked via Sign in with Google (Google's
+    # stable per-account "sub" claim). Null for everyone else.
+    google_sub: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role"), nullable=False)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

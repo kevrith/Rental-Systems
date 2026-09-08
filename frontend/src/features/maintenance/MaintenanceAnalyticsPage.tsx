@@ -106,7 +106,7 @@ export function MaintenanceAnalyticsPage() {
         </Alert>
       )}
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Spent this month"
           value={kes(data.this_month_cost)}
@@ -208,7 +208,7 @@ export function MaintenanceAnalyticsPage() {
           </CardBody>
         </Card>
 
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle>By property</CardTitle>

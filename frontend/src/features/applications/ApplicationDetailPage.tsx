@@ -152,7 +152,7 @@ export function ApplicationDetailPage() {
         </Alert>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-5">
           <Card>
             <CardHeader>
@@ -166,7 +166,7 @@ export function ApplicationDetailPage() {
               </a>
             </CardHeader>
             <CardBody className="space-y-4">
-              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <Detail label="National ID" value={record.national_id ?? '—'} />
                 <Detail label="Email" value={record.email ?? '—'} />
                 <Detail label="Occupants" value={String(record.occupants)} />
@@ -194,7 +194,7 @@ export function ApplicationDetailPage() {
               <CardTitle>How they will pay</CardTitle>
             </CardHeader>
             <CardBody>
-              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <Detail label="Status" value={humanize(record.employment_status)} />
                 <Detail label="Employer" value={record.employer_name ?? '—'} />
                 <Detail label="Role" value={record.job_title ?? '—'} />
@@ -755,7 +755,7 @@ function GuarantorDialog({ open, record, onClose, onDone }: DialogProps) {
       }
     >
       <div className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Full name" required>
             <Input
               value={form.full_name}
@@ -772,7 +772,7 @@ function GuarantorDialog({ open, record, onClose, onDone }: DialogProps) {
             />
           </Field>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Phone" required>
             <Input
               placeholder="+2547XXXXXXXX"
@@ -787,7 +787,7 @@ function GuarantorDialog({ open, record, onClose, onDone }: DialogProps) {
             />
           </Field>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Employer">
             <Input
               value={form.employer_name}
