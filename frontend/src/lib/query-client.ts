@@ -155,6 +155,10 @@ export const queryKeys = {
   onboarding: ['customer-success', 'onboarding'] as const,
   helpSearch: (q?: string) => ['customer-success', 'help', q ?? ''] as const,
   helpArticle: (slug: string) => ['customer-success', 'help', 'article', slug] as const,
+  // Kept separate from the two above: the public endpoint is reachable with no
+  // session, so its cache must not be cleared along with a user's on logout.
+  publicHelpSearch: (q?: string) => ['public-help', q ?? ''] as const,
+  publicHelpArticle: (slug: string) => ['public-help', 'article', slug] as const,
   referralSummary: ['customer-success', 'referral'] as const,
   pendingNps: ['customer-success', 'nps', 'pending'] as const,
   pendingMilestones: ['customer-success', 'milestones', 'pending'] as const,
