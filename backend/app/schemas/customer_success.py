@@ -126,6 +126,12 @@ class ReferralSummary(BaseModel):
 
 class OrganizationPlanUpdate(BaseModel):
     plan: SubscriptionPlan
+    # Enterprise's negotiated document-vault storage cap, in bytes — every
+    # other plan's cap comes from a fixed table
+    # (`file_service.PLAN_STORAGE_LIMITS_GB`) and has no per-org override.
+    # Omit to leave the existing value alone; pass null to clear it back to
+    # the plan default.
+    storage_limit_bytes: int | None = Field(default=None)
 
 
 class NpsPendingRead(BaseModel):

@@ -5,6 +5,7 @@ import { filesApi } from '@/api'
 import { API_BASE_URL } from '@/lib/api-client'
 import { cn } from '@/lib/cn'
 import { errorMessage } from '@/lib/format'
+import { compressImage } from '@/lib/image-compression'
 
 export interface UploadedFile {
   id: string
@@ -14,31 +15,6 @@ export interface UploadedFile {
 
 const ACCEPTED = 'image/jpeg,image/png,image/webp,application/pdf'
 const MAX_BYTES = 10 * 1024 * 1024
-/** Photos are downscaled in the browser: a 12MP phone shot is ~5MB, and a
- *  caretaker on 3G should not be uploading that to record a meter reading. */
-const MAX_IMAGE_EDGE = 1600
-const JPEG_QUALITY = 0.82
-
-async function compressImage(file: File): Promise<Blob> {
-  if (!file.type.startsWith('image/') || file.type === 'image/webp') return file
-
-  const bitmap = await createImageBitmap(file)
-  const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height))
-  if (scale === 1 && file.size <= 1_500_000) return file
-
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.round(bitmap.width * scale)
-  canvas.height = Math.round(bitmap.height * scale)
-  const context = canvas.getContext('2d')
-  if (!context) return file
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY),
-  )
-  bitmap.close()
-  return blob && blob.size < file.size ? blob : file
-}
 
 /**
  * Direct-to-storage upload (US-012).
@@ -75,17 +51,19 @@ export function FileUpload({
 
   const uploadOne = useCallback(
     async (file: File): Promise<UploadedFile | null> => {
-      const payload = await compressImage(file)
-      if (payload.size > MAX_BYTES) {
+      // Downscaled and re-encoded first: a 12MP phone shot is ~5MB, and neither
+      // the caretaker's bundle nor the agency's storage cap should carry that
+      // to record a meter reading.
+      const image = await compressImage(file)
+      if (image.bytes > MAX_BYTES) {
         setError(`${file.name} is larger than 10MB.`)
         return null
       }
 
-      const contentType = payload.type || file.type || 'application/octet-stream'
       const ticket = await filesApi.requestUpload({
-        filename: file.name,
-        content_type: contentType,
-        size_bytes: payload.size,
+        filename: image.filename,
+        content_type: image.contentType,
+        size_bytes: image.bytes,
         category,
       })
 
@@ -97,12 +75,12 @@ export function FileUpload({
       const response = await fetch(destination, {
         method: ticket.method,
         headers: ticket.headers,
-        body: payload,
+        body: image.blob,
       })
       if (!response.ok) throw new Error(`Upload failed (${response.status})`)
 
-      const confirmed = await filesApi.confirm(ticket.file_id, payload.size)
-      return { id: ticket.file_id, url: confirmed.url, filename: file.name }
+      const confirmed = await filesApi.confirm(ticket.file_id, image.bytes)
+      return { id: ticket.file_id, url: confirmed.url, filename: image.filename }
     },
     [category],
   )

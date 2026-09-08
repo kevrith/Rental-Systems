@@ -819,6 +819,7 @@ export interface PropertyVault {
 export interface VaultUsage {
   total_documents: number
   total_bytes: number
+  limit_bytes: number | null
   by_category: { category: string; document_count: number; bytes: number }[]
 }
 

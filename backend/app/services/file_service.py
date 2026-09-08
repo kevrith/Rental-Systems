@@ -13,13 +13,43 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OrgContext
 from app.core.config import settings
 from app.models.file import FileCategory, ScanStatus, StoredFile, UploadStatus
+from app.models.organization import Organization, SubscriptionPlan
 from app.services import audit_service, storage_service, virus_scan_service
+
+GIGABYTE = 1024 * 1024 * 1024
+
+# Document vault storage cap per plan, in GB. Enterprise has no platform-wide
+# figure — its cap, if any, lives on `Organization.storage_limit_bytes`
+# (a negotiated, platform-staff-set override), not here.
+PLAN_STORAGE_LIMITS_GB: dict[SubscriptionPlan, int] = {
+    SubscriptionPlan.TRIAL: 5,
+    SubscriptionPlan.STARTER: 5,
+    SubscriptionPlan.PROFESSIONAL: 20,
+    SubscriptionPlan.BUSINESS: 100,
+}
+
+
+def effective_storage_limit_bytes(organization: Organization) -> int | None:
+    """None means unlimited — true only for Enterprise with no override set."""
+    if organization.storage_limit_bytes is not None:
+        return organization.storage_limit_bytes
+    plan_gb = PLAN_STORAGE_LIMITS_GB.get(organization.subscription_plan)
+    return plan_gb * GIGABYTE if plan_gb is not None else None
+
+
+async def total_storage_bytes(db: AsyncSession, organization_id: uuid.UUID) -> int:
+    total = await db.scalar(
+        select(func.coalesce(func.sum(StoredFile.size_bytes), 0)).where(
+            StoredFile.organization_id == organization_id, StoredFile.status == UploadStatus.UPLOADED
+        )
+    )
+    return int(total or 0)
 
 
 async def request_upload(
@@ -34,6 +64,18 @@ async def request_upload(
     entity_id: uuid.UUID | None = None,
 ) -> tuple[StoredFile, storage_service.PresignedUpload]:
     storage_service.validate_upload(content_type, size_bytes)
+
+    limit = effective_storage_limit_bytes(context.organization)
+    if limit is not None:
+        used = await total_storage_bytes(db, context.organization_id)
+        if used + size_bytes > limit:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=(
+                    f"This would take document storage past your plan's {limit // GIGABYTE}GB limit. "
+                    "Delete something you no longer need, or upgrade your plan."
+                ),
+            )
 
     storage_key = storage_service.build_storage_key(
         context.organization_id, category.value, filename, content_type
