@@ -4,7 +4,7 @@ pytest==9.1.1
 # pytest<9, which is what made this file unresolvable.
 pytest-asyncio==1.4.0
 ruff==0.8.4
-black==24.10.0
+black==26.5.1
 mypy==2.3.1
 pre-commit==4.6.2
 fakeredis==2.26.2
