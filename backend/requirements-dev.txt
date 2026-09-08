@@ -4,7 +4,7 @@ pytest-asyncio==0.25.0
 ruff==0.8.4
 black==24.10.0
 mypy==1.14.0
-pre-commit==4.0.1
+pre-commit==4.6.2
 fakeredis==2.26.2
 # Coverage measurement (Sprint 26). The global Definition of Done asks for
 # 80%; until this was added it had never been measured.
