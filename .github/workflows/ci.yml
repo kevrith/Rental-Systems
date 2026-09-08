@@ -16,11 +16,16 @@ jobs:
     services:
       postgres:
         image: postgres:15-alpine
-        # CI_DB_PASSWORD is a repository secret (Settings -> Secrets and variables -> Actions).
-        # Any value works — this database only ever exists for the lifetime of this job.
+        # No password, by design. The entrypoint refuses to initialise unless it
+        # is given either a password or an explicit auth method, and a password
+        # here can only come from a repository secret — which is empty on a
+        # fork's pull request and empty again the day the secret is rotated
+        # away, taking every job that needs a database down with it. `trust` has
+        # nothing to leak: this server is reachable only from inside the
+        # runner's own container network and is destroyed with the job.
         env:
           POSTGRES_USER: rentflow
-          POSTGRES_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: rentflow_test
         ports: ["5432:5432"]
         options: >-
@@ -37,8 +42,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql+asyncpg://rentflow:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/rentflow_test
-      DATABASE_URL_SYNC: postgresql+psycopg2://rentflow:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/rentflow_test
+      DATABASE_URL: postgresql+asyncpg://rentflow@localhost:5432/rentflow_test
+      DATABASE_URL_SYNC: postgresql+psycopg2://rentflow@localhost:5432/rentflow_test
       REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v7
@@ -126,9 +131,10 @@ jobs:
     services:
       postgres:
         image: postgres:15-alpine
+        # Passwordless for the same reason as the backend job above.
         env:
           POSTGRES_USER: rentflow
-          POSTGRES_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: rentflow_e2e
         ports: ["5432:5432"]
         options: >-
@@ -145,8 +151,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql+asyncpg://rentflow:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/rentflow_e2e
-      DATABASE_URL_SYNC: postgresql+psycopg2://rentflow:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/rentflow_e2e
+      DATABASE_URL: postgresql+asyncpg://rentflow@localhost:5432/rentflow_e2e
+      DATABASE_URL_SYNC: postgresql+psycopg2://rentflow@localhost:5432/rentflow_e2e
       REDIS_URL: redis://localhost:6379/0
       E2E_BASE_URL: http://localhost:4173
       E2E_API_URL: http://localhost:8000/api/v1
@@ -247,9 +253,26 @@ jobs:
 
       # Audits the pinned set rather than a resolved environment, so the result
       # matches what actually ships.
+      #
+      # PYSEC-2026-1325 (CVE-2024-23342) is the Minerva timing attack on P-256
+      # in python-ecdsa. It is ignored on two counts, and both have to hold:
+      #
+      #   * There is nothing to upgrade to. python-ecdsa considers side channel
+      #     attacks out of scope and has said there is no planned fix, so the
+      #     advisory has no fix version and never will.
+      #   * Nothing here reaches the affected code. ecdsa arrives only because
+      #     python-jose declares it unconditionally; this service signs with
+      #     HS256 (app/core/config.py), which is HMAC — no curve operations, no
+      #     sign_digest(), no key generation, no ECDH. Signature verification is
+      #     unaffected even on the curve.
+      #
+      # Revisit if JWT_ALGORITHM ever moves to an ES* algorithm, or if the JWT
+      # library changes to one that does not drag in ecdsa.
       - name: Audit Python dependencies
         working-directory: backend
-        run: pip-audit --requirement requirements.txt --strict --progress-spinner off
+        run: |
+          pip-audit --requirement requirements.txt --strict --progress-spinner off \
+            --ignore-vuln PYSEC-2026-1325
 
       - uses: actions/setup-node@v7
         with:
@@ -297,8 +320,12 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload results to code scanning
+        # Only if the scan actually produced a file. When the image build fails
+        # there is no SARIF, and an unconditional upload reports a second
+        # "path does not exist" error that reads like the cause and buries the
+        # real one further up the log.
+        if: always() && hashFiles(format('trivy-{0}.sarif', matrix.image)) != ''
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
         with:
           sarif_file: trivy-${{ matrix.image }}.sarif
           category: trivy-${{ matrix.image }}

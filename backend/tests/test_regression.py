@@ -19,7 +19,7 @@ import re
 import uuid
 
 import pytest
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, iter_route_contexts
 from httpx import AsyncClient
 
 from app.main import app
@@ -76,16 +76,34 @@ def _is_public(path: str) -> bool:
     return any(path == prefix if prefix == "/" else path.startswith(prefix) for prefix in PUBLIC_PREFIXES)
 
 
+def api_route_paths() -> set[str]:
+    """Every path the API exposes, as one flat set.
+
+    `app.routes` is not that list. Since FastAPI 0.141 `include_router` leaves a
+    single opaque node behind instead of copying the child routes up, so
+    iterating `app.routes` and filtering for APIRoute sees only the handful
+    declared on the app itself — which is how this suite could pass while
+    checking nothing. `iter_route_contexts` is the supported way to flatten it,
+    and unlike the OpenAPI schema it still includes routes registered with
+    `include_in_schema=False`.
+    """
+    return {
+        context.path
+        for context in iter_route_contexts(app.routes)
+        if isinstance(context.original_route, APIRoute)
+    }
+
+
 def _authenticated_routes() -> list[tuple[str, str]]:
     """Every (method, path) the API exposes that is not deliberately public."""
     routes = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
+    for context in iter_route_contexts(app.routes):
+        if not isinstance(context.original_route, APIRoute):
             continue
-        if _is_public(route.path):
+        if _is_public(context.path):
             continue
-        for method in sorted(route.methods - {"HEAD", "OPTIONS"}):
-            routes.append((method, route.path))
+        for method in sorted((context.methods or set()) - {"HEAD", "OPTIONS"}):
+            routes.append((method, context.path))
     return sorted(routes)
 
 
@@ -117,9 +135,7 @@ async def test_every_authenticated_route_rejects_an_anonymous_caller(client: Asy
 @pytest.mark.asyncio
 async def test_public_routes_are_exactly_the_documented_ones(client: AsyncClient):
     """A new public route must be a decision, not an accident."""
-    public = sorted(
-        {route.path for route in app.routes if isinstance(route, APIRoute) and _is_public(route.path)}
-    )
+    public = sorted(path for path in api_route_paths() if _is_public(path))
     undocumented = [path for path in public if not any(path.startswith(p) for p in PUBLIC_PREFIXES)]
     assert not undocumented, f"Public routes with no stated reason: {undocumented}"
 

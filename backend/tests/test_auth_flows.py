@@ -209,7 +209,11 @@ async def test_replaying_an_old_refresh_token_kills_every_session(client: AsyncC
 
 
 async def test_access_token_is_required(client: AsyncClient) -> None:
-    assert (await client.get("/api/v1/auth/me")).status_code == 403
+    # 401, not 403: no credentials were presented at all. FastAPI's HTTPBearer
+    # used to answer 403 here, which said "you may not" to a caller it had never
+    # identified; the frontend's interceptor keys a token refresh off 401 and
+    # treats 403 as final, so this is the answer it always wanted.
+    assert (await client.get("/api/v1/auth/me")).status_code == 401
 
 
 async def test_garbage_token_is_rejected(client: AsyncClient) -> None:
