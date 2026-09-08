@@ -164,8 +164,13 @@ async def apply(
 
         template.last_used_at = datetime.now(UTC)
         return rendered_title, rendered_body
-    except Exception:  # noqa: BLE001 — a template bug must never block a message
-        logger.exception("Communication template lookup failed for %s", notification_type)
+    except Exception as exc:  # noqa: BLE001 — a template bug must never block a message
+        # Logged without the exception's own message/traceback: it was raised while
+        # handling `variables` (tenant name, balance, amounts — caller-supplied PII),
+        # and a built-in exception's message frequently echoes the offending value
+        # verbatim (e.g. a bad KeyError/TypeError), which would otherwise land that
+        # value in clear text in the log.
+        logger.error("Communication template lookup failed for %s: %s", notification_type, type(exc).__name__)
         return title, body
 
 

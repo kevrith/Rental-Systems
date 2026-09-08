@@ -15,6 +15,7 @@ from typing import Any, Protocol
 import httpx
 
 from app.core.config import settings
+from app.core.crypto import mask
 
 logger = logging.getLogger("rentflow.notifications")
 
@@ -49,10 +50,15 @@ class SmsNotifier(Protocol):
 
 
 class ConsoleSmsNotifier:
-    """Local-dev stand-in that logs instead of sending a real SMS."""
+    """Local-dev stand-in that logs instead of sending a real SMS.
+
+    `message` is never logged in full — it routinely carries a login or phone
+    verification OTP (see auth_service), and a code sitting in clear text in a
+    log line defeats the second factor for anyone who can read logs.
+    """
 
     async def send(self, phone_number: str, message: str) -> DeliveryResult:
-        logger.info("SMS to %s: %s", normalize_phone(phone_number), message)
+        logger.info("SMS to %s (%d chars)", mask(normalize_phone(phone_number)), len(message))
         return DeliveryResult(success=True, provider_message_id="console")
 
 
@@ -88,7 +94,7 @@ class AfricasTalkingSmsNotifier:
                 reason = recipients[0].get("status") if recipients else "No recipients accepted"
                 return DeliveryResult(success=False, error=str(reason))
         except httpx.HTTPError as exc:
-            logger.warning("Africa's Talking SMS failed for %s: %s", phone_number, exc)
+            logger.warning("Africa's Talking SMS failed for %s: %s", mask(normalize_phone(phone_number)), exc)
             return DeliveryResult(success=False, error=str(exc)[:500])
 
 
@@ -111,19 +117,21 @@ class WhatsAppNotifier(Protocol):
 
 
 class ConsoleWhatsAppNotifier:
+    """Local-dev stand-in — see ConsoleSmsNotifier for why `message`/`document_url`
+    (a signed, directly-usable link) are never logged in full."""
+
     async def send_text(self, phone_number: str, message: str) -> DeliveryResult:
-        logger.info("WhatsApp to %s: %s", normalize_phone(phone_number), message)
+        logger.info("WhatsApp to %s (%d chars)", mask(normalize_phone(phone_number)), len(message))
         return DeliveryResult(success=True, provider_message_id="console")
 
     async def send_document(
         self, phone_number: str, document_url: str, filename: str, caption: str | None = None
     ) -> DeliveryResult:
         logger.info(
-            "WhatsApp document to %s: %s (%s) — %s",
-            normalize_phone(phone_number),
+            "WhatsApp document to %s: %s (caption: %s)",
+            mask(normalize_phone(phone_number)),
             filename,
-            document_url,
-            caption or "",
+            "yes" if caption else "no",
         )
         return DeliveryResult(success=True, provider_message_id="console")
 

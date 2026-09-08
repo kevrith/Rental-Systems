@@ -25,6 +25,7 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
+from app.core.crypto import mask
 from app.core.redis import redis_client
 from app.services.notifications import normalize_phone
 
@@ -110,7 +111,7 @@ async def initiate_stk_push(
 ) -> StkPushResult:
     if not is_configured():
         # Sandbox stub: deterministic ids so the callback can be simulated in tests.
-        logger.info("Daraja not configured — simulating STK push for %s", phone_number)
+        logger.info("Daraja not configured — simulating STK push for %s", mask(normalize_phone(phone_number)))
         return StkPushResult(
             checkout_request_id=f"ws_CO_SIM_{payment_id.hex[:16]}",
             merchant_request_id=f"SIM-{payment_id.hex[:12]}",
@@ -277,7 +278,9 @@ async def initiate_b2c_payment(
         raise MpesaError("A payout must be for a positive amount")
 
     if not is_b2c_configured():
-        logger.info("Daraja B2C not configured — simulating payout to %s", phone_number)
+        logger.info(
+            "Daraja B2C not configured — simulating payout to %s", mask(normalize_phone(phone_number))
+        )
         return B2CRequestResult(
             conversation_id=f"AG_SIM_{disbursement_id.hex[:16]}",
             originator_conversation_id=f"SIM-B2C-{disbursement_id.hex[:12]}",
