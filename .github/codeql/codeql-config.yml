@@ -1,0 +1,12 @@
+name: "RentFlow CodeQL config"
+
+queries:
+  - uses: security-and-quality
+
+paths-ignore:
+  # Alembic migration files all define the same four module-level
+  # `revision`/`down_revision`/`branch_labels`/`depends_on` variables, read by
+  # Alembic through module introspection rather than a Python import — every
+  # migration in the repo trips py/unused-global-variable for a pattern that
+  # isn't unused, it's just invisible to CodeQL's import-based usage tracking.
+  - backend/alembic/versions/**

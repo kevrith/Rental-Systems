@@ -23,7 +23,7 @@ from app.core.database import Base
 from app.models.base import TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
-    from app.models.user import User
+    from app.models.user import User  # lgtm[py/unsafe-cyclic-import]
 
 
 class OperatingMode(str, enum.Enum):

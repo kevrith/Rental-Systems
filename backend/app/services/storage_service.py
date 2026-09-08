@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from app.models.file import FileCategory
+    from app.models.file import FileCategory  # lgtm[py/unused-import]
 
 from fastapi import HTTPException, status
 

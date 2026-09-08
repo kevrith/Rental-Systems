@@ -19,8 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import crypto
 from app.core.config import settings
 from app.models.developer import WebhookDelivery, WebhookDeliveryStatus, WebhookEndpoint
+from app.tasks.async_utils import run_async
 from app.tasks.celery_app import celery_app
-from app.tasks.scheduled import run_async
 
 logger = logging.getLogger("rentflow.webhooks")
 

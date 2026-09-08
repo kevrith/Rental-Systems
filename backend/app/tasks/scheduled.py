@@ -6,15 +6,13 @@ to re-run: reminders record what they have already sent, and invoice generation
 is idempotent per billing period.
 """
 
-import asyncio
 import logging
-from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, TypeVar
+from typing import Any
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.billing import Invoice, InvoiceStatus, Payment, PaymentStatus
@@ -31,35 +29,15 @@ from app.models.user import User, UserRole
 from app.services import notification_service
 from app.services.pdf_service import format_kes
 from app.services.task_monitor_service import monitored
+from app.tasks.async_utils import run_async
 from app.tasks.celery_app import celery_app
 
 logger = logging.getLogger("rentflow.tasks")
-
-T = TypeVar("T")
 
 RENT_REMINDER_OFFSETS = [7, 3, 0]
 LEASE_EXPIRY_OFFSETS = [90, 60, 30, 14]
 TRIAL_REMINDER_OFFSETS = [7, 3, 1]
 LIVE_TENANCIES = [TenancyStatus.ACTIVE, TenancyStatus.EXPIRING_SOON, TenancyStatus.NOTICE_GIVEN]
-
-
-def run_async(coro_factory: Callable[[AsyncSession], Awaitable[T]]) -> T:
-    """Run one async unit of work against a fresh engine and session.
-
-    A per-task engine avoids sharing a connection pool across Celery's forked
-    workers, which is a classic source of 'connection already closed' errors.
-    """
-
-    async def _run() -> T:
-        engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True)
-        factory = async_sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
-        try:
-            async with factory() as session:
-                return await coro_factory(session)
-        finally:
-            await engine.dispose()
-
-    return asyncio.run(_run())
 
 
 async def _already_sent(

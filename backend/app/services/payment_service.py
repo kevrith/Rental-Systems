@@ -607,7 +607,10 @@ async def handle_callback(db: AsyncSession, body: dict) -> str:
     try:
         result = mpesa_service.parse_callback(body)
     except mpesa_service.MpesaError as exc:
-        return f"Ignored: {exc}"
+        # This endpoint is unauthenticated (Safaricom calls it) so the exception's
+        # own message never goes back in the response — only a fixed string does.
+        logger.warning("Ignored STK callback: %s", exc)
+        return "Ignored: invalid callback"
 
     if not await mpesa_service.claim_callback(result.checkout_request_id):
         return "Duplicate callback ignored"

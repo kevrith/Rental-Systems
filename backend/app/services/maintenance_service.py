@@ -43,7 +43,7 @@ from app.schemas.maintenance import (
     MaintenanceInfoRequest,
     MaintenanceReject,
 )
-from app.services import audit_service, notification_service, vendor_service, webhook_service
+from app.services import audit_service, notification_service, vendor_service
 
 ZERO = Decimal("0.00")
 
@@ -105,6 +105,11 @@ async def _transition(
         summary=f"{record.reference_code}: {summary}",
         request=request,
     )
+    # Imported lazily to break a cyclic import: webhook_service is called from
+    # several services like this one, and is itself called from the scheduler
+    # that runs some of them.
+    from app.services import webhook_service
+
     await webhook_service.dispatch(
         db,
         context.organization_id,

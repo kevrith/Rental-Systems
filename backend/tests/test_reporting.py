@@ -143,11 +143,18 @@ async def test_cross_tenant_isolation_on_definitions(owner: Actor, other_owner: 
     )
     definition_id = created.json()["id"]
 
+    # Each request is issued outside the assert: a call inside `assert (...).x`
+    # never runs under `python -O`, which strips asserts entirely — this test
+    # would then silently stop exercising the authorization check at all.
     patch_response = await other_owner.patch(f"{BASE}/definitions/{definition_id}", json={"name": "Hijacked"})
-    assert (await other_owner.get(f"{BASE}/definitions/{definition_id}")).status_code == 403
+    get_response = await other_owner.get(f"{BASE}/definitions/{definition_id}")
+    delete_response = await other_owner.delete(f"{BASE}/definitions/{definition_id}")
+    run_response = await other_owner.post(f"{BASE}/definitions/{definition_id}/run")
+
+    assert get_response.status_code == 403
     assert patch_response.status_code == 403
-    assert (await other_owner.delete(f"{BASE}/definitions/{definition_id}")).status_code == 403
-    assert (await other_owner.post(f"{BASE}/definitions/{definition_id}/run")).status_code == 403
+    assert delete_response.status_code == 403
+    assert run_response.status_code == 403
 
     other_listed = await other_owner.get(f"{BASE}/definitions")
     assert all(row["id"] != definition_id for row in other_listed.json())

@@ -37,7 +37,6 @@ from app.services import (
     notification_service,
     reference_service,
     tenant_pii,
-    webhook_service,
 )
 from app.services.notifications import normalize_phone
 
@@ -146,6 +145,12 @@ async def create_tenant(
     )
     await db.commit()
     await db.refresh(record)
+
+    # Imported lazily to break a cyclic import: webhook_service is called from
+    # several services like this one, and is itself called from the scheduler
+    # that runs some of them.
+    from app.services import webhook_service
+
     await webhook_service.dispatch(
         db,
         context.organization_id,

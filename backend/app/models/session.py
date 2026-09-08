@@ -12,7 +12,7 @@ from app.core.database import Base
 from app.models.base import OrgScopedMixin, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
-    from app.models.user import User
+    from app.models.user import User  # lgtm[py/unsafe-cyclic-import]
 
 
 class UserSession(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):

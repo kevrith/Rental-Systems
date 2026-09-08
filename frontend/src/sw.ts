@@ -58,6 +58,11 @@ self.addEventListener('activate', (event) => {
 })
 
 self.addEventListener('message', (event) => {
+  // A service worker only ever hears from clients it controls, which the
+  // browser restricts to this same origin — but the listener otherwise has
+  // no origin check of its own, so add one explicitly rather than relying on
+  // that platform guarantee.
+  if (event.origin !== self.location.origin) return
   if (event.data?.type === 'SKIP_WAITING') void self.skipWaiting()
 })
 

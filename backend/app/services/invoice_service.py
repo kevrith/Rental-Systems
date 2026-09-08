@@ -34,7 +34,6 @@ from app.services import (
     pdf_service,
     reference_service,
     service_charge_service,
-    webhook_service,
 )
 
 ZERO = Decimal("0.00")
@@ -205,6 +204,11 @@ async def generate_invoice_for_tenancy(
 
     if notify:
         await _notify_tenant(db, invoice, tenancy)
+
+    # Imported lazily to break a cyclic import: webhook_service is called from
+    # several services like this one, and is itself called from the scheduler
+    # that runs some of them.
+    from app.services import webhook_service
 
     await webhook_service.dispatch(
         db,

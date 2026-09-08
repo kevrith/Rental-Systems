@@ -23,7 +23,7 @@ from app.core.database import Base
 from app.models.base import OrgScopedMixin, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
-    from app.models.tenant import Tenancy
+    from app.models.tenant import Tenancy  # lgtm[py/unsafe-cyclic-import]
 
 ZERO = Decimal("0.00")
 

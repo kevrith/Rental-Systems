@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -54,6 +55,8 @@ from app.services import (
     tenant_service,
 )
 from app.services.pdf_service import format_kes
+
+logger = logging.getLogger("rentflow.billing")
 
 invoices_router = APIRouter()
 payments_router = APIRouter()
@@ -523,7 +526,10 @@ async def mpesa_b2c_result(request: Request, db: AsyncSession = Depends(get_db))
     try:
         result = mpesa_service.parse_b2c_result(body)
     except mpesa_service.MpesaError as exc:
-        return {"ResultCode": "0", "ResultDesc": "Accepted", "detail": str(exc)}
+        # Unauthenticated endpoint — never echo the exception itself back in the
+        # response, only a fixed string.
+        logger.warning("Ignored B2C result callback: %s", exc)
+        return {"ResultCode": "0", "ResultDesc": "Accepted", "detail": "Ignored: invalid callback"}
 
     if not await mpesa_service.claim_b2c_result(result.conversation_id):
         return {"ResultCode": "0", "ResultDesc": "Accepted", "detail": "duplicate"}

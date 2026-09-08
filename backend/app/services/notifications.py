@@ -16,6 +16,7 @@ import httpx
 
 from app.core.config import settings
 from app.core.crypto import mask
+from app.core.logging import sanitize_for_log
 
 logger = logging.getLogger("rentflow.notifications")
 
@@ -46,6 +47,7 @@ def normalize_phone(phone_number: str) -> str:
 
 
 class SmsNotifier(Protocol):
+    # lgtm[py/ineffectual-statement]
     async def send(self, phone_number: str, message: str) -> DeliveryResult: ...
 
 
@@ -109,8 +111,10 @@ def get_sms_notifier() -> SmsNotifier:
 
 
 class WhatsAppNotifier(Protocol):
+    # lgtm[py/ineffectual-statement]
     async def send_text(self, phone_number: str, message: str) -> DeliveryResult: ...
 
+    # lgtm[py/ineffectual-statement]
     async def send_document(
         self, phone_number: str, document_url: str, filename: str, caption: str | None = None
     ) -> DeliveryResult: ...
@@ -197,6 +201,7 @@ def get_whatsapp_notifier() -> WhatsAppNotifier:
 
 
 class PushNotifier(Protocol):
+    # lgtm[py/ineffectual-statement]
     async def send(self, subscription_info: dict[str, Any], payload: dict[str, Any]) -> DeliveryResult: ...
 
 
@@ -241,12 +246,13 @@ def get_push_notifier() -> PushNotifier:
 
 
 class EmailNotifier(Protocol):
+    # lgtm[py/ineffectual-statement]
     async def send(self, to: str, subject: str, html: str) -> DeliveryResult: ...
 
 
 class ConsoleEmailNotifier:
     async def send(self, to: str, subject: str, html: str) -> DeliveryResult:
-        logger.info("Email to %s | %s", to, subject)
+        logger.info("Email to %s | %s", sanitize_for_log(to), sanitize_for_log(subject))
         return DeliveryResult(success=True, provider_message_id="console")
 
 

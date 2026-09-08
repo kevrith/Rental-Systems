@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OrgContext, assert_in_org
+from app.core.logging import sanitize_for_log
 from app.models.communication import CommunicationTemplate, TemplateChannel
 from app.models.notification import NotificationChannel, NotificationType
 from app.services import audit_service
@@ -91,7 +92,7 @@ def render(template_body: str, variables: dict[str, object]) -> str | None:
     """
     missing = [name for name in variables_in(template_body) if name not in variables]
     if missing:
-        logger.warning("Template not used — no value supplied for %s", ", ".join(missing))
+        logger.warning("Template not used — no value supplied for %s", sanitize_for_log(", ".join(missing)))
         return None
     return PLACEHOLDER.sub(lambda match: str(variables[match.group(1)]), template_body)
 

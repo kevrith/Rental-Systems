@@ -11,9 +11,9 @@ from app.core.database import Base
 from app.models.base import TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
-    from app.models.organization import Organization
-    from app.models.property import CaretakerAssignment
-    from app.models.session import UserSession
+    from app.models.organization import Organization  # lgtm[py/unsafe-cyclic-import]
+    from app.models.property import CaretakerAssignment  # lgtm[py/unsafe-cyclic-import]
+    from app.models.session import UserSession  # lgtm[py/unsafe-cyclic-import]
 
 
 class UserRole(str, enum.Enum):
