@@ -1,4 +1,10 @@
-fastapi==0.115.6
+fastapi==0.141.1
+# Pinned explicitly, not just inherited from fastapi's `starlette>=0.46.0`:
+# 1.x is the first line carrying the fixes for CVE-2026-48818 (SSRF and NTLM
+# credential theft through UNC paths in StaticFiles), CVE-2026-54283
+# (request.form() size limits silently ignored) and CVE-2025-62727 (Range
+# header DoS). Dropping below it reopens all three.
+starlette==1.6.0
 uvicorn[standard]==0.34.0
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.30.0
@@ -7,14 +13,22 @@ alembic==1.14.0
 pydantic==2.10.4
 pydantic-settings==2.7.0
 email-validator==2.2.0
-python-jose[cryptography]==3.4.0
+# 3.5.0 is the first release to allow pyasn1>=0.5.0; 3.4.0 capped it at
+# <0.5.0, which held pyasn1 on a line with four unfixed DoS advisories.
+python-jose[cryptography]==3.5.0
+# Transitive (python-jose -> rsa -> pyasn1), pinned here because the version
+# a resolver picks on its own is the vulnerable one: CVE-2026-30922,
+# CVE-2026-59884, CVE-2026-59885 and CVE-2026-59886 are all fixed by 0.6.4.
+pyasn1==0.6.4
 bcrypt==5.0.0
 python-multipart==0.0.32
 celery==5.4.0
 redis==5.2.1
 httpx==0.28.1
 jinja2==3.1.6
-weasyprint==63.1
+# 68.0 fixes CVE-2025-68616, an SSRF reachable from HTML handed to the
+# renderer; 70.0 is the current release on that line.
+weasyprint==70.0
 # Pure-Python QR codes for the eTIMS receipt stamp (US-053).
 segno==1.6.1
 # Excel import/export for bulk onboarding and data migration (US-072, US-076, US-077).
@@ -32,14 +46,22 @@ webauthn==2.6.0
 # Error tracking (Sprint 26). Inert without SENTRY_DSN.
 sentry-sdk[fastapi,celery,sqlalchemy]==2.20.0
 # Distributed tracing (Sprint 26). Inert without OTEL_EXPORTER_OTLP_ENDPOINT.
+# These move in lockstep: opentelemetry-sdk X.Y.Z pins opentelemetry-api to the
+# exact same version, and every instrumentation package pins
+# opentelemetry-instrumentation and -semantic-conventions to the exact same
+# 0.(Y+21)bZ beta. Bumping one on its own makes the file unresolvable, which is
+# what took out pip-audit and the backend image build; .github/dependabot.yml
+# groups them so Dependabot has to propose the whole train at once.
 opentelemetry-api==1.44.0
-opentelemetry-sdk==1.33.1
-opentelemetry-exporter-otlp-proto-http==1.33.1
+opentelemetry-sdk==1.44.0
+opentelemetry-exporter-otlp-proto-http==1.44.0
 opentelemetry-instrumentation==0.65b0
-opentelemetry-instrumentation-fastapi==0.54b1
-opentelemetry-instrumentation-sqlalchemy==0.54b1
+opentelemetry-instrumentation-fastapi==0.65b0
+opentelemetry-instrumentation-sqlalchemy==0.65b0
 opentelemetry-instrumentation-celery==0.65b0
 opentelemetry-instrumentation-httpx==0.65b0
 # Prometheus metrics at /metrics (Sprint 26).
 prometheus-client==0.21.1
-prometheus-fastapi-instrumentator==7.1.0
+# 8.x is the line that accepts starlette 1.x; every 7.x release caps at
+# starlette<1.0.0 and would hold the pin above on the vulnerable line.
+prometheus-fastapi-instrumentator==8.1.0

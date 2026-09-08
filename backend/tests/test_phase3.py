@@ -15,10 +15,8 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
-from fastapi.routing import APIRoute
 
 from app.core.rls import ORG_SCOPED_TABLES, PHASE_3_ORG_SCOPED_TABLES
-from app.main import app
 from app.models.base import Base
 from tests.conftest import Actor
 from tests.test_portfolio import make_property, make_unit
@@ -92,13 +90,11 @@ def test_every_phase_3_scheduled_task_is_actually_scheduled():
 def test_the_public_surface_is_only_what_phase_3_intended():
     """Screening and vacancy marketing deliberately expose four unauthenticated
     prefixes. Anything else appearing there is an accident."""
-    from tests.test_regression import PUBLIC_PREFIXES, _is_public
+    from tests.test_regression import PUBLIC_PREFIXES, _is_public, api_route_paths
 
     phase_3_public = {
         path
-        for route in app.routes
-        if isinstance(route, APIRoute)
-        for path in [route.path]
+        for path in api_route_paths()
         if _is_public(path)
         and any(
             path.startswith(prefix)

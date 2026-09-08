@@ -5,6 +5,14 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    # OpenTelemetry ships api/sdk/exporter and the instrumentation betas as one
+    # release train that cross-pins on exact versions, so a per-package PR
+    # produces a requirements.txt no resolver can satisfy. Grouping them means
+    # Dependabot has to open one PR for the whole train or none at all.
+    groups:
+      opentelemetry:
+        patterns:
+          - "opentelemetry-*"
 
   - package-ecosystem: npm
     directory: /frontend
