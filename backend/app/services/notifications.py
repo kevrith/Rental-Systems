@@ -96,7 +96,7 @@ class AfricasTalkingSmsNotifier:
                 response.raise_for_status()
                 recipients = response.json().get("SMSMessageData", {}).get("Recipients", [])
                 if recipients and recipients[0].get("status") == "Success":
-                    logger.info("AT SMS sent to %s: messageId=%s", mask(normalize_phone(phone_number)), recipients[0].get("messageId"))
+                    logger.warning("AT SMS sent to %s: messageId=%s", mask(normalize_phone(phone_number)), recipients[0].get("messageId"))
                     return DeliveryResult(success=True, provider_message_id=recipients[0].get("messageId"))
                 reason = recipients[0].get("status") if recipients else "No recipients accepted"
                 logger.warning("AT SMS rejected for %s: %s", mask(normalize_phone(phone_number)), reason)
@@ -109,9 +109,9 @@ class AfricasTalkingSmsNotifier:
 @lru_cache
 def get_sms_notifier() -> SmsNotifier:
     if settings.AFRICAS_TALKING_USERNAME and settings.AFRICAS_TALKING_API_KEY:
-        logger.info("SMS notifier: AfricasTalking (username=%s)", settings.AFRICAS_TALKING_USERNAME)
+        logger.warning("SMS notifier: AfricasTalking (username=%s)", settings.AFRICAS_TALKING_USERNAME)
         return AfricasTalkingSmsNotifier()
-    logger.info("SMS notifier: Console (AT credentials not set)")
+    logger.warning("SMS notifier: Console (AT credentials not set)")
     return ConsoleSmsNotifier()
 
 
