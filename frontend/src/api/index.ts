@@ -514,6 +514,14 @@ export const publicListingApi = {
     post<{ status: string; message: string }>(`/listings/${slug}/inquire`, body),
 }
 
+/** The help centre, readable without an account. Same rows `customerSuccessApi`
+ *  serves to the in-app HelpPanel — the knowledge base is platform-wide, so
+ *  there is no per-organisation variant to keep in step. */
+export const publicHelpApi = {
+  search: (q?: string) => get<HelpArticle[]>('/help/articles', q ? { q } : undefined),
+  article: (slug: string) => get<HelpArticle>(`/help/articles/${slug}`),
+}
+
 export const serviceChargesApi = {
   forProperty: (propertyId: string) =>
     get<ServiceChargeScheme | null>(`/service-charges/property/${propertyId}`),

@@ -95,6 +95,33 @@ async def get_help_article(
     return HelpArticleRead.model_validate(row)
 
 
+# The same knowledge base with no login in front of it, mounted at `/help`.
+# Two readers need it: someone evaluating RentFlow before there is an account
+# to log into, and a caretaker or tenant who cannot get past the sign-in screen
+# and needs to read why. There is nothing to scope — `help_articles` carries no
+# `organization_id` and is deliberately outside the RLS policy set, so every
+# organisation was already reading the identical rows.
+public_router = APIRouter()
+
+
+@public_router.get("/articles", response_model=list[HelpArticleRead])
+async def public_search_help_articles(
+    q: str | None = Query(default=None, max_length=200),
+    video_only: bool = Query(default=False, description="Only articles with a tutorial video"),
+    db: AsyncSession = Depends(get_db),
+) -> list[HelpArticleRead]:
+    """Published articles only — `help_service.search` filters on `is_published`,
+    so an unfinished draft in the staff CMS never surfaces here."""
+    rows = await help_service.search(db, q, video_only=video_only)
+    return [HelpArticleRead.model_validate(row) for row in rows]
+
+
+@public_router.get("/articles/{slug}", response_model=HelpArticleRead)
+async def public_get_help_article(slug: str, db: AsyncSession = Depends(get_db)) -> HelpArticleRead:
+    row = await help_service.get_by_slug(db, slug)
+    return HelpArticleRead.model_validate(row)
+
+
 # -------------------------------------------------------------------- support
 
 
