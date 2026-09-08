@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OrgContext, assert_in_org
+from app.core.logging import sanitize_for_log
 from app.models.communication import CommunicationTemplate, TemplateChannel
 from app.models.notification import NotificationChannel, NotificationType
 from app.services import audit_service
@@ -91,7 +92,7 @@ def render(template_body: str, variables: dict[str, object]) -> str | None:
     """
     missing = [name for name in variables_in(template_body) if name not in variables]
     if missing:
-        logger.warning("Template not used — no value supplied for %s", ", ".join(missing))
+        logger.warning("Template not used — no value supplied for %s", sanitize_for_log(", ".join(missing)))
         return None
     return PLACEHOLDER.sub(lambda match: str(variables[match.group(1)]), template_body)
 
@@ -164,8 +165,13 @@ async def apply(
 
         template.last_used_at = datetime.now(UTC)
         return rendered_title, rendered_body
-    except Exception:  # noqa: BLE001 — a template bug must never block a message
-        logger.exception("Communication template lookup failed for %s", notification_type)
+    except Exception as exc:  # noqa: BLE001 — a template bug must never block a message
+        # Logged without the exception's own message/traceback: it was raised while
+        # handling `variables` (tenant name, balance, amounts — caller-supplied PII),
+        # and a built-in exception's message frequently echoes the offending value
+        # verbatim (e.g. a bad KeyError/TypeError), which would otherwise land that
+        # value in clear text in the log.
+        logger.error("Communication template lookup failed for %s: %s", notification_type, type(exc).__name__)
         return title, body
 
 

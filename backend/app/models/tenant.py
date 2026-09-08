@@ -23,8 +23,8 @@ from app.core.database import Base
 from app.models.base import ArchivableMixin, OrgScopedMixin, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
-    from app.models.billing import Invoice, Payment
-    from app.models.property import Unit
+    from app.models.billing import Invoice, Payment  # lgtm[py/unsafe-cyclic-import]
+    from app.models.property import Unit  # lgtm[py/unsafe-cyclic-import]
 
 
 class TenancyStatus(str, enum.Enum):

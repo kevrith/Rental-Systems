@@ -92,6 +92,15 @@ def _current_trace_ids() -> dict[str, str] | None:
     }
 
 
+def sanitize_for_log(value: str) -> str:
+    """Strip CR/LF so untrusted text can't forge extra lines in the
+    human-readable log format. `JsonFormatter` already escapes these (each
+    entry is one `json.dumps`-encoded line), but this keeps interpolated
+    values safe under the plain formatter too, without depending on which one
+    is active."""
+    return value.replace("\r", " ").replace("\n", " ")
+
+
 def configure_logging(debug: bool, log_format: str = "console") -> None:
     handler = logging.StreamHandler()
     handler.addFilter(RequestIdFilter())

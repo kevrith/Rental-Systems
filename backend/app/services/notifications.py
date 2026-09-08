@@ -15,6 +15,8 @@ from typing import Any, Protocol
 import httpx
 
 from app.core.config import settings
+from app.core.crypto import mask
+from app.core.logging import sanitize_for_log
 
 logger = logging.getLogger("rentflow.notifications")
 
@@ -45,14 +47,20 @@ def normalize_phone(phone_number: str) -> str:
 
 
 class SmsNotifier(Protocol):
+    # lgtm[py/ineffectual-statement]
     async def send(self, phone_number: str, message: str) -> DeliveryResult: ...
 
 
 class ConsoleSmsNotifier:
-    """Local-dev stand-in that logs instead of sending a real SMS."""
+    """Local-dev stand-in that logs instead of sending a real SMS.
+
+    `message` is never logged in full — it routinely carries a login or phone
+    verification OTP (see auth_service), and a code sitting in clear text in a
+    log line defeats the second factor for anyone who can read logs.
+    """
 
     async def send(self, phone_number: str, message: str) -> DeliveryResult:
-        logger.info("SMS to %s: %s", normalize_phone(phone_number), message)
+        logger.info("SMS to %s (%d chars)", mask(normalize_phone(phone_number)), len(message))
         return DeliveryResult(success=True, provider_message_id="console")
 
 
@@ -88,7 +96,7 @@ class AfricasTalkingSmsNotifier:
                 reason = recipients[0].get("status") if recipients else "No recipients accepted"
                 return DeliveryResult(success=False, error=str(reason))
         except httpx.HTTPError as exc:
-            logger.warning("Africa's Talking SMS failed for %s: %s", phone_number, exc)
+            logger.warning("Africa's Talking SMS failed for %s: %s", mask(normalize_phone(phone_number)), exc)
             return DeliveryResult(success=False, error=str(exc)[:500])
 
 
@@ -103,27 +111,31 @@ def get_sms_notifier() -> SmsNotifier:
 
 
 class WhatsAppNotifier(Protocol):
+    # lgtm[py/ineffectual-statement]
     async def send_text(self, phone_number: str, message: str) -> DeliveryResult: ...
 
+    # lgtm[py/ineffectual-statement]
     async def send_document(
         self, phone_number: str, document_url: str, filename: str, caption: str | None = None
     ) -> DeliveryResult: ...
 
 
 class ConsoleWhatsAppNotifier:
+    """Local-dev stand-in — see ConsoleSmsNotifier for why `message`/`document_url`
+    (a signed, directly-usable link) are never logged in full."""
+
     async def send_text(self, phone_number: str, message: str) -> DeliveryResult:
-        logger.info("WhatsApp to %s: %s", normalize_phone(phone_number), message)
+        logger.info("WhatsApp to %s (%d chars)", mask(normalize_phone(phone_number)), len(message))
         return DeliveryResult(success=True, provider_message_id="console")
 
     async def send_document(
         self, phone_number: str, document_url: str, filename: str, caption: str | None = None
     ) -> DeliveryResult:
         logger.info(
-            "WhatsApp document to %s: %s (%s) — %s",
-            normalize_phone(phone_number),
+            "WhatsApp document to %s: %s (caption: %s)",
+            mask(normalize_phone(phone_number)),
             filename,
-            document_url,
-            caption or "",
+            "yes" if caption else "no",
         )
         return DeliveryResult(success=True, provider_message_id="console")
 
@@ -189,6 +201,7 @@ def get_whatsapp_notifier() -> WhatsAppNotifier:
 
 
 class PushNotifier(Protocol):
+    # lgtm[py/ineffectual-statement]
     async def send(self, subscription_info: dict[str, Any], payload: dict[str, Any]) -> DeliveryResult: ...
 
 
@@ -233,12 +246,13 @@ def get_push_notifier() -> PushNotifier:
 
 
 class EmailNotifier(Protocol):
+    # lgtm[py/ineffectual-statement]
     async def send(self, to: str, subject: str, html: str) -> DeliveryResult: ...
 
 
 class ConsoleEmailNotifier:
     async def send(self, to: str, subject: str, html: str) -> DeliveryResult:
-        logger.info("Email to %s | %s", to, subject)
+        logger.info("Email to %s | %s", sanitize_for_log(to), sanitize_for_log(subject))
         return DeliveryResult(success=True, provider_message_id="console")
 
 

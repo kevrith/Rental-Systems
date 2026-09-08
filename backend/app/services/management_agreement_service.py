@@ -53,7 +53,6 @@ from app.services import (
     notification_service,
     pdf_service,
     reference_service,
-    signature_service,
     storage_service,
 )
 
@@ -332,6 +331,11 @@ async def send_for_signature(
     is not in force until both have — which is what `activate_if_fully_signed`
     enforces on the way back in.
     """
+    # Imported lazily to break a cyclic import: signature_service is called
+    # from several services like this one, and itself calls webhook_service,
+    # which is in turn called from the scheduler that runs some of them.
+    from app.services import signature_service
+
     agreement = await get(db, context, agreement_id)
     if agreement.status not in (
         ManagementAgreementStatus.DRAFT,

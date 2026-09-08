@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from app.models.file import FileCategory
+    from app.models.file import FileCategory  # lgtm[py/unused-import]
 
 from fastapi import HTTPException, status
 
@@ -78,11 +78,20 @@ class LocalStorageBackend:
         self.root = root
 
     def _path(self, storage_key: str) -> Path:
-        # storage_key is server-generated, but resolve anyway so a crafted key can
-        # never escape the storage root.
-        target = (self.root / storage_key).resolve()
-        if not str(target).startswith(str(self.root.resolve())):
+        # storage_key reaches here straight from the URL path (local_put/local_get),
+        # so treat it as hostile: reject traversal/absolute segments outright, then
+        # use relative_to (not startswith, which a sibling directory like
+        # "storage-evil" can defeat) to confirm the resolved path is still inside root.
+        if not storage_key or storage_key.startswith("/") or ".." in Path(storage_key).parts:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid storage key")
+        root = self.root.resolve()
+        target = (root / storage_key).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid storage key"
+            ) from None
         return target
 
     def presign_upload(self, storage_key: str, content_type: str) -> PresignedUpload:

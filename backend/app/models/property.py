@@ -25,9 +25,9 @@ from app.models.base import ArchivableMixin, OrgScopedMixin, TimestampMixin, UUI
 from app.models.service_charge import UseClass
 
 if TYPE_CHECKING:
-    from app.models.agency import OwnerProfile
-    from app.models.tenant import Tenancy
-    from app.models.user import User
+    from app.models.agency import OwnerProfile  # lgtm[py/unsafe-cyclic-import]
+    from app.models.tenant import Tenancy  # lgtm[py/unsafe-cyclic-import]
+    from app.models.user import User  # lgtm[py/unsafe-cyclic-import]
 
 
 class PropertyType(str, enum.Enum):

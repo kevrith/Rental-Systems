@@ -20,7 +20,7 @@ from app.models.file import FileCategory, StoredFile
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.signature import DigitalSignature, SignatureStatus
 from app.models.tenant import Tenancy
-from app.services import audit_service, notification_service, otp_service, webhook_service
+from app.services import audit_service, notification_service, otp_service
 from app.services.notifications import get_sms_notifier
 from app.services.storage_service import store_bytes
 
@@ -213,6 +213,12 @@ async def verify_otp_and_sign(
 
     await db.commit()
     await db.refresh(sig)
+
+    # Imported lazily to break a cyclic import: webhook_service is called from
+    # several services like this one, and is itself called from the scheduler
+    # that runs some of them.
+    from app.services import webhook_service
+
     await webhook_service.dispatch(
         db,
         sig.organization_id,

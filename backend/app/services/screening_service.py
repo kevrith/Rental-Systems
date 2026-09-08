@@ -34,7 +34,7 @@ from app.models.file import FileCategory
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.organization import Organization
 from app.models.property import Property, Unit
-from app.services import file_service, notification_service, pdf_service, signature_service
+from app.services import file_service, notification_service, pdf_service
 
 logger = logging.getLogger(__name__)
 
@@ -302,6 +302,11 @@ async def send_guarantee_for_signing(db: AsyncSession, guarantor: Guarantor) -> 
     Only offered once the guarantor has acknowledged: asking someone to sign a
     deed before they have said yes gets the order of consent backwards.
     """
+    # Imported lazily to break a cyclic import: signature_service itself calls
+    # webhook_service, which is in turn called from the scheduler that runs
+    # this module's own sweep_stale_references.
+    from app.services import signature_service
+
     if guarantor.status != GuarantorStatus.ACKNOWLEDGED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

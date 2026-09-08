@@ -27,7 +27,7 @@ class OrgScopedMixin:
     """
 
     @declared_attr
-    def organization_id(cls) -> Mapped[uuid.UUID]:  # noqa: N805
+    def organization_id(cls) -> Mapped[uuid.UUID]:  # noqa: N805  # lgtm[py/not-named-self]
         return mapped_column(
             UUID(as_uuid=True),
             ForeignKey("organizations.id", ondelete="CASCADE"),

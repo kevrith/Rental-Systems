@@ -29,7 +29,7 @@ from app.core.database import Base
 from app.models.base import OrgScopedMixin, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
-    from app.models.property import Property
+    from app.models.property import Property  # lgtm[py/unsafe-cyclic-import]
 
 ZERO = Decimal("0.00")
 

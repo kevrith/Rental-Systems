@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify'
 import { Bold, Heading2, Italic, List, ListOrdered, Redo2, Undo2 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
@@ -37,6 +38,13 @@ const COMMANDS: Command[] = [
  * The DOM is only written from `value` when the two have actually diverged.
  * Assigning `innerHTML` on every render would move the caret to the start of the
  * document on each keystroke.
+ *
+ * `value` is run through DOMPurify before that assignment: the raw-HTML tab
+ * mentioned above lets a landlord type arbitrary markup directly, and this
+ * component reinterprets whatever lands in `value` as HTML the moment it's
+ * shown — an `<img onerror>` typed there (or pasted from somewhere untrusted)
+ * would otherwise execute in the editor immediately, not just in whatever
+ * eventually renders the saved lease.
  */
 export function RichTextEditor({
   value,
@@ -54,7 +62,9 @@ export function RichTextEditor({
 
   useEffect(() => {
     const node = editorRef.current
-    if (node && node.innerHTML !== value) node.innerHTML = value
+    if (!node) return
+    const sanitized = DOMPurify.sanitize(value)
+    if (node.innerHTML !== sanitized) node.innerHTML = sanitized
   }, [value])
 
   useEffect(() => {

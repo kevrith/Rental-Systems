@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import type { APIRequestContext, Page } from '@playwright/test'
 
 /**
@@ -40,7 +42,7 @@ interface Registered {
  * `register_owner` as a fixture rather than re-testing it in every file.
  */
 export async function registerOwner(request: APIRequestContext): Promise<Registered> {
-  const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`
+  const suffix = `${Date.now()}${randomUUID().slice(0, 6)}`
   const email = uniqueEmail('owner')
   const password = `E2e-Pass-${suffix}!`
 

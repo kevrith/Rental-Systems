@@ -42,6 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OrgContext
 from app.core.config import settings
+from app.core.logging import sanitize_for_log
 from app.core.redis import redis_client
 from app.models.file import StoredFile, UploadStatus
 from app.models.operations import MeterType
@@ -211,7 +212,7 @@ async def read_meter_photo(
             output_config={"format": {"type": "json_schema", "schema": READING_SCHEMA}},
         )
     except (anthropic.APIStatusError, anthropic.APIConnectionError, anthropic.RateLimitError) as exc:
-        logger.warning("Meter OCR call failed for photo %s: %s", photo_file_id, exc)
+        logger.warning("Meter OCR call failed for photo %s: %s", photo_file_id, sanitize_for_log(str(exc)))
         return _no_suggestion("The meter reader is unavailable right now. Type the reading in.")
 
     if response.stop_reason in ("refusal", "max_tokens"):
@@ -221,7 +222,9 @@ async def read_meter_photo(
         text = next(block.text for block in response.content if block.type == "text")
         data = json.loads(text)
     except (StopIteration, json.JSONDecodeError):
-        logger.warning("Meter OCR returned an unreadable response for photo %s", photo_file_id)
+        logger.warning(
+            "Meter OCR returned an unreadable response for photo %s", sanitize_for_log(str(photo_file_id))
+        )
         return _no_suggestion("The meter could not be read from that photo. Type the reading in.")
 
     reading = _parse_reading(data.get("reading"))

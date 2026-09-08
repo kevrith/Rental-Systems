@@ -79,7 +79,9 @@ services:
     command: celery -A app.tasks.celery_app beat --loglevel=info
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      target: dev
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
     volumes:

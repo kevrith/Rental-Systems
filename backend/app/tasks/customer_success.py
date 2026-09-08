@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.organization import Organization
 from app.services.task_monitor_service import monitored
+from app.tasks.async_utils import run_async
 from app.tasks.celery_app import celery_app
-from app.tasks.scheduled import run_async
 
 logger = logging.getLogger("rentflow.tasks")
 

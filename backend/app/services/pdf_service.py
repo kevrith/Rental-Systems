@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2.sandbox import SandboxedEnvironment
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 
@@ -64,15 +65,18 @@ def render_string_to_pdf(html: str) -> bytes:
 
 
 @lru_cache
-def _string_environment() -> Environment:
+def _string_environment() -> SandboxedEnvironment:
     """Separate environment for landlord-authored template bodies.
 
-    Autoescape is forced on here. The template *source* is the landlord's own
-    markup and passes through untouched; only interpolated values — tenant names,
+    Sandboxed because `body` is untrusted template *source*, not just untrusted
+    data — a landlord account (or one compromised via XSS/leaked creds) could
+    otherwise use Jinja2 template syntax itself to reach arbitrary Python
+    objects (e.g. `{{ ''.__class__.__mro__[1].__subclasses__() }}`) and achieve
+    RCE. Autoescape is forced on here too: interpolated values — tenant names,
     addresses and other captured data — get escaped, so a tenant cannot inject
     markup into a lease by way of their own name.
     """
-    env = Environment(autoescape=True, trim_blocks=True, lstrip_blocks=True)
+    env = SandboxedEnvironment(autoescape=True, trim_blocks=True, lstrip_blocks=True)
     env.filters["kes"] = format_kes
     env.filters["longdate"] = format_long_date
     return env
