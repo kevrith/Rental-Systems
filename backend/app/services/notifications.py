@@ -67,7 +67,11 @@ class ConsoleSmsNotifier:
 class AfricasTalkingSmsNotifier:
     """Africa's Talking REST API. Used whenever credentials are configured."""
 
-    BASE_URL = "https://api.africastalking.com/version1/messaging"
+    @property
+    def base_url(self) -> str:
+        if (settings.AFRICAS_TALKING_USERNAME or "").lower() == "sandbox":
+            return "https://api.sandbox.africastalking.com/version1/messaging"
+        return "https://api.africastalking.com/version1/messaging"
 
     async def send(self, phone_number: str, message: str) -> DeliveryResult:
         payload: dict[str, str] = {
@@ -81,7 +85,7 @@ class AfricasTalkingSmsNotifier:
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 response = await client.post(
-                    self.BASE_URL,
+                    self.base_url,
                     data=payload,
                     headers={
                         "apiKey": settings.AFRICAS_TALKING_API_KEY or "",
