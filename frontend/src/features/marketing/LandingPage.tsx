@@ -133,7 +133,7 @@ function MarketingNav() {
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/85 backdrop-blur dark:border-slate-800 dark:bg-slate-950/85">
       <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
         <Link to="/" aria-label="RentFlow Kenya home">
-          <Logo />
+          <Logo compact />
         </Link>
 
         <nav className="ml-6 hidden items-center gap-1 lg:flex">

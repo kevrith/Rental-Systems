@@ -74,6 +74,13 @@ body,
   height: 100%;
 }
 
+/* Belt-and-suspenders: no single element should ever be able to push the
+   viewport wider than the screen and force horizontal scroll on phones. */
+html,
+body {
+  overflow-x: hidden;
+}
+
 /* In-page anchors (the landing page nav) glide rather than jump. */
 @media (prefers-reduced-motion: no-preference) {
   html {
