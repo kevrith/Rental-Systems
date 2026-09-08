@@ -32,7 +32,7 @@ webauthn==2.6.0
 # Error tracking (Sprint 26). Inert without SENTRY_DSN.
 sentry-sdk[fastapi,celery,sqlalchemy]==2.20.0
 # Distributed tracing (Sprint 26). Inert without OTEL_EXPORTER_OTLP_ENDPOINT.
-opentelemetry-api==1.33.1
+opentelemetry-api==1.44.0
 opentelemetry-sdk==1.33.1
 opentelemetry-exporter-otlp-proto-http==1.33.1
 opentelemetry-instrumentation==0.54b1
