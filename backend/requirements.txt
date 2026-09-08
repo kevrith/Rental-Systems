@@ -61,7 +61,7 @@ opentelemetry-instrumentation-sqlalchemy==0.65b0
 opentelemetry-instrumentation-celery==0.65b0
 opentelemetry-instrumentation-httpx==0.65b0
 # Prometheus metrics at /metrics (Sprint 26).
-prometheus-client==0.21.1
+prometheus-client==0.26.0
 # 8.x is the line that accepts starlette 1.x; every 7.x release caps at
 # starlette<1.0.0 and would hold the pin above on the vulnerable line.
 prometheus-fastapi-instrumentator==8.1.0
