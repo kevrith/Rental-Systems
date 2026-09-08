@@ -12,6 +12,13 @@ receipts, and a self-service portal for every party.
 - [`masterplan.md`](masterplan.md) — product blueprint: modes, personas, 26 modules, pricing
 - [`sprint-plan.md`](sprint-plan.md) — 12-month engineering roadmap, sprint by sprint
 - [`docs/data-model.md`](docs/data-model.md) — entities, tenancy scoping and RLS policies
+- [`docs/deployment-render-vercel-supabase.md`](docs/deployment-render-vercel-supabase.md) — going live: Vercel, Render and Supabase, step by step
+- [`docs/deployment-domains.md`](docs/deployment-domains.md) — subdomains, DNS and which host serves what
+
+User-facing documentation is not in this repo as markdown — it is the help
+centre, served from the `help_articles` table and readable without an account
+at `/help`. The starter set is seeded by the `b1c2d3e4f5a6` migration; RentFlow
+staff edit and add to it from `/internal/content` in the running app.
 
 ---
 
@@ -199,9 +206,12 @@ schedule.
 | **3** — Full platform | Maintenance and vendors (done) · screening and KYC, service charges, vacancy marketing, compliance calendar, vehicle and equipment rentals | In progress |
 | **4** — Intelligence | Public API and webhooks, AI features, partner integrations | Planned |
 
-Deployment infrastructure (DigitalOcean, Nginx and TLS, Cloudflare R2, Sentry,
-automated backups) and live Safaricom Daraja credentials are pending — the code
-for each is written and falls back to local behaviour until the keys exist.
+Hosting is Vercel (frontend), Render (API, free plan) and Supabase (Postgres),
+described in [`docs/deployment-render-vercel-supabase.md`](docs/deployment-render-vercel-supabase.md)
+and declared in [`render.yaml`](render.yaml) and [`frontend/vercel.json`](frontend/vercel.json).
+Cloudflare R2, Sentry and live Safaricom Daraja credentials are pending — the
+code for each is written and falls back to local behaviour until the keys
+exist.
 
 ---
 

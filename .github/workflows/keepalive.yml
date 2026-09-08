@@ -1,0 +1,45 @@
+# Keeps the free Render service awake.
+#
+# A free Render web service sleeps after 15 minutes without a request. A
+# sleeping service runs no Celery beat, so rent invoices would not be raised on
+# the billing day and no reminder would go out — the schedule would simply
+# stop, quietly, and the first sign would be a month with no invoices.
+#
+# GitHub's scheduled runners are best-effort and can be delayed by several
+# minutes under load, which is why this asks for every 10 minutes rather than
+# every 14: the margin absorbs the drift.
+#
+# Delete this workflow once rentflow-api is on a paid instance type. Paid
+# services do not sleep and the ping stops earning its keep.
+name: Keep Render awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+# A backlog of pings is worth nothing — only the most recent one matters.
+concurrency:
+  group: render-keepalive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the health endpoint
+        env:
+          # Repository variable (Settings > Secrets and variables > Actions >
+          # Variables), e.g. https://api.kastra.co.ke — not a secret, the URL
+          # is public anyway.
+          API_URL: ${{ vars.RENDER_API_URL }}
+        run: |
+          if [ -z "$API_URL" ]; then
+            echo "RENDER_API_URL is not set; nothing to ping."
+            exit 1
+          fi
+          # --max-time 90 because a cold start takes ~50s and the whole point
+          # of this request is to be the one that pays that cost.
+          curl --fail --silent --show-error --max-time 90 \
+            --retry 3 --retry-delay 15 --retry-all-errors \
+            "$API_URL/api/v1/health"

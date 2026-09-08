@@ -142,7 +142,13 @@ def verify_local_download(storage_key: str, expires: str | None, token: str | No
 
 
 class R2StorageBackend:
-    """Cloudflare R2 over the S3 API."""
+    """Cloudflare R2, or any other S3-compatible store, over the S3 API.
+
+    R2 is the default and needs nothing but an account id. Setting
+    `R2_ENDPOINT_URL` points the same code at Supabase Storage, MinIO or S3
+    itself; those need path-style addressing, because resolving a bucket as a
+    subdomain of the endpoint (boto3's default) is a Cloudflare-ism.
+    """
 
     name = "r2"
 
@@ -151,13 +157,18 @@ class R2StorageBackend:
         from botocore.config import Config
 
         self.bucket = settings.R2_BUCKET
+        addressing_style = "path" if settings.R2_ENDPOINT_URL else "auto"
         self.client = boto3.client(
             "s3",
-            endpoint_url=f"https://{settings.R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
+            endpoint_url=settings.r2_endpoint_url,
             aws_access_key_id=settings.R2_ACCESS_KEY_ID,
             aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
-            config=Config(signature_version="s3v4", retries={"max_attempts": 3}),
-            region_name="auto",
+            config=Config(
+                signature_version="s3v4",
+                retries={"max_attempts": 3},
+                s3={"addressing_style": addressing_style},
+            ),
+            region_name=settings.R2_REGION,
         )
 
     def presign_upload(self, storage_key: str, content_type: str) -> PresignedUpload:

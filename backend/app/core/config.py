@@ -76,6 +76,14 @@ class Settings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str | None = None
     R2_BUCKET: str | None = None
     R2_PUBLIC_BASE_URL: str | None = None
+    # Overrides for any other S3-compatible store — Supabase Storage, MinIO,
+    # plain S3. Left blank the endpoint is derived from R2_ACCOUNT_ID in R2's
+    # own format, which is what a Cloudflare deployment wants and what every
+    # existing environment already has. A store that is not R2 also needs its
+    # real region name (R2 has none, hence "auto") and path-style addressing,
+    # since only Cloudflare resolves a bucket as a subdomain of the endpoint.
+    R2_ENDPOINT_URL: str | None = None
+    R2_REGION: str = "auto"
     LOCAL_STORAGE_DIR: str = "./var/uploads"
 
     # Africa's Talking (SMS)
@@ -243,10 +251,16 @@ class Settings(BaseSettings):
         )
 
     @property
+    def r2_endpoint_url(self) -> str:
+        return self.R2_ENDPOINT_URL or f"https://{self.R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
+    @property
     def r2_configured(self) -> bool:
-        return bool(
-            self.R2_ACCOUNT_ID and self.R2_ACCESS_KEY_ID and self.R2_SECRET_ACCESS_KEY and self.R2_BUCKET
-        )
+        # An explicit endpoint stands in for the account id: a non-Cloudflare
+        # store has no account id to give, and requiring one would mean
+        # inventing a value whose only job is to pass this check.
+        has_host = bool(self.R2_ACCOUNT_ID or self.R2_ENDPOINT_URL)
+        return bool(has_host and self.R2_ACCESS_KEY_ID and self.R2_SECRET_ACCESS_KEY and self.R2_BUCKET)
 
     @property
     def quickbooks_configured(self) -> bool:

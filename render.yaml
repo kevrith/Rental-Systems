@@ -1,0 +1,212 @@
+# Render Blueprint — the API and its Redis/Key Value store, on Render's FREE
+# plan.
+#
+# What "free" costs, stated plainly, because each of these shapes the file:
+#   * No background workers, no cron jobs, no pre-deploy commands. The Celery
+#     worker therefore runs inside the web service (see render-start.sh) and
+#     migrations run at boot rather than before it.
+#   * The service sleeps after 15 minutes idle and cold-starts in ~50s. The
+#     first request after a quiet night is slow, and a sleeping service runs
+#     no scheduler — .github/workflows/keepalive.yml exists to prevent that.
+#   * 512MB RAM and 0.1 CPU, shared by the API and the worker.
+#   * 750 instance-hours a month across all free services, which one
+#     always-on service uses almost exactly. Do not add a second.
+#
+# The upgrade path is at the bottom of this file.
+#
+# The database is NOT here: it lives on Supabase, so DATABASE_URL is supplied
+# by hand rather than by `fromDatabase`. Everything marked `sync: false` is a
+# secret Render prompts for on first apply and never reads out of this file —
+# see docs/deployment-vercel-render-supabase.md for what each one is.
+#
+# Docker rather than Render's native Python runtime, and not optionally:
+# WeasyPrint renders every lease, invoice and receipt PDF against the system
+# pango/cairo libraries, which the native runtime does not have. The Dockerfile
+# installs them.
+
+# The API and the worker are the same application with different entrypoints,
+# so they take the same configuration. It lives in one group rather than being
+# written twice, where the two copies would drift the first time a value
+# changed. Only what a group cannot express (REDIS_URL, which is resolved from
+# another service) is declared per-service below.
+envVarGroups:
+  - name: rentflow-shared
+    envVars:
+      # --- Core ---------------------------------------------------------------
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LOG_FORMAT
+        value: json
+      # Also derives the key that encrypts customer eTIMS, portal and OAuth
+      # credentials — rotating it makes those unreadable and they must be
+      # re-entered. Generated once here, then shared by both services.
+      - key: SECRET_KEY
+        generateValue: true
+
+      # --- Supabase Postgres --------------------------------------------------
+      # Both URLs address the same database; the app talks asyncpg, Alembic
+      # talks psycopg2. Use Supabase's SESSION pooler (IPv4, port 5432) — the
+      # direct connection is IPv6-only and Render cannot route to it.
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_SYNC
+        sync: false
+
+      # --- Domains ------------------------------------------------------------
+      # CORS_ORIGINS is parsed as JSON by pydantic-settings: it must be a JSON
+      # array, brackets and double quotes included, not a bare hostname.
+      - key: FRONTEND_URL
+        value: https://app.kastra.co.ke
+      - key: CORS_ORIGINS
+        value: '["https://app.kastra.co.ke"]'
+      - key: WEBAUTHN_RP_ID
+        value: app.kastra.co.ke
+      - key: WEBAUTHN_ORIGIN
+        value: https://app.kastra.co.ke
+      - key: WEBAUTHN_RP_NAME
+        value: RentFlow
+      # Third parties post to these, so they name the API host, not the app.
+      - key: DARAJA_CALLBACK_BASE_URL
+        value: https://api.kastra.co.ke
+      - key: OAUTH_CALLBACK_BASE_URL
+        value: https://api.kastra.co.ke
+      - key: SUPPORT_EMAIL
+        value: support@kastra.co.ke
+      - key: EMAIL_FROM
+        value: RentFlow <noreply@mail.kastra.co.ke>
+
+      # --- Object storage -----------------------------------------------------
+      # Render's disk is ephemeral: without these, every uploaded document is
+      # lost on the next deploy. Cloudflare R2 or Supabase Storage — the
+      # deployment guide says which values go where.
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ENDPOINT_URL
+        sync: false
+      - key: R2_REGION
+        sync: false
+
+      # --- Outbound messaging -------------------------------------------------
+      # Login is OTP-over-SMS, so Africa's Talking is not optional: without it
+      # nobody can complete a sign-in.
+      - key: AFRICAS_TALKING_USERNAME
+        sync: false
+      - key: AFRICAS_TALKING_API_KEY
+        sync: false
+      - key: AFRICAS_TALKING_SENDER_ID
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_WEBHOOK_SECRET
+        sync: false
+
+      # --- M-Pesa -------------------------------------------------------------
+      - key: DARAJA_ENVIRONMENT
+        value: sandbox
+      - key: DARAJA_CONSUMER_KEY
+        sync: false
+      - key: DARAJA_CONSUMER_SECRET
+        sync: false
+      - key: DARAJA_SHORTCODE
+        sync: false
+      - key: DARAJA_PASSKEY
+        sync: false
+
+      # --- Optional (blank leaves each feature cleanly off) --------------------
+      - key: WHATSAPP_API_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        value: mailto:support@kastra.co.ke
+      - key: SENTRY_DSN
+        sync: false
+      # /metrics sits outside /api/v1 and outside the rate limiter. Left blank
+      # it is world-readable on a public host, so it gets a bearer token.
+      - key: METRICS_TOKEN
+        generateValue: true
+
+services:
+  # ---------------------------------------------------------------------------
+  # The API — and, on this plan, the Celery worker and scheduler too.
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: rentflow-api
+    runtime: docker
+    plan: free
+    region: frankfurt # closest of Render's regions to Kenya
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: ./scripts/render-start.sh
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - fromGroup: rentflow-shared
+      # Runs `celery worker --beat` alongside uvicorn in this one container,
+      # since the free plan has no background-worker service to put it in.
+      # Flip to false the moment a paid worker exists.
+      - key: RUN_EMBEDDED_WORKER
+        value: "true"
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: rentflow-keyvalue
+          property: connectionString
+
+  # ---------------------------------------------------------------------------
+  # OTP codes, login lockouts, rate-limit counters and the Celery broker.
+  # The free plan holds 25MB without persistence, which covers all of those.
+  # `allkeys-lru` is the only eviction policy the free plan offers, so a queued
+  # Celery task can in principle be evicted under memory pressure — at this
+  # volume it will not come close.
+  # ---------------------------------------------------------------------------
+  - type: keyvalue
+    name: rentflow-keyvalue
+    plan: free
+    region: frankfurt
+    ipAllowList: [] # reachable only from inside this Render account
+
+# -----------------------------------------------------------------------------
+# Upgrading off the free plan
+#
+# The first $7/mo should go to a `starter` instance for rentflow-api: it stops
+# the service sleeping, which removes the cold start, removes the need for the
+# keepalive workflow, and triples the RAM the worker and API are sharing.
+#
+# The second $7/mo splits the worker out, which is the point at which the API
+# stops competing with PDF rendering for memory. To do that: set
+# RUN_EMBEDDED_WORKER=false above, and add back:
+#
+#   - type: worker
+#     name: rentflow-worker
+#     runtime: docker
+#     plan: starter
+#     region: frankfurt
+#     dockerfilePath: ./backend/Dockerfile
+#     dockerContext: ./backend
+#     dockerCommand: celery -A app.tasks.celery_app worker --beat --loglevel=info
+#     envVars:
+#       - fromGroup: rentflow-shared
+#       - key: REDIS_URL
+#         fromService:
+#           type: keyvalue
+#           name: rentflow-keyvalue
+#           property: connectionString
+#
+# Keep `--beat` on exactly one process. Two schedulers means every tenant gets
+# two of every invoice.
+# -----------------------------------------------------------------------------

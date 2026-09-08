@@ -33,13 +33,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# A slow or flaky link to PyPI (common on a residential/CGNAT connection
+# fetching ~30 packages including a couple of large binary wheels) makes pip
+# report a version as nonexistent when it only failed to list it in time.
+# Retries and a longer per-request timeout turn a transient stall into a
+# retry instead of a hard failure.
+RUN pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.txt
 
 COPY . .
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
-    CMD curl -fsS http://localhost:8000/api/v1/health || exit 1
+    CMD curl -fsS "http://localhost:${PORT:-8000}/api/v1/health" || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form, and `${PORT:-8000}` rather than a literal, because a PaaS assigns
+# the port at run time and expects the process to bind whatever it was given.
+# Locally PORT is unset, so this is still 8000 and docker-compose is unchanged.
+CMD exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
