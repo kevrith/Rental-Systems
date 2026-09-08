@@ -23,7 +23,7 @@ pyasn1==0.6.4
 bcrypt==5.0.0
 python-multipart==0.0.32
 celery==5.4.0
-redis==5.2.1
+redis==8.1.0
 httpx==0.28.1
 jinja2==3.1.6
 # 68.0 fixes CVE-2025-68616, an SSRF reachable from HTML handed to the
@@ -42,7 +42,7 @@ anthropic==1.4.0
 # Virus scanning on upload (Sprint 25, US-105) — talks to a clamd daemon.
 clamd==1.0.2
 # WebAuthn / biometric login (Sprint 25, US-108).
-webauthn==2.6.0
+webauthn==3.0.0
 # Error tracking (Sprint 26). Inert without SENTRY_DSN.
 sentry-sdk[fastapi,celery,sqlalchemy]==2.20.0
 # Distributed tracing (Sprint 26). Inert without OTEL_EXPORTER_OTLP_ENDPOINT.
