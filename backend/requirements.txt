@@ -20,7 +20,7 @@ segno==1.6.1
 # Excel import/export for bulk onboarding and data migration (US-072, US-076, US-077).
 openpyxl==3.1.5
 pyarrow==25.0.1
-boto3==1.35.92
+boto3==1.43.89
 pywebpush==2.0.0
 resend==2.10.0
 # AI lease analysis (US-096).
