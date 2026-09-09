@@ -111,6 +111,12 @@ celery_app.conf.update(
             "task": "rentflow.process_scheduled_disbursements",
             "schedule": crontab(hour=7, minute=30),
         },
+        # Renew subscriptions due today, and retry the ones still in dunning.
+        # Early, so a card that fails has the whole working day to be fixed.
+        "charge-due-subscriptions": {
+            "task": "rentflow.charge_due_subscriptions",
+            "schedule": crontab(hour=5, minute=0),
+        },
         # Settle owners who are on daily disbursement, for rent that cleared
         # yesterday. Early enough that the money is with them before the working
         # day, and after the 00:15 status refresh so the period is closed.

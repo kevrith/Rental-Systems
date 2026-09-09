@@ -20,14 +20,21 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from app.core import crypto
 from app.core.config import settings
 from app.core.crypto import mask
 from app.core.redis import redis_client
+from app.models.organization import MpesaCollectionMode
 from app.services.notifications import normalize_phone
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.models.organization import Organization
 
 logger = logging.getLogger("rentflow.mpesa")
 
@@ -59,27 +66,128 @@ class CallbackResult:
     transaction_date: datetime | None = None
 
 
-def is_configured() -> bool:
-    return bool(
-        settings.DARAJA_CONSUMER_KEY
-        and settings.DARAJA_CONSUMER_SECRET
-        and settings.DARAJA_SHORTCODE
-        and settings.DARAJA_PASSKEY
+@dataclass(slots=True)
+class DarajaCredentials:
+    """One organisation's own Daraja app.
+
+    Every call here is made *as the landlord*, against the landlord's shortcode,
+    so their tenants' rent lands in their till and never in RentFlow's. The
+    organisation id rides along so cached tokens cannot be shared between two
+    customers' Safaricom apps.
+    """
+
+    organization_id: uuid.UUID
+    consumer_key: str
+    consumer_secret: str
+    shortcode: str
+    passkey: str
+    environment: str = "sandbox"
+    initiator_name: str | None = None
+    security_credential: str | None = None
+
+    @property
+    def base_url(self) -> str:
+        return (
+            "https://api.safaricom.co.ke"
+            if self.environment == "production"
+            else "https://sandbox.safaricom.co.ke"
+        )
+
+    @property
+    def can_pay_out(self) -> bool:
+        return bool(self.initiator_name and self.security_credential)
+
+
+async def credentials_for(db: "AsyncSession", organization: "Organization") -> DarajaCredentials | None:
+    """This organisation's Daraja credentials, decrypted, or None.
+
+    None is an ordinary answer, not a failure: most landlords are on PAYBILL or
+    MANUAL and have no API app at all. Callers fall back to recording payments
+    rather than pushing them.
+    """
+    if organization.mpesa_collection_mode != MpesaCollectionMode.AUTOMATED:
+        return None
+    if not (
+        organization.daraja_consumer_key_encrypted
+        and organization.daraja_consumer_secret_encrypted
+        and organization.daraja_passkey_encrypted
+        and organization.mpesa_shortcode
+    ):
+        return None
+
+    consumer_key = await crypto.decrypt_for_org(
+        db, organization.id, organization.daraja_consumer_key_encrypted
+    )
+    consumer_secret = await crypto.decrypt_for_org(
+        db, organization.id, organization.daraja_consumer_secret_encrypted
+    )
+    passkey = await crypto.decrypt_for_org(db, organization.id, organization.daraja_passkey_encrypted)
+    if not (consumer_key and consumer_secret and passkey):
+        return None
+
+    initiator = (
+        await crypto.decrypt_for_org(db, organization.id, organization.daraja_initiator_name_encrypted)
+        if organization.daraja_initiator_name_encrypted
+        else None
+    )
+    security = (
+        await crypto.decrypt_for_org(db, organization.id, organization.daraja_security_credential_encrypted)
+        if organization.daraja_security_credential_encrypted
+        else None
+    )
+
+    return DarajaCredentials(
+        organization_id=organization.id,
+        consumer_key=consumer_key,
+        consumer_secret=consumer_secret,
+        shortcode=organization.mpesa_shortcode,
+        passkey=passkey,
+        environment=organization.daraja_environment,
+        initiator_name=initiator,
+        security_credential=security,
     )
 
 
-async def _access_token() -> str:
-    cached = await redis_client.get(_TOKEN_KEY)
+async def verify_credentials(creds: DarajaCredentials) -> tuple[bool, str]:
+    """Check a landlord's Daraja keys against Safaricom, right now.
+
+    Deliberately bypasses the token cache: after someone corrects a mistyped
+    secret, a token cached under the old one would report success and the first
+    real payment would still fail.
+
+    What this proves is bounded, and the caller should say so rather than
+    overclaim — OAuth authenticates the consumer key and secret only. The
+    passkey and shortcode are not exercised until an actual STK push, because
+    they are only used to build that request's password.
+    """
+    credentials = base64.b64encode(f"{creds.consumer_key}:{creds.consumer_secret}".encode()).decode()
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.get(
+                f"{creds.base_url}/oauth/v1/generate?grant_type=client_credentials",
+                headers={"Authorization": f"Basic {credentials}"},
+            )
+    except httpx.HTTPError as exc:
+        return False, f"Could not reach Safaricom: {exc}"
+
+    if response.status_code == 200 and (response.json() or {}).get("access_token"):
+        return True, "Your API key and secret are working."
+    if response.status_code in (400, 401, 403):
+        return False, "Safaricom rejected these credentials. Check the consumer key and secret."
+    return False, f"Safaricom returned an unexpected response ({response.status_code})."
+
+
+async def _access_token(creds: DarajaCredentials) -> str:
+    key = f"{_TOKEN_KEY}:{creds.organization_id}"
+    cached = await redis_client.get(key)
     if cached:
         return cached
 
-    credentials = base64.b64encode(
-        f"{settings.DARAJA_CONSUMER_KEY}:{settings.DARAJA_CONSUMER_SECRET}".encode()
-    ).decode()
+    credentials = base64.b64encode(f"{creds.consumer_key}:{creds.consumer_secret}".encode()).decode()
 
     async with httpx.AsyncClient(timeout=20) as client:
         response = await client.get(
-            f"{settings.daraja_base_url}/oauth/v1/generate?grant_type=client_credentials",
+            f"{creds.base_url}/oauth/v1/generate?grant_type=client_credentials",
             headers={"Authorization": f"Basic {credentials}"},
         )
         if response.status_code != 200:
@@ -92,12 +200,12 @@ async def _access_token() -> str:
 
     # Daraja tokens last 3599s; expire ours a minute early to avoid a race.
     ttl = max(60, int(data.get("expires_in", 3599)) - 60)
-    await redis_client.set(_TOKEN_KEY, token, ex=ttl)
+    await redis_client.set(key, token, ex=ttl)
     return token
 
 
-def _password(timestamp: str) -> str:
-    raw = f"{settings.DARAJA_SHORTCODE}{settings.DARAJA_PASSKEY}{timestamp}"
+def _password(creds: DarajaCredentials, timestamp: str) -> str:
+    raw = f"{creds.shortcode}{creds.passkey}{timestamp}"
     return base64.b64encode(raw.encode()).decode()
 
 
@@ -107,9 +215,20 @@ def _daraja_phone(phone_number: str) -> str:
 
 
 async def initiate_stk_push(
-    *, phone_number: str, amount: Decimal, account_reference: str, description: str, payment_id: uuid.UUID
+    creds: DarajaCredentials | None,
+    *,
+    phone_number: str,
+    amount: Decimal,
+    account_reference: str,
+    description: str,
+    payment_id: uuid.UUID,
 ) -> StkPushResult:
-    if not is_configured():
+    """Prompt a tenant to pay, into `creds`' own shortcode.
+
+    With no credentials the stub keeps the whole flow exercisable offline, and
+    in development.
+    """
+    if creds is None:
         # Sandbox stub: deterministic ids so the callback can be simulated in tests.
         logger.info("Daraja not configured — simulating STK push for %s", mask(normalize_phone(phone_number)))
         return StkPushResult(
@@ -120,24 +239,24 @@ async def initiate_stk_push(
 
     timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
     payload: dict[str, Any] = {
-        "BusinessShortCode": settings.DARAJA_SHORTCODE,
-        "Password": _password(timestamp),
+        "BusinessShortCode": creds.shortcode,
+        "Password": _password(creds, timestamp),
         "Timestamp": timestamp,
         "TransactionType": "CustomerPayBillOnline",
         # Daraja rejects fractional amounts on paybill.
         "Amount": int(Decimal(amount).quantize(Decimal("1"))),
         "PartyA": _daraja_phone(phone_number),
-        "PartyB": settings.DARAJA_SHORTCODE,
+        "PartyB": creds.shortcode,
         "PhoneNumber": _daraja_phone(phone_number),
         "CallBackURL": f"{settings.DARAJA_CALLBACK_BASE_URL}{settings.API_V1_PREFIX}/mpesa/callback",
         "AccountReference": account_reference[:12],
         "TransactionDesc": description[:13],
     }
 
-    token = await _access_token()
+    token = await _access_token(creds)
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
-            f"{settings.daraja_base_url}/mpesa/stkpush/v1/processrequest",
+            f"{creds.base_url}/mpesa/stkpush/v1/processrequest",
             json=payload,
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
         )
@@ -189,20 +308,20 @@ def parse_callback(body: dict[str, Any]) -> CallbackResult:
     return result
 
 
-async def query_status(checkout_request_id: str) -> dict[str, Any]:
+async def query_status(creds: DarajaCredentials | None, checkout_request_id: str) -> dict[str, Any]:
     """Ask Daraja what actually happened — used to verify a confirmation before we
     trust it, and to recover payments whose callback never arrived."""
-    if not is_configured():
+    if creds is None:
         return {"ResultCode": "0", "ResultDesc": "Simulated success (Daraja not configured)"}
 
     timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
-    token = await _access_token()
+    token = await _access_token(creds)
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
-            f"{settings.daraja_base_url}/mpesa/stkpushquery/v1/query",
+            f"{creds.base_url}/mpesa/stkpushquery/v1/query",
             json={
-                "BusinessShortCode": settings.DARAJA_SHORTCODE,
-                "Password": _password(timestamp),
+                "BusinessShortCode": creds.shortcode,
+                "Password": _password(creds, timestamp),
                 "Timestamp": timestamp,
                 "CheckoutRequestID": checkout_request_id,
             },
@@ -249,17 +368,8 @@ class B2CResult:
     completed_at: datetime | None = None
 
 
-def is_b2c_configured() -> bool:
-    return bool(
-        settings.DARAJA_CONSUMER_KEY
-        and settings.DARAJA_CONSUMER_SECRET
-        and settings.DARAJA_B2C_SHORTCODE
-        and settings.DARAJA_B2C_INITIATOR_NAME
-        and settings.DARAJA_B2C_SECURITY_CREDENTIAL
-    )
-
-
 async def initiate_b2c_payment(
+    creds: DarajaCredentials | None,
     *,
     phone_number: str,
     amount: Decimal,
@@ -277,7 +387,7 @@ async def initiate_b2c_payment(
     if amount <= Decimal("0"):
         raise MpesaError("A payout must be for a positive amount")
 
-    if not is_b2c_configured():
+    if creds is None or not creds.can_pay_out:
         logger.info(
             "Daraja B2C not configured — simulating payout to %s", mask(normalize_phone(phone_number))
         )
@@ -290,14 +400,14 @@ async def initiate_b2c_payment(
 
     base = f"{settings.DARAJA_CALLBACK_BASE_URL}{settings.API_V1_PREFIX}/mpesa"
     payload: dict[str, Any] = {
-        "InitiatorName": settings.DARAJA_B2C_INITIATOR_NAME,
-        "SecurityCredential": settings.DARAJA_B2C_SECURITY_CREDENTIAL,
+        "InitiatorName": creds.initiator_name,
+        "SecurityCredential": creds.security_credential,
         # BusinessPayment is the right category for a supplier/landlord payout;
         # SalaryPayment and PromotionPayment carry different limits and charges.
         "CommandID": "BusinessPayment",
         # Daraja rejects fractional amounts.
         "Amount": int(Decimal(amount).quantize(Decimal("1"))),
-        "PartyA": settings.DARAJA_B2C_SHORTCODE,
+        "PartyA": creds.shortcode,
         "PartyB": _daraja_phone(phone_number),
         "Remarks": remarks[:100],
         "QueueTimeOutURL": f"{base}/b2c/timeout",
@@ -305,10 +415,10 @@ async def initiate_b2c_payment(
         "Occasion": occasion[:100],
     }
 
-    token = await _access_token()
+    token = await _access_token(creds)
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
-            f"{settings.daraja_base_url}/mpesa/b2c/v1/paymentrequest",
+            f"{creds.base_url}/mpesa/b2c/v1/paymentrequest",
             json=payload,
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
         )

@@ -4,17 +4,20 @@ from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import OrgContext, get_org_context, require_write
+from app.api.deps import OrgContext, get_org_context, require, require_write
+from app.core import crypto
 from app.core.database import get_db
 from app.core.permissions import Permission
-from app.models.organization import Organization, SubscriptionPlan
+from app.models.organization import MpesaCollectionMode, Organization, SubscriptionPlan
 from app.schemas.auth import MessageResponse
 from app.schemas.organization import (
+    MpesaSetupRequest,
+    MpesaSetupStatus,
     OrganizationRead,
     OrganizationWithTrial,
     UpdateOrganizationRequest,
 )
-from app.services import audit_service, demo_service, security_service
+from app.services import audit_service, demo_service, mpesa_service, security_service
 
 router = APIRouter()
 
@@ -31,7 +34,7 @@ def _with_trial(organization: Organization) -> OrganizationWithTrial:
         is_trial=is_trial,
         is_trial_expired=organization.is_trial_expired,
         trial_days_remaining=days_remaining,
-        is_read_only=organization.is_trial_expired,
+        is_read_only=organization.is_read_only,
     )
 
 
@@ -73,6 +76,141 @@ async def update_my_organization(
     await db.commit()
     await db.refresh(organization)
     return _with_trial(organization)
+
+
+# ------------------------------------------------------------------ M-Pesa collection
+
+
+def _mpesa_status(organization: Organization) -> MpesaSetupStatus:
+    return MpesaSetupStatus(
+        mode=organization.mpesa_collection_mode,
+        shortcode=organization.mpesa_shortcode,
+        phone_number=organization.mpesa_phone_number,
+        account_label=organization.mpesa_account_label,
+        daraja_environment=organization.daraja_environment,
+        has_api_credentials=bool(
+            organization.daraja_consumer_key_encrypted
+            and organization.daraja_consumer_secret_encrypted
+            and organization.daraja_passkey_encrypted
+        ),
+        can_send_payouts=bool(
+            organization.daraja_initiator_name_encrypted and organization.daraja_security_credential_encrypted
+        ),
+        verified_at=organization.mpesa_verified_at,
+    )
+
+
+@router.get("/me/mpesa", response_model=MpesaSetupStatus)
+async def mpesa_setup(
+    context: OrgContext = Depends(require(Permission.ORG_MANAGE)),
+) -> MpesaSetupStatus:
+    """How this organisation collects rent. Never returns the credentials."""
+    return _mpesa_status(context.organization)
+
+
+@router.put("/me/mpesa", response_model=MpesaSetupStatus)
+async def save_mpesa_setup(
+    payload: MpesaSetupRequest,
+    context: OrgContext = Depends(require_write(Permission.ORG_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> MpesaSetupStatus:
+    """Point rent at this landlord's own M-Pesa.
+
+    Rent goes to their till, not to RentFlow — so these are their credentials,
+    encrypted under their organisation's own key. Sending a credential as null
+    leaves the stored one alone, which is what lets someone edit the account
+    label without re-typing their Daraja secret.
+    """
+    organization = context.organization
+    organization.mpesa_collection_mode = payload.mode
+    organization.mpesa_shortcode = payload.shortcode
+    organization.mpesa_phone_number = payload.phone_number
+    organization.mpesa_account_label = payload.account_label
+    organization.daraja_environment = payload.daraja_environment
+
+    secrets_written = []
+    for field, value in (
+        ("daraja_consumer_key_encrypted", payload.consumer_key),
+        ("daraja_consumer_secret_encrypted", payload.consumer_secret),
+        ("daraja_passkey_encrypted", payload.passkey),
+        ("daraja_initiator_name_encrypted", payload.initiator_name),
+        ("daraja_security_credential_encrypted", payload.security_credential),
+    ):
+        if value:
+            setattr(
+                organization,
+                field,
+                await crypto.encrypt_for_org(db, organization.id, value),
+            )
+            secrets_written.append(field.removesuffix("_encrypted"))
+
+    # Leaving AUTOMATED means the stored keys are no longer used for anything,
+    # so they are dropped rather than left lying in the table.
+    if payload.mode != MpesaCollectionMode.AUTOMATED:
+        organization.daraja_consumer_key_encrypted = None
+        organization.daraja_consumer_secret_encrypted = None
+        organization.daraja_passkey_encrypted = None
+        organization.daraja_initiator_name_encrypted = None
+        organization.daraja_security_credential_encrypted = None
+        organization.mpesa_verified_at = None
+
+    audit_service.record(
+        db,
+        organization_id=organization.id,
+        action="organization.mpesa_setup_changed",
+        entity_type="organization",
+        entity_id=organization.id,
+        actor=context.user,
+        summary=f"M-Pesa collection set to {payload.mode.value}",
+        # The values are never recorded, only which ones were replaced.
+        changes={"credentials_replaced": secrets_written, "shortcode": payload.shortcode},
+    )
+    await db.commit()
+    await db.refresh(organization)
+    return _mpesa_status(organization)
+
+
+class MpesaTestResult(BaseModel):
+    ok: bool
+    message: str
+    verified_at: datetime | None = None
+
+
+@router.post("/me/mpesa/test", response_model=MpesaTestResult)
+async def test_mpesa_credentials(
+    context: OrgContext = Depends(require_write(Permission.ORG_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> MpesaTestResult:
+    """Check the saved Daraja credentials against Safaricom.
+
+    Without this a landlord types a wrong secret, sees "Saved", and only finds
+    out when a tenant's payment fails — which is exactly the moment this product
+    is supposed to be earning their trust.
+    """
+    organization = context.organization
+    creds = await mpesa_service.credentials_for(db, organization)
+    if creds is None:
+        return MpesaTestResult(
+            ok=False,
+            message="Add your paybill and Daraja credentials first.",
+            verified_at=organization.mpesa_verified_at,
+        )
+
+    ok, message = await mpesa_service.verify_credentials(creds)
+    organization.mpesa_verified_at = datetime.now(UTC) if ok else None
+
+    audit_service.record(
+        db,
+        organization_id=organization.id,
+        action="organization.mpesa_tested",
+        entity_type="organization",
+        entity_id=organization.id,
+        actor=context.user,
+        summary=f"M-Pesa credential test {'passed' if ok else 'failed'}",
+    )
+    await db.commit()
+    await db.refresh(organization)
+    return MpesaTestResult(ok=ok, message=message, verified_at=organization.mpesa_verified_at)
 
 
 # ------------------------------------------------------------- sample data

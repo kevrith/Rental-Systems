@@ -155,11 +155,6 @@ class Payment(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # caller's job, scoped to the organisation.
     bank_reference: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
-    # Paystack's transaction reference for a card payment. Unique for the same
-    # reason `mpesa_receipt` is: a re-delivered webhook must never bank the same
-    # card charge twice.
-    paystack_reference: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
-
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     payment_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     recorded_by_id: Mapped[uuid.UUID | None] = mapped_column(

@@ -40,6 +40,28 @@ class SubscriptionPlan(str, enum.Enum):
     ENTERPRISE = "enterprise"
 
 
+class MpesaCollectionMode(str, enum.Enum):
+    """How rent reaches this landlord, which decides how much RentFlow can automate.
+
+    The three are not a maturity ladder — they are three real situations in this
+    market, and the product has to be useful in all of them:
+
+    AUTOMATED  the landlord has a paybill/till *and* Daraja API credentials, so
+               RentFlow can push an STK prompt and confirm the payment itself.
+               Everything reconciles without anyone typing.
+    PAYBILL    they have a shortcode but no API credentials. Tenants are shown
+               the paybill and account number to pay; someone records what came
+               in, or it is matched from a statement.
+    MANUAL     a personal M-Pesa number and nothing else, which is most small
+               landlords. No API exists for this, so the payment is recorded by
+               hand or from the forwarded confirmation SMS.
+    """
+
+    AUTOMATED = "automated"
+    PAYBILL = "paybill"
+    MANUAL = "manual"
+
+
 class ReportDeliveryChannel(str, enum.Enum):
     WHATSAPP = "whatsapp"
     EMAIL = "email"
@@ -60,6 +82,9 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Enum(SubscriptionPlan, name="subscription_plan"), default=SubscriptionPlan.TRIAL
     )
     trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When dunning gave up on a paid subscription. Cleared the moment a charge
+    # succeeds, so paying a late invoice restores writing immediately.
+    subscription_lapsed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Branding, used on leases, invoices and receipts (US-016, US-023).
@@ -140,6 +165,45 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     bank_account_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
     bank_branch: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
+    # --- M-Pesa collection ---
+    #
+    # Rent is collected by the landlord, into the landlord's own M-Pesa. RentFlow
+    # never touches it: no pooled shortcode, no float, no waiting on a payout.
+    # What the platform does is prompt, confirm, receipt and reconcile — the work
+    # that was manual before.
+    #
+    # Which of those is possible depends on what the landlord actually has, and
+    # in this market that is three different situations (see `MpesaCollectionMode`).
+    mpesa_collection_mode: Mapped["MpesaCollectionMode"] = mapped_column(
+        Enum(MpesaCollectionMode, name="mpesa_collection_mode"),
+        default=MpesaCollectionMode.MANUAL,
+        server_default="MANUAL",
+        nullable=False,
+    )
+    # The paybill/till a tenant pays, or the phone number for a landlord who has
+    # neither. Shown to tenants in the portal either way.
+    mpesa_shortcode: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    mpesa_phone_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    mpesa_account_label: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # Daraja API credentials, present only in AUTOMATED mode. Encrypted with the
+    # organisation's own key — these move that landlord's money, and a leak of
+    # the table must not be a leak of every customer's till.
+    daraja_consumer_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    daraja_consumer_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    daraja_passkey_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Safaricom issues sandbox and production credentials separately.
+    daraja_environment: Mapped[str] = mapped_column(
+        String(16), default="sandbox", server_default="sandbox", nullable=False
+    )
+    mpesa_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # B2C, for an agency paying its owner clients out of its own till. Separate
+    # Safaricom credentials from collection, and optional: without them the
+    # agency records payouts it made itself instead of RentFlow sending them.
+    daraja_initiator_name_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    daraja_security_credential_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Sprint 26 (Module 25): suspension. `is_active` is what `deps.get_org_context`
     # already enforces; these three record *why* it was flipped and by whom, so a
     # suspension is a reversible, auditable act rather than a silent boolean.
@@ -205,6 +269,18 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         if self.subscription_plan != SubscriptionPlan.TRIAL or self.trial_ends_at is None:
             return False
         return datetime.now(self.trial_ends_at.tzinfo) > self.trial_ends_at
+
+    # Set by the subscription biller when dunning runs out (Sprint 27). A column
+    # rather than a join so the write-gate on every request stays a single row
+    # read, and so a lapse survives the subscription row being changed.
+    @property
+    def is_read_only(self) -> bool:
+        """True when the account may be read but not written to.
+
+        Two roads lead here — a trial that ran out and a subscription that went
+        unpaid past its grace window — and both keep every record intact.
+        """
+        return self.is_trial_expired or self.subscription_lapsed_at is not None
 
 
 class OrganizationEncryptionKey(UUIDPrimaryKeyMixin, TimestampMixin, Base):

@@ -54,6 +54,7 @@ from app.services import (
     notification_service,
     payment_service,
     paystack_service,
+    subscription_service,
     tenant_service,
 )
 from app.services.pdf_service import format_kes
@@ -561,6 +562,10 @@ async def mpesa_b2c_timeout(request: Request, db: AsyncSession = Depends(get_db)
 async def paystack_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
     """Paystack's charge webhook.
 
+    Paystack carries RentFlow's own subscription revenue and nothing else: rent
+    is collected by each landlord into their own M-Pesa, and never passes
+    through this platform's Paystack account.
+
     Unauthenticated in the session sense — Paystack calls it — but every body is
     HMAC-verified against the secret key before it is parsed. An unsigned or
     mis-signed delivery is refused with a 401 so it is visible in Paystack's own
@@ -576,7 +581,13 @@ async def paystack_webhook(request: Request, db: AsyncSession = Depends(get_db))
     except ValueError:
         return {"status": "accepted", "detail": "Ignored: malformed body"}
 
-    outcome = await payment_service.handle_paystack_event(db, body)
+    reference = str((body.get("data") or {}).get("reference") or "")
+    if not reference.startswith(paystack_service.SUBSCRIPTION_PREFIX):
+        return {"status": "accepted", "detail": "Ignored: not a subscription charge"}
+    if not await paystack_service.claim_webhook(reference):
+        return {"status": "accepted", "detail": "Duplicate event ignored"}
+
+    outcome = await subscription_service.handle_charge(db, reference, body)
     return {"status": "accepted", "detail": outcome}
 
 

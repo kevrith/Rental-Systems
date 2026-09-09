@@ -178,6 +178,13 @@ from app.models.session import (
     VerificationToken,
 )
 from app.models.signature import DigitalSignature, SignatureStatus
+from app.models.subscription import (
+    BillingInterval,
+    Subscription,
+    SubscriptionInvoice,
+    SubscriptionInvoiceStatus,
+    SubscriptionStatus,
+)
 from app.models.task_run import TaskRun, TaskRunStatus
 from app.models.tenant import (
     LeaseTemplate,
@@ -235,6 +242,7 @@ __all__ = [
     "BankStatementUpload",
     "Base",
     "BayType",
+    "BillingInterval",
     "BookingStatus",
     "BreachCategory",
     "BreachSeverity",
@@ -349,7 +357,11 @@ __all__ = [
     "SinkingFundEntry",
     "SinkingFundMovement",
     "StoredFile",
+    "Subscription",
+    "SubscriptionInvoice",
+    "SubscriptionInvoiceStatus",
     "SubscriptionPlan",
+    "SubscriptionStatus",
     "TaskRun",
     "TaskRunStatus",
     "TemplateChannel",

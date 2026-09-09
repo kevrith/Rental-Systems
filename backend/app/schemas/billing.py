@@ -89,7 +89,6 @@ class PaymentRead(BaseModel):
     status: PaymentStatus
     mpesa_receipt: str | None
     bank_reference: str | None = None
-    paystack_reference: str | None = None
     phone_number: str | None
     failure_reason: str | None
     paid_at: datetime | None
@@ -131,11 +130,12 @@ class BankInstructions(BaseModel):
 
 
 class PortalPaymentMethods(BaseModel):
-    """Which payment routes the portal may offer, each gated on its provider
-    actually being configured."""
+    """Which payment routes this organisation can actually accept.
+
+    Gated on what the landlord has set up, so the portal never shows a tenant a
+    button that dead-ends."""
 
     mpesa: bool
-    card: bool
     bank_transfer: bool
 
 

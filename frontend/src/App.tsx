@@ -140,6 +140,12 @@ const DisbursementsPage = lazy(() =>
 const DeveloperPage = lazy(() =>
   import('@/features/developer/DeveloperPage').then((m) => ({ default: m.DeveloperPage })),
 )
+const MpesaSettingsPage = lazy(() =>
+  import('@/features/settings/MpesaSettingsPage').then((m) => ({ default: m.MpesaSettingsPage })),
+)
+const BillingSettingsPage = lazy(() =>
+  import('@/features/settings/BillingSettingsPage').then((m) => ({ default: m.BillingSettingsPage })),
+)
 const EtimsSettingsPage = lazy(() =>
   import('@/features/analytics/EtimsSettingsPage').then((m) => ({ default: m.EtimsSettingsPage })),
 )
@@ -503,6 +509,8 @@ function App() {
               <Route path="sessions" element={<SessionsSettings />} />
               <Route path="notifications" element={<NotificationSettings />} />
               <Route path="organization" element={<OrganizationSettings />} />
+              <Route path="mpesa" element={<MpesaSettingsPage />} />
+              <Route path="billing" element={<BillingSettingsPage />} />
               <Route path="messages" element={<MessageTemplatesPage />} />
               <Route path="etims" element={<EtimsSettingsPage />} />
               <Route path="portals" element={<PortalsSettingsPage />} />

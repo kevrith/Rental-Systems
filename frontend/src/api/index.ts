@@ -88,7 +88,13 @@ import type {
   OwnerSummary,
   PaymentDetail,
   PortalHome,
+  MpesaSetupStatus,
+  MpesaTestResult,
   PortalPaymentMethods,
+  BillingInterval,
+  PlanOption,
+  Subscription,
+  SubscriptionInvoice,
   PortfolioDashboard,
   Property,
   PropertySummary,
@@ -652,6 +658,12 @@ export const organizationApi = {
   me: () => get<Record<string, unknown>>('/organizations/me'),
   update: (body: unknown) => patch<Record<string, unknown>>('/organizations/me', body),
 
+  // How this landlord collects rent. Credentials are write-only — they go up
+  // here and never come back down.
+  mpesaSetup: () => get<MpesaSetupStatus>('/organizations/me/mpesa'),
+  saveMpesaSetup: (body: unknown) => put<MpesaSetupStatus>('/organizations/me/mpesa', body),
+  testMpesaSetup: () => post<MpesaTestResult>('/organizations/me/mpesa/test'),
+
   // Sample data (Sprint 26). Teardown deletes exactly the rows the seeding
   // created, so it can never take a real one with it.
   demoData: () => get<DemoDataStatus>('/organizations/demo-data'),
@@ -933,17 +945,28 @@ export const vaultApi = {
     post<DocumentDelivery>(`/vault/documents/${id}/send`, body),
 }
 
+// ------------------------------------------------------- RentFlow's own billing
+
+export const subscriptionApi = {
+  plans: () => get<PlanOption[]>('/billing/plans'),
+  current: () => get<Subscription | null>('/billing/subscription'),
+  checkout: (body: { plan: string; interval: BillingInterval }) =>
+    post<{
+      invoice_id: string
+      reference_code: string
+      amount: string
+      authorization_url: string
+    }>('/billing/subscription/checkout', body),
+  cancel: () => post<Subscription>('/billing/subscription/cancel'),
+  invoices: () => get<SubscriptionInvoice[]>('/billing/subscription/invoices'),
+}
+
 // ---------------------------------------------------------------- tenant portal
 
 export const portalApi = {
   home: () => get<PortalHome>('/portal/home'),
   pay: (body: { amount: string; phone_number?: string }) =>
     post<{ payment_id: string; reference_code: string; message: string }>('/portal/pay', body),
-  payByCard: (body: { amount: string; email?: string }) =>
-    post<{ payment_id: string; reference_code: string; authorization_url: string }>(
-      '/portal/pay/card',
-      body,
-    ),
   paymentMethods: () => get<PortalPaymentMethods>('/portal/payment-methods'),
   paymentStatus: (id: string) => get<PaymentDetail>(`/portal/payments/${id}/status`),
   payments: () => get<PaymentDetail[]>('/portal/payments'),

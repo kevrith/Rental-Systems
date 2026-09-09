@@ -33,6 +33,7 @@ from app.api.v1.endpoints import (
     security,
     service_charges,
     signatures,
+    subscriptions,
     tasks,
     team,
     tenants,
@@ -55,6 +56,7 @@ api_router.include_router(files.local_router, prefix="/files/local", tags=["file
 
 # Organization & people
 api_router.include_router(organizations.router, prefix="/organizations", tags=["organizations"])
+api_router.include_router(subscriptions.router, prefix="/billing", tags=["subscription-billing"])
 api_router.include_router(team.router, prefix="/team", tags=["team"])
 
 # Portfolio

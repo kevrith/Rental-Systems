@@ -121,11 +121,13 @@ def assert_can_write(context: OrgContext) -> None:
     """
     if context.role in READ_ONLY_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account has read-only access")
-    if context.organization.is_trial_expired:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="Your free trial has ended. Upgrade your plan to add or change data.",
+    if context.organization.is_read_only:
+        detail = (
+            "Your free trial has ended. Upgrade your plan to add or change data."
+            if context.organization.is_trial_expired
+            else "Your subscription is unpaid. Settle it to add or change data."
         )
+        raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=detail)
 
 
 def require_write(*permissions: Permission):

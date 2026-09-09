@@ -171,6 +171,12 @@ PHASE_12_ORG_SCOPED_TABLES: Sequence[str] = (
     "approval_actions",
 )
 
+# Sprint 27 — RentFlow's own subscription billing.
+PHASE_13_ORG_SCOPED_TABLES: Sequence[str] = (
+    "subscriptions",
+    "subscription_invoices",
+)
+
 ORG_SCOPED_TABLES: Sequence[str] = (
     *PHASE_1_ORG_SCOPED_TABLES,
     *PHASE_2_ORG_SCOPED_TABLES,
@@ -185,6 +191,7 @@ ORG_SCOPED_TABLES: Sequence[str] = (
     *PHASE_10_ORG_SCOPED_TABLES,
     *PHASE_11_ORG_SCOPED_TABLES,
     *PHASE_12_ORG_SCOPED_TABLES,
+    *PHASE_13_ORG_SCOPED_TABLES,
 )
 
 SETTING = "app.current_org_id"

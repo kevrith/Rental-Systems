@@ -4,7 +4,12 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from app.models.organization import OperatingMode, ReportDeliveryChannel, SubscriptionPlan
+from app.models.organization import (
+    MpesaCollectionMode,
+    OperatingMode,
+    ReportDeliveryChannel,
+    SubscriptionPlan,
+)
 from app.models.user import UserRole
 
 
@@ -39,6 +44,14 @@ class OrganizationRead(BaseModel):
     bank_account_name: str | None = None
     bank_account_number: str | None = None
     bank_branch: str | None = None
+    # M-Pesa collection. The Daraja credentials themselves are never returned —
+    # only what the landlord needs to see about their own setup.
+    mpesa_collection_mode: MpesaCollectionMode = MpesaCollectionMode.MANUAL
+    mpesa_shortcode: str | None = None
+    mpesa_phone_number: str | None = None
+    mpesa_account_label: str | None = None
+    daraja_environment: str = "sandbox"
+    mpesa_verified_at: datetime | None = None
     # Sprint 26 — dual approval, session cap, suspension state, demo mode.
     cash_dual_approval_threshold: Decimal | None = None
     max_concurrent_sessions: int | None = None
@@ -125,3 +138,41 @@ class UpdateOrganizationRequest(BaseModel):
                 raise ValueError(f"'{entry}' is not a valid IP address or CIDR range") from exc
             cleaned.append(entry)
         return cleaned
+
+
+class MpesaSetupRequest(BaseModel):
+    """How this landlord collects rent.
+
+    Credentials are write-only: they go in here and never come back out of any
+    endpoint. Sending them as null on an update leaves whatever is stored
+    untouched, so saving the shortcode does not silently wipe the keys.
+    """
+
+    mode: MpesaCollectionMode
+    shortcode: str | None = Field(default=None, max_length=16)
+    phone_number: str | None = Field(default=None, max_length=32)
+    account_label: str | None = Field(
+        default=None,
+        max_length=64,
+        description="What tenants type as the account number — often the unit or tenant reference",
+    )
+    daraja_environment: str = Field(default="sandbox", pattern="^(sandbox|production)$")
+    consumer_key: str | None = Field(default=None, max_length=255)
+    consumer_secret: str | None = Field(default=None, max_length=255)
+    passkey: str | None = Field(default=None, max_length=255)
+    # B2C, only needed by an agency that wants RentFlow to send owner payouts.
+    initiator_name: str | None = Field(default=None, max_length=128)
+    security_credential: str | None = Field(default=None, max_length=2048)
+
+
+class MpesaSetupStatus(BaseModel):
+    """What is configured, never the secrets themselves."""
+
+    mode: MpesaCollectionMode
+    shortcode: str | None
+    phone_number: str | None
+    account_label: str | None
+    daraja_environment: str
+    has_api_credentials: bool
+    can_send_payouts: bool
+    verified_at: datetime | None

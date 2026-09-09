@@ -270,7 +270,6 @@ export interface Payment {
   status: PaymentStatus
   mpesa_receipt: string | null
   bank_reference: string | null
-  paystack_reference: string | null
   phone_number: string | null
   failure_reason: string | null
   paid_at: string | null
@@ -2434,9 +2433,66 @@ export interface BankInstructions {
   branch: string | null
 }
 
+export type BillingInterval = 'monthly' | 'annual'
+export type SubscriptionStatus = 'active' | 'past_due' | 'lapsed' | 'cancelled'
+export type SubscriptionInvoiceStatus = 'pending' | 'paid' | 'failed'
+
+export interface PlanOption {
+  id: 'starter' | 'professional' | 'business'
+  monthly: string
+  annual: string
+}
+
+export interface Subscription {
+  id: string
+  plan: string
+  interval: BillingInterval
+  status: SubscriptionStatus
+  amount: string
+  current_period_start: string
+  current_period_end: string
+  next_billing_date: string
+  card_last4: string | null
+  card_brand: string | null
+  failed_attempts: number
+  grace_ends_at: string | null
+  cancelled_at: string | null
+}
+
+export interface SubscriptionInvoice {
+  id: string
+  reference_code: string
+  period_start: string
+  period_end: string
+  amount: string
+  status: SubscriptionInvoiceStatus
+  attempts: number
+  paid_at: string | null
+  failure_reason: string | null
+  created_at: string
+}
+
+export type MpesaCollectionMode = 'automated' | 'paybill' | 'manual'
+
+export interface MpesaSetupStatus {
+  mode: MpesaCollectionMode
+  shortcode: string | null
+  phone_number: string | null
+  account_label: string | null
+  daraja_environment: string
+  has_api_credentials: boolean
+  can_send_payouts: boolean
+  verified_at: string | null
+}
+
+export interface MpesaTestResult {
+  ok: boolean
+  message: string
+  verified_at: string | null
+}
+
 export interface PortalPaymentMethods {
   mpesa: boolean
-  card: boolean
   bank_transfer: boolean
 }
 

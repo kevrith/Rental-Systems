@@ -17,7 +17,7 @@ from app.api.deps import OrgContext, assert_in_org
 from app.models.agency import Disbursement, DisbursementStatus, OwnerProfile
 from app.models.billing import Payment, PaymentStatus
 from app.models.notification import NotificationChannel, NotificationType
-from app.models.organization import OperatingMode
+from app.models.organization import OperatingMode, Organization
 from app.models.property import Property, Unit
 from app.models.tenant import Tenancy
 from app.models.user import User, UserRole
@@ -608,7 +608,10 @@ async def dispatch_mpesa_payout(
     payout is still recorded as FAILED.
     """
     try:
+        organization = await db.get(Organization, disbursement.organization_id)
+        creds = await mpesa_service.credentials_for(db, organization) if organization else None
         result = await mpesa_service.initiate_b2c_payment(
+            creds,
             phone_number=destination,
             amount=Decimal(disbursement.net_amount),
             remarks=f"Rent disbursement {disbursement.reference_code}",

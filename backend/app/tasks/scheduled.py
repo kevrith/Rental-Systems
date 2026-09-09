@@ -647,6 +647,54 @@ def process_daily_disbursements() -> dict[str, int]:
     return {"settled": settled, "nothing_due": nothing_due, "failed": failed}
 
 
+@celery_app.task(name="rentflow.charge_due_subscriptions")
+@monitored("rentflow.charge_due_subscriptions")
+def charge_due_subscriptions() -> dict[str, int]:
+    """Renew every subscription whose billing date has arrived (Sprint 27).
+
+    Also the dunning loop: a subscription left PAST_DUE by a failed charge is
+    still due, so it is picked up again by the next run until it either clears
+    or exhausts its grace window and lapses to read-only.
+
+    CANCELLED and LAPSED subscriptions are skipped — one has been stopped
+    deliberately and the other has already run out of retries.
+    """
+    from app.models.subscription import Subscription, SubscriptionStatus
+    from app.services import subscription_service
+
+    async def work(db: AsyncSession) -> dict[str, int]:
+        today = date.today()
+        outcomes = {"charged": 0, "failed": 0, "no_card": 0}
+
+        subscriptions = await db.scalars(
+            select(Subscription).where(
+                Subscription.status.in_([SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE]),
+                Subscription.next_billing_date <= today,
+            )
+        )
+        for subscription in subscriptions:
+            try:
+                outcome = await subscription_service.charge_due_subscription(db, subscription, today)
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                logger.exception("Subscription renewal errored for org %s", subscription.organization_id)
+                outcomes["failed"] += 1
+                continue
+            outcomes[outcome] = outcomes.get(outcome, 0) + 1
+
+        return outcomes
+
+    outcomes = run_async(work)
+    logger.info(
+        "Subscription billing: %s charged, %s failed, %s without a card",
+        outcomes["charged"],
+        outcomes["failed"],
+        outcomes["no_card"],
+    )
+    return outcomes
+
+
 # ------------------------------------------------------------------ housekeeping
 
 
@@ -676,7 +724,9 @@ def reconcile_pending_payments() -> dict[str, int]:
         for payment in pending:
             if payment.mpesa_checkout_request_id is None:
                 continue
-            response = await mpesa_service.query_status(payment.mpesa_checkout_request_id)
+            organization = await db.get(Organization, payment.organization_id)
+            creds = await mpesa_service.credentials_for(db, organization) if organization else None
+            response = await mpesa_service.query_status(creds, payment.mpesa_checkout_request_id)
             code = str(response.get("ResultCode", ""))
             if code and code not in ("0", "1037"):
                 payment.status = PaymentStatus.CANCELLED if code == "1032" else PaymentStatus.FAILED

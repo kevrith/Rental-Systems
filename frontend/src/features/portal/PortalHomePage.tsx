@@ -4,7 +4,6 @@ import {
   CalendarClock,
   CheckCircle2,
   Clock,
-  CreditCard,
   Download,
   FileText,
   Home,
@@ -40,7 +39,6 @@ import { queryKeys } from '@/lib/query-client'
 
 export function PortalHomePage() {
   const [payOpen, setPayOpen] = useState(false)
-  const [cardOpen, setCardOpen] = useState(false)
   const [bankOpen, setBankOpen] = useState(false)
   const [vacateOpen, setVacateOpen] = useState(false)
 
@@ -111,33 +109,32 @@ export function PortalHomePage() {
             </p>
           )}
 
-          <Button
-            size="lg"
-            variant={owing ? 'success' : 'outline'}
-            className="mt-4 w-full justify-center"
-            icon={<Smartphone className="h-5 w-5" />}
-            onClick={() => setPayOpen(true)}
-          >
-            Pay rent with M-Pesa
-          </Button>
-          {methods.data?.card && (
+          {methods.data?.mpesa && (
             <Button
               size="lg"
-              variant="outline"
-              className="mt-2 w-full justify-center"
-              icon={<CreditCard className="h-5 w-5" />}
-              onClick={() => setCardOpen(true)}
+              variant={owing ? 'success' : 'outline'}
+              className="mt-4 w-full justify-center"
+              icon={<Smartphone className="h-5 w-5" />}
+              onClick={() => setPayOpen(true)}
             >
-              Pay by card
+              Pay rent with M-Pesa
             </Button>
           )}
-          <button
-            type="button"
-            className="mt-2 text-sm text-brand-600 hover:underline"
-            onClick={() => setBankOpen(true)}
-          >
-            Pay by bank transfer instead
-          </button>
+          {methods.data?.bank_transfer && (
+            <button
+              type="button"
+              className="mt-2 text-sm text-brand-600 hover:underline"
+              onClick={() => setBankOpen(true)}
+            >
+              Pay by bank transfer instead
+            </button>
+          )}
+          {methods.data && !methods.data.mpesa && !methods.data.bank_transfer && (
+            <p className="mt-4 text-sm text-slate-500">
+              Pay {data.organization_name} the way you normally do. Your receipts and balance will
+              still appear here once they record it.
+            </p>
+          )}
         </CardBody>
       </Card>
 
@@ -222,82 +219,9 @@ export function PortalHomePage() {
         balance={data.balance}
         phone={data.phone_number}
       />
-      <CardPayDialog open={cardOpen} onClose={() => setCardOpen(false)} balance={data.balance} />
       <BankTransferDialog open={bankOpen} onClose={() => setBankOpen(false)} />
       <VacateDialog open={vacateOpen} onClose={() => setVacateOpen(false)} />
     </div>
-  )
-}
-
-/** Paystack checkout for tenants paying by card rather than M-Pesa.
- *
- *  Unlike the M-Pesa dialog there is nothing to poll here: the tenant leaves for
- *  Paystack's hosted page and comes back to /portal/payments, where the webhook
- *  will already have settled the payment. */
-function CardPayDialog({
-  open,
-  onClose,
-  balance,
-}: {
-  open: boolean
-  onClose: () => void
-  balance: string
-}) {
-  const [amount, setAmount] = useState(balance)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (open) {
-      setAmount(Number(balance) > 0 ? balance : '')
-      setError(null)
-    }
-  }, [open, balance])
-
-  const pay = useMutation({
-    mutationFn: () => portalApi.payByCard({ amount }),
-    onSuccess: (result) => {
-      window.location.href = result.authorization_url
-    },
-    onError: (payError) => setError(errorMessage(payError)),
-  })
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title="Pay by card"
-      description="You will finish the payment on Paystack's secure page."
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            loading={pay.isPending}
-            disabled={!amount || Number(amount) <= 0}
-            onClick={() => pay.mutate()}
-            icon={<CreditCard className="h-4 w-4" />}
-          >
-            Continue to Paystack
-          </Button>
-        </>
-      }
-    >
-      <Field label="Amount" required>
-        <Input
-          type="number"
-          inputMode="decimal"
-          min="1"
-          value={amount}
-          onChange={(event) => setAmount(event.target.value)}
-        />
-      </Field>
-      {error && (
-        <Alert tone="danger" className="mt-3" icon={<AlertCircle className="h-4 w-4" />}>
-          {error}
-        </Alert>
-      )}
-    </Dialog>
   )
 }
 

@@ -34,6 +34,10 @@ logger = logging.getLogger("rentflow.paystack")
 
 _WEBHOOK_LOCK_TTL = 300
 
+# Both rent and RentFlow's own subscriptions come back through one webhook, so
+# the reference says which ledger an event belongs to.
+SUBSCRIPTION_PREFIX = "rentflow-sub-"
+
 # Paystack works in the currency's minor unit — kobo for NGN, cents for KES.
 _MINOR_UNITS = Decimal("100")
 
@@ -103,24 +107,66 @@ async def initialize_transaction(
     tenancy_reference: str,
     callback_url: str,
 ) -> InitializeResult:
-    """Open a card transaction and get back the URL to send the tenant to.
+    """Open a card transaction for rent and get back the URL to send the tenant to.
 
     `reference` is our own payment id rather than a Paystack-generated one, so a
     webhook can be matched to a payment even if the response below never
     arrives.
     """
-    reference = f"rentflow-{payment_id}"
-    payload = {
+    return await _initialize(
+        email=email,
+        amount=amount,
+        reference=f"rentflow-{payment_id}",
+        callback_url=callback_url,
+        metadata={"payment_id": str(payment_id), "tenancy_reference": tenancy_reference},
+    )
+
+
+async def initialize_subscription_charge(
+    *,
+    email: str,
+    amount: Decimal,
+    invoice_id: uuid.UUID,
+    organization_id: uuid.UUID,
+    callback_url: str,
+) -> InitializeResult:
+    """Open the first charge of a subscription, which also saves the card.
+
+    Restricted to the card channel on purpose: this transaction has to leave an
+    authorization behind for later renewals, and no other channel does.
+    """
+    return await _initialize(
+        email=email,
+        amount=amount,
+        reference=f"{SUBSCRIPTION_PREFIX}{invoice_id}",
+        callback_url=callback_url,
+        metadata={
+            "subscription_invoice_id": str(invoice_id),
+            "organization_id": str(organization_id),
+        },
+        channels=["card"],
+    )
+
+
+async def _initialize(
+    *,
+    email: str,
+    amount: Decimal,
+    reference: str,
+    callback_url: str,
+    metadata: dict[str, str],
+    channels: list[str] | None = None,
+) -> InitializeResult:
+    payload: dict[str, Any] = {
         "email": email,
         "amount": _to_minor_units(amount),
         "currency": "KES",
         "reference": reference,
         "callback_url": callback_url,
-        "metadata": {
-            "payment_id": str(payment_id),
-            "tenancy_reference": tenancy_reference,
-        },
+        "metadata": metadata,
     }
+    if channels:
+        payload["channels"] = channels
 
     async with httpx.AsyncClient(timeout=30) as client:
         try:
@@ -146,6 +192,75 @@ async def initialize_transaction(
         authorization_url=str(authorization_url),
         access_code=str(data.get("access_code") or ""),
     )
+
+
+async def charge_authorization(
+    *,
+    email: str,
+    amount: Decimal,
+    authorization_code: str,
+    reference: str,
+) -> ChargeResult:
+    """Charge a card already authorised by an earlier transaction.
+
+    This is what makes a subscription recur without the customer present: the
+    first payment goes through the hosted page and returns an authorization
+    code, and every renewal after that is server-side. Paystack answers
+    synchronously *and* fires a webhook, so the caller must treat both as the
+    same event — the reference is what keeps them idempotent.
+    """
+    payload = {
+        "email": email,
+        "amount": _to_minor_units(amount),
+        "currency": "KES",
+        "authorization_code": authorization_code,
+        "reference": reference,
+    }
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        try:
+            response = await client.post(
+                f"{settings.PAYSTACK_BASE_URL}/transaction/charge_authorization",
+                json=payload,
+                headers=_headers(),
+            )
+        except httpx.HTTPError as exc:
+            raise PaystackError(f"Could not reach Paystack: {exc}") from exc
+
+    body = _json(response)
+    if response.status_code >= 400 or not body.get("status"):
+        raise PaystackError(str(body.get("message") or "Paystack rejected the charge"))
+
+    data = body.get("data") or {}
+    state = str(data.get("status") or "unknown")
+    return ChargeResult(
+        reference=str(data.get("reference") or reference),
+        success=state == "success",
+        status=state,
+        amount=_from_minor_units(data.get("amount")),
+        paid_at=_parse_paid_at(data.get("paid_at") or data.get("paidAt")),
+        channel=str(data.get("channel")) if data.get("channel") else None,
+        gateway_response=str(data.get("gateway_response")) if data.get("gateway_response") else None,
+    )
+
+
+def read_authorization(body: dict[str, Any]) -> dict[str, str] | None:
+    """The reusable card handle out of a charge payload, when there is one.
+
+    Only a card leaves something chargeable behind — pay by bank transfer or
+    M-Pesa through Paystack and there is nothing to save, which is why a
+    subscription's first payment is restricted to the card channel.
+    """
+    data = body.get("data") or body
+    auth = data.get("authorization") or {}
+    code = auth.get("authorization_code")
+    if not code or not auth.get("reusable", True):
+        return None
+    return {
+        "authorization_code": str(code),
+        "last4": str(auth.get("last4") or ""),
+        "brand": str(auth.get("brand") or ""),
+    }
 
 
 async def verify_transaction(reference: str) -> ChargeResult:

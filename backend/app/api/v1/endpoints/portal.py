@@ -47,7 +47,6 @@ from app.services import (
     notification_service,
     operations_service,
     payment_service,
-    paystack_service,
     session_service,
     tenant_service,
 )
@@ -386,17 +385,6 @@ async def pay_rent(
     return PortalPayResponse(payment_id=payment.id, reference_code=payment.reference_code, message=message)
 
 
-class PortalCardPayRequest(BaseModel):
-    amount: Decimal = Field(gt=0)
-    email: str | None = Field(default=None, max_length=255)
-
-
-class PortalCardPayResponse(BaseModel):
-    payment_id: uuid.UUID
-    reference_code: str
-    authorization_url: str
-
-
 @router.get("/payment-methods", response_model=PortalPaymentMethods)
 async def portal_payment_methods(
     tenant: Tenant = Depends(get_current_tenant), db: AsyncSession = Depends(get_db)
@@ -410,43 +398,13 @@ async def portal_payment_methods(
 
     organization = await db.get(Organization, tenant.organization_id)
     bank = bank_transfer_service.instructions(organization) if organization else {"configured": False}
+    # An STK prompt is only offerable where the landlord has their own Daraja
+    # app. On PAYBILL or MANUAL the tenant pays the landlord the way they always
+    # have, and the payment is recorded rather than pushed.
+    creds = await mpesa_service.credentials_for(db, organization) if organization else None
     return PortalPaymentMethods(
-        mpesa=mpesa_service.is_configured(),
-        card=paystack_service.is_configured(),
+        mpesa=creds is not None,
         bank_transfer=bool(bank.get("configured")),
-    )
-
-
-@router.post("/pay/card", response_model=PortalCardPayResponse, status_code=status.HTTP_202_ACCEPTED)
-async def pay_rent_by_card(
-    payload: PortalCardPayRequest,
-    request: Request,
-    tenant: Tenant = Depends(get_current_tenant),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> PortalCardPayResponse:
-    """'Pay by card' — opens a Paystack checkout for tenants without M-Pesa."""
-    tenancy = await _active_tenancy(db, tenant)
-    if tenancy is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="You have no active tenancy to pay for"
-        )
-
-    context = await _operator_context(db, tenant, current_user)
-
-    payment, authorization_url = await payment_service.initiate_card_payment(
-        db,
-        context,
-        tenancy_id=tenancy.id,
-        amount=payload.amount,
-        email=payload.email or tenant.email,
-        callback_url=f"{settings.FRONTEND_URL}/portal/payments",
-        request=request,
-    )
-    return PortalCardPayResponse(
-        payment_id=payment.id,
-        reference_code=payment.reference_code,
-        authorization_url=authorization_url,
     )
 
 
