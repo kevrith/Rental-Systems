@@ -571,6 +571,82 @@ def process_scheduled_disbursements() -> dict[str, int]:
     return {"prepared": prepared, "skipped": skipped}
 
 
+@celery_app.task(name="rentflow.process_daily_disbursements")
+@monitored("rentflow.process_daily_disbursements")
+def process_daily_disbursements() -> dict[str, int]:
+    """Settle yesterday's rent for owners on daily disbursement.
+
+    The monthly run above prepares a disbursement and waits for an agency admin
+    to approve it. This one approves and pays in the same pass, which is why it
+    only touches owners who have `auto_disburse_daily` switched on — that flag is
+    the standing approval, and it is off by default.
+
+    Each owner is settled independently: one owner's failed payout must not stop
+    the rest of the run, and a failure leaves a FAILED disbursement behind whose
+    period is retried by tomorrow's pass rather than being lost.
+    """
+    from app.models.agency import OwnerProfile
+    from app.models.organization import OperatingMode
+    from app.services import agency_service
+
+    async def work(db: AsyncSession) -> tuple[int, int, int]:
+        today = date.today()
+        settled = 0
+        nothing_due = 0
+        failed = 0
+
+        profiles = await db.scalars(
+            select(OwnerProfile).where(
+                OwnerProfile.is_active.is_(True),
+                OwnerProfile.auto_disburse_daily.is_(True),
+            )
+        )
+        for profile in profiles:
+            org = await db.get(Organization, profile.organization_id)
+            if not org or org.operating_mode != OperatingMode.AGENCY:
+                continue
+
+            try:
+                disbursement = await agency_service.auto_settle_owner(db, profile, today)
+            except Exception:
+                # Includes a Daraja rejection, which `dispatch_mpesa_payout` has
+                # already recorded as FAILED and committed.
+                await db.rollback()
+                logger.exception("Daily settlement failed for owner %s", profile.id)
+                failed += 1
+                continue
+
+            if disbursement is None:
+                nothing_due += 1
+                continue
+
+            settled += 1
+            await notification_service.send(
+                db,
+                recipient=notification_service.Recipient(
+                    phone_number=profile.mpesa_phone or profile.phone_number
+                ),
+                notification_type=NotificationType.ACCOUNT,
+                title="Rent sent to you",
+                body=(
+                    f"KES {format_kes(disbursement.net_amount)} has been sent to you for "
+                    f"{disbursement.period_start} to {disbursement.period_end}. "
+                    f"Reference: {disbursement.reference_code}."
+                ),
+                channels=[NotificationChannel.WHATSAPP],
+                entity_type="disbursement",
+                entity_id=disbursement.id,
+                organization_id=profile.organization_id,
+            )
+
+        await db.commit()
+        return settled, nothing_due, failed
+
+    settled, nothing_due, failed = run_async(work)
+    logger.info("Daily settlement: %s paid, %s with nothing due, %s failed", settled, nothing_due, failed)
+    return {"settled": settled, "nothing_due": nothing_due, "failed": failed}
+
+
 # ------------------------------------------------------------------ housekeeping
 
 

@@ -111,6 +111,13 @@ celery_app.conf.update(
             "task": "rentflow.process_scheduled_disbursements",
             "schedule": crontab(hour=7, minute=30),
         },
+        # Settle owners who are on daily disbursement, for rent that cleared
+        # yesterday. Early enough that the money is with them before the working
+        # day, and after the 00:15 status refresh so the period is closed.
+        "process-daily-disbursements": {
+            "task": "rentflow.process_daily_disbursements",
+            "schedule": crontab(hour=6, minute=30),
+        },
         # Phase 2: Escalate arrears into formal demand letters at 60 and 90 days.
         # Runs after late fees so a letter states the fee-inclusive balance.
         "issue-demand-letters": {

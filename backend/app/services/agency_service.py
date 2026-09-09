@@ -4,8 +4,9 @@ Handles owner profile CRUD, management fee calculation, disbursement
 calculation and initiation, and owner statement generation.
 """
 
+import logging
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import HTTPException, status
@@ -19,7 +20,7 @@ from app.models.notification import NotificationChannel, NotificationType
 from app.models.organization import OperatingMode
 from app.models.property import Property, Unit
 from app.models.tenant import Tenancy
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 from app.services import (
     audit_service,
     file_service,
@@ -29,6 +30,8 @@ from app.services import (
     reference_service,
 )
 from app.services.pdf_service import format_kes
+
+logger = logging.getLogger("rentflow.agency")
 
 ZERO = Decimal("0.00")
 
@@ -134,6 +137,8 @@ async def update_owner_profile(
         "mpesa_phone",
         "management_fee_percent",
         "disbursement_day",
+        "auto_disburse_daily",
+        "auto_disburse_minimum",
         "maintenance_auto_approve_limit",
         "maintenance_notify_limit",
         "notes",
@@ -578,6 +583,31 @@ async def initiate_mpesa_payout(
         )
 
     try:
+        await dispatch_mpesa_payout(db, disbursement, destination, actor=context.user)
+    except mpesa_service.MpesaError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    await db.refresh(disbursement)
+    return disbursement
+
+
+async def dispatch_mpesa_payout(
+    db: AsyncSession,
+    disbursement: Disbursement,
+    destination: str,
+    *,
+    actor: User | None = None,
+) -> Disbursement:
+    """Send an approved disbursement to `destination` over Daraja B2C.
+
+    The mechanics alone, with no permission or status checks and no request
+    context, so the nightly scheduler moves money down exactly the same path as
+    the agency clicking "pay" — a divergence between those two would be a
+    divergence in how rent reaches an owner. Callers that need an HTTP response
+    translate `MpesaError` themselves; this commits either way so a rejected
+    payout is still recorded as FAILED.
+    """
+    try:
         result = await mpesa_service.initiate_b2c_payment(
             phone_number=destination,
             amount=Decimal(disbursement.net_amount),
@@ -591,16 +621,16 @@ async def initiate_mpesa_payout(
         disbursement.failure_reason = str(exc)[:512]
         audit_service.record(
             db,
-            organization_id=context.organization_id,
+            organization_id=disbursement.organization_id,
             action="disbursement.payout_rejected",
             entity_type="disbursement",
             entity_id=disbursement.id,
-            actor=context.user,
+            actor=actor,
             summary=f"M-Pesa rejected the payout for {disbursement.reference_code}: {exc}",
         )
         await db.commit()
         await db.refresh(disbursement)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise
 
     disbursement.status = DisbursementStatus.PROCESSING
     disbursement.payment_method = "mpesa"
@@ -611,11 +641,11 @@ async def initiate_mpesa_payout(
 
     audit_service.record(
         db,
-        organization_id=context.organization_id,
+        organization_id=disbursement.organization_id,
         action="disbursement.payout_initiated",
         entity_type="disbursement",
         entity_id=disbursement.id,
-        actor=context.user,
+        actor=actor,
         summary=(
             f"Sent KES {format_kes(disbursement.net_amount)} to {destination} "
             f"for {disbursement.reference_code} ({result.response_description})"
@@ -633,7 +663,101 @@ async def initiate_mpesa_payout(
         )
 
     await db.commit()
-    await db.refresh(disbursement)
+    return disbursement
+
+
+async def next_auto_period(db: AsyncSession, profile: OwnerProfile, today: date) -> tuple[date, date]:
+    """The window a daily settlement should cover for this owner.
+
+    Starts the day after whatever was last settled, so a day the run was down —
+    or an amount that sat under the minimum — is picked up by the next run rather
+    than silently skipped. With no prior disbursement it reaches back to the
+    owner's first confirmed rent, which also makes the first run after switching
+    the setting on settle the backlog instead of one day of it.
+
+    Ends yesterday: today's payments are still arriving.
+    """
+    period_end = today - timedelta(days=1)
+
+    last_end = await db.scalar(
+        select(func.max(Disbursement.period_end)).where(
+            Disbursement.owner_profile_id == profile.id,
+            Disbursement.status != DisbursementStatus.REJECTED,
+        )
+    )
+    if last_end is not None:
+        return last_end + timedelta(days=1), period_end
+
+    earliest = await db.scalar(
+        select(func.min(Payment.payment_date))
+        .join(Tenancy, Tenancy.id == Payment.tenancy_id)
+        .join(Unit, Unit.id == Tenancy.unit_id)
+        .join(Property, Property.id == Unit.property_id)
+        .where(
+            Property.owner_profile_id == profile.id,
+            Payment.status == PaymentStatus.CONFIRMED,
+        )
+    )
+    return (earliest or period_end), period_end
+
+
+async def auto_settle_owner(db: AsyncSession, profile: OwnerProfile, today: date) -> Disbursement | None:
+    """Settle one owner's rent for the period since their last disbursement.
+
+    Returns the disbursement when money was actually sent, and None when there
+    was nothing to send — no window, nothing collected, or a net under the
+    owner's minimum. Unlike the monthly run this approves as it goes: opting into
+    daily settlement *is* the standing approval, which is why the setting is per
+    owner and off by default.
+    """
+    period_start, period_end = await next_auto_period(db, profile, today)
+    if period_start > period_end:
+        return None
+
+    destination = profile.mpesa_phone or profile.phone_number
+    if not destination:
+        logger.warning("Skipped daily settlement for owner %s: no M-Pesa number on file", profile.id)
+        return None
+
+    calc = await calculate_for_profile(db, profile, period_start, period_end)
+    net = Decimal(calc["net_amount"])
+    if net < Decimal(profile.auto_disburse_minimum):
+        # Left unsettled on purpose: the window rolls forward, so this money is
+        # picked up by the first run that clears the minimum.
+        return None
+
+    code = await reference_service.generate_reference(db, Disbursement, profile.organization_id, "DSB")
+    disbursement = Disbursement(
+        organization_id=profile.organization_id,
+        reference_code=code,
+        owner_profile_id=profile.id,
+        period_start=period_start,
+        period_end=period_end,
+        gross_rent=calc["gross_rent"],
+        management_fee=calc["management_fee"],
+        maintenance_costs=calc["maintenance_costs"],
+        other_deductions=calc["other_deductions"],
+        net_amount=net,
+        status=DisbursementStatus.APPROVED,
+        approved_at=datetime.now(UTC),
+        notes="Settled automatically under daily disbursement",
+    )
+    db.add(disbursement)
+    await db.flush()
+
+    audit_service.record(
+        db,
+        organization_id=profile.organization_id,
+        action="disbursement.auto_approved",
+        entity_type="disbursement",
+        entity_id=disbursement.id,
+        summary=(
+            f"Daily settlement for {profile.full_name}: KES {format_kes(net)} "
+            f"covering {period_start} to {period_end}"
+        ),
+    )
+
+    await dispatch_mpesa_payout(db, disbursement, destination)
     return disbursement
 
 

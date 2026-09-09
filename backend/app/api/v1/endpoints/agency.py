@@ -52,6 +52,10 @@ class OwnerProfileUpdate(BaseModel):
     mpesa_phone: str | None = None
     management_fee_percent: Decimal | None = None
     disbursement_day: int | None = Field(default=None, ge=1, le=28)
+    # Turning this on authorises payouts to this owner without a per-payout
+    # approval; `disbursement_day` stops being consulted while it is set.
+    auto_disburse_daily: bool | None = None
+    auto_disburse_minimum: Decimal | None = Field(default=None, ge=0)
     maintenance_auto_approve_limit: Decimal | None = None
     maintenance_notify_limit: Decimal | None = None
     notes: str | None = None

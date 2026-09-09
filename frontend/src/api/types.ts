@@ -656,6 +656,8 @@ export interface OwnerProfile {
   mpesa_phone: string | null
   management_fee_percent: string
   disbursement_day: number
+  auto_disburse_daily: boolean
+  auto_disburse_minimum: string
   maintenance_auto_approve_limit: string
   maintenance_notify_limit: string
   portal_user_id: string | null

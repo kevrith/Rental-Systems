@@ -44,6 +44,8 @@ const schema = z.object({
     .int()
     .min(1, 'Pick a day between 1 and 28')
     .max(28, 'Use 28 or lower so every month has that day'),
+  auto_disburse_daily: z.boolean(),
+  auto_disburse_minimum: z.coerce.number().min(0, 'Cannot be negative'),
   maintenance_auto_approve_limit: z.coerce.number().min(0, 'Cannot be negative'),
   maintenance_notify_limit: z.coerce.number().min(0, 'Cannot be negative'),
   notes: z.string().optional(),
@@ -76,6 +78,8 @@ export function OwnerProfileFormPage() {
     defaultValues: {
       management_fee_percent: 8,
       disbursement_day: 5,
+      auto_disburse_daily: false,
+      auto_disburse_minimum: 1000,
       maintenance_auto_approve_limit: 5000,
       maintenance_notify_limit: 20000,
     },
@@ -96,6 +100,8 @@ export function OwnerProfileFormPage() {
       mpesa_phone: owner.mpesa_phone ?? '',
       management_fee_percent: Number(owner.management_fee_percent),
       disbursement_day: owner.disbursement_day,
+      auto_disburse_daily: owner.auto_disburse_daily,
+      auto_disburse_minimum: Number(owner.auto_disburse_minimum),
       maintenance_auto_approve_limit: Number(owner.maintenance_auto_approve_limit),
       maintenance_notify_limit: Number(owner.maintenance_notify_limit),
       notes: owner.notes ?? '',
@@ -115,6 +121,14 @@ export function OwnerProfileFormPage() {
         mpesa_phone: values.mpesa_phone || null,
         notes: values.notes || null,
         management_fee_percent: String(values.management_fee_percent),
+        // Only the update endpoint accepts these; an owner is created first and
+        // put on automatic payouts as a separate, deliberate step.
+        ...(isEdit
+          ? {
+              auto_disburse_daily: values.auto_disburse_daily,
+              auto_disburse_minimum: String(values.auto_disburse_minimum),
+            }
+          : {}),
         maintenance_auto_approve_limit: String(values.maintenance_auto_approve_limit),
         maintenance_notify_limit: String(values.maintenance_notify_limit),
       }
@@ -229,6 +243,30 @@ export function OwnerProfileFormPage() {
             >
               <Input {...register('disbursement_day')} type="number" min={1} max={28} />
             </Field>
+            {isEdit && (
+              <>
+                <Field
+                  label="Pay out daily, automatically"
+                  hint="Sends their net rent the morning after it clears, without waiting for you to approve each payout. The disbursement day above is ignored while this is on."
+                >
+                  <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-brand-600"
+                      {...register('auto_disburse_daily')}
+                    />
+                    Settle this owner every day
+                  </label>
+                </Field>
+                <Field
+                  label="Minimum to send (KES)"
+                  hint="Below this, the money rolls into the next day rather than paying an M-Pesa fee on a small amount."
+                  error={errors.auto_disburse_minimum?.message}
+                >
+                  <Input {...register('auto_disburse_minimum')} type="number" step="1" min={0} />
+                </Field>
+              </>
+            )}
             <Field
               label="Auto-approve repairs up to (KES)"
               hint="You proceed without asking the owner."

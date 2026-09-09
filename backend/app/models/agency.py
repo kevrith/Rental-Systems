@@ -21,6 +21,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -78,6 +79,21 @@ class OwnerProfile(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Numeric(5, 2), default=Decimal("8.00"), nullable=False
     )
     disbursement_day: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+
+    # Daily auto-disbursement. Off by default: this is the one setting that moves
+    # an owner's money with nobody reviewing it first, so it is opted into per
+    # owner rather than inherited. When on, `disbursement_day` is ignored — rent
+    # is settled the morning after it clears instead of once a month.
+    #
+    # The minimum exists because every B2C push costs a fee: settling KES 200
+    # daily would spend more on transfers than the monthly run does in a year.
+    # Anything under it simply rolls into the next day's period.
+    auto_disburse_daily: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False, index=True
+    )
+    auto_disburse_minimum: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("1000.00"), server_default=text("1000.00"), nullable=False
+    )
     # Maintenance spending authority thresholds (KES)
     maintenance_auto_approve_limit: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), default=Decimal("5000.00"), nullable=False
