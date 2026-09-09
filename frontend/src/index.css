@@ -79,6 +79,10 @@ body,
 html,
 body {
   overflow-x: hidden;
+  /* Without this, swiping past the left/right edge on Android still shows a
+     brief elastic bounce revealing blank canvas — harmless, but easy to
+     mistake for a layout bug when someone is deliberately testing width. */
+  overscroll-behavior-x: none;
 }
 
 /* In-page anchors (the landing page nav) glide rather than jump. */
