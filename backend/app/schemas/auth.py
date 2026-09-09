@@ -60,6 +60,10 @@ class VerifyLoginOtpRequest(BaseModel):
     remember_device: bool = False
 
 
+class ResendLoginOtpRequest(BaseModel):
+    challenge_token: str
+
+
 class GoogleAuthRequest(BaseModel):
     credential: str = Field(description="The ID token Google Identity Services hands back on sign-in")
 

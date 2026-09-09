@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
 import { AlertCircle, Fingerprint, ShieldCheck } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
@@ -94,6 +94,28 @@ export function LoginPage() {
     onError: (error) => setServerError(errorMessage(error, 'Invalid or expired code.')),
   })
 
+  // Matches the backend's own 30-second cooldown between resends (it enforces
+  // this regardless — the countdown here just avoids sending a request that
+  // is only going to come back 429).
+  const [resendCooldown, setResendCooldown] = useState(0)
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setInterval(() => setResendCooldown((seconds) => Math.max(0, seconds - 1)), 1000)
+    return () => clearInterval(timer)
+  }, [resendCooldown])
+
+  const resendMutation = useMutation({
+    mutationFn: async () => {
+      if (!challenge) throw new Error('No active login challenge')
+      return authApi.resendLoginOtp(challenge.token)
+    },
+    onSuccess: () => {
+      setServerError(null)
+      setResendCooldown(30)
+    },
+    onError: (error) => setServerError(errorMessage(error, 'Could not resend the code.')),
+  })
+
   const signInWithPasskey = async () => {
     if (!challenge?.webauthnOptions) return
     setServerError(null)
@@ -172,6 +194,19 @@ export function LoginPage() {
               {passkeyPending ? 'Waiting for your passkey…' : 'Use your passkey instead'}
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => resendMutation.mutate()}
+            disabled={resendCooldown > 0 || resendMutation.isPending}
+            className="w-full text-center text-sm text-brand-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
+          >
+            {resendCooldown > 0
+              ? `Resend code in ${resendCooldown}s`
+              : resendMutation.isPending
+                ? 'Sending…'
+                : 'Resend code'}
+          </button>
 
           <button
             type="button"

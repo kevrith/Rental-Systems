@@ -129,6 +129,83 @@ async def test_wrong_otp_is_rejected(client: AsyncClient) -> None:
     assert response.status_code == 401
 
 
+async def test_resend_sends_a_new_code_and_invalidates_the_old_one(client: AsyncClient, fake_redis) -> None:
+    payload = await _register(client)
+    register = await client.post("/api/v1/auth/register", json=payload)
+    user_id = register.json()["user"]["id"]
+
+    challenge = await client.post(
+        "/api/v1/auth/login", json={"email": payload["email"], "password": PASSWORD}
+    )
+    first_code = await fake_redis.get(f"otp:login:{user_id}")
+
+    resend = await client.post(
+        "/api/v1/auth/login/resend-otp", json={"challenge_token": challenge.json()["challenge_token"]}
+    )
+    assert resend.status_code == 200, resend.text
+
+    second_code = await fake_redis.get(f"otp:login:{user_id}")
+    assert second_code != first_code
+
+    # The old code no longer works — resend replaced it, it did not add to it.
+    stale = await client.post(
+        "/api/v1/auth/login/verify-otp",
+        json={"challenge_token": challenge.json()["challenge_token"], "otp_code": first_code},
+    )
+    assert stale.status_code == 401
+
+    # The new code, from the same challenge, still completes the login.
+    verified = await client.post(
+        "/api/v1/auth/login/verify-otp",
+        json={"challenge_token": challenge.json()["challenge_token"], "otp_code": second_code},
+    )
+    assert verified.status_code == 200, verified.text
+
+
+async def test_resend_is_refused_for_an_unknown_challenge(client: AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/auth/login/resend-otp", json={"challenge_token": "not-a-real-token"}
+    )
+    assert response.status_code == 401
+
+
+async def test_resend_is_rate_limited_per_challenge(client: AsyncClient) -> None:
+    """Every resend is a real SMS; a stuck button must not run up the bill."""
+    payload = await _register(client)
+    await client.post("/api/v1/auth/register", json=payload)
+    challenge = await client.post(
+        "/api/v1/auth/login", json={"email": payload["email"], "password": PASSWORD}
+    )
+    token = challenge.json()["challenge_token"]
+
+    first = await client.post("/api/v1/auth/login/resend-otp", json={"challenge_token": token})
+    assert first.status_code == 200, first.text
+
+    immediate_retry = await client.post("/api/v1/auth/login/resend-otp", json={"challenge_token": token})
+    assert immediate_retry.status_code == 429
+
+
+async def test_resend_has_a_hard_cap_per_challenge(client: AsyncClient, fake_redis) -> None:
+    from app.services import auth_service
+
+    payload = await _register(client)
+    await client.post("/api/v1/auth/register", json=payload)
+    challenge = await client.post(
+        "/api/v1/auth/login", json={"email": payload["email"], "password": PASSWORD}
+    )
+    token = challenge.json()["challenge_token"]
+
+    for _ in range(auth_service.LOGIN_OTP_RESEND_MAX_PER_CHALLENGE):
+        ok = await client.post("/api/v1/auth/login/resend-otp", json={"challenge_token": token})
+        assert ok.status_code == 200, ok.text
+        # Clear only the cooldown between attempts, so the next call is tested
+        # against the per-challenge cap rather than blocked by the cooldown.
+        await fake_redis.delete(f"otp:resend_cooldown:login:{token}")
+
+    over_the_cap = await client.post("/api/v1/auth/login/resend-otp", json={"challenge_token": token})
+    assert over_the_cap.status_code == 429
+
+
 async def test_bad_password_is_rejected(client: AsyncClient) -> None:
     payload = await _register(client)
     await client.post("/api/v1/auth/register", json=payload)

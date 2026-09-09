@@ -22,6 +22,7 @@ from app.schemas.auth import (
     RegisterRequest,
     RegisterResponse,
     ResendEmailVerificationRequest,
+    ResendLoginOtpRequest,
     ResetPasswordRequest,
     SessionRead,
     TokenResponse,
@@ -73,6 +74,15 @@ async def google_register(
     org/account-type/phone details `/auth/google` couldn't get from Google."""
     organization, user, tokens = await auth_service.register_organization_with_google(db, payload, request)
     return RegisterResponse(organization=organization, user=user, tokens=tokens)  # type: ignore[arg-type]
+
+
+@router.post("/login/resend-otp", response_model=MessageResponse)
+async def resend_login_otp(
+    payload: ResendLoginOtpRequest, db: AsyncSession = Depends(get_db)
+) -> MessageResponse:
+    """Send a fresh login code without starting over — the password was already
+    checked to get this challenge token."""
+    return await auth_service.resend_login_otp(db, payload.challenge_token)
 
 
 @router.post("/login/verify-otp", response_model=TokenResponse)

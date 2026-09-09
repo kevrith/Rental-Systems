@@ -25,6 +25,7 @@ from app.schemas.auth import (
     GoogleRegisterRequest,
     LoginChallengeResponse,
     LoginRequest,
+    MessageResponse,
     RegisterRequest,
     TokenResponse,
 )
@@ -41,6 +42,13 @@ from app.services.notifications import get_email_notifier, get_sms_notifier, nor
 
 LOGIN_OTP_PURPOSE = "login"
 PHONE_VERIFICATION_PURPOSE = "phone_verification"
+
+# Resending a login code costs a real SMS, so both a per-attempt cooldown and a
+# hard cap per challenge exist — a lost or slow message is one tap away, but a
+# stuck "resend" button (or someone poking the endpoint) cannot run up an
+# unbounded bill against one login attempt.
+LOGIN_OTP_RESEND_COOLDOWN_SECONDS = 30
+LOGIN_OTP_RESEND_MAX_PER_CHALLENGE = 3
 
 
 def _slugify(name: str) -> str:
@@ -442,6 +450,49 @@ async def initiate_login(
         message=f"Enter the code sent to {_mask_phone(user.phone_number)}",
         webauthn_options=webauthn_options,
     )
+
+
+async def resend_login_otp(db: AsyncSession, challenge_token: str) -> MessageResponse:
+    """Send a fresh code for a login already in progress — no password needed.
+
+    Safe to expose without re-authenticating: `challenge_token` only exists
+    because `initiate_login` already checked the password, so this cannot be
+    used to probe for a valid account or bypass anything. What it must guard
+    against instead is cost — every call sends a real SMS.
+    """
+    challenge = await otp_service.resolve_login_challenge(challenge_token)
+    if not challenge:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Login session expired — please log in again"
+        )
+    user_id = challenge["user_id"]
+
+    cooldown_key = f"otp:resend_cooldown:login:{challenge_token}"
+    if not await redis_client.set(cooldown_key, "1", ex=LOGIN_OTP_RESEND_COOLDOWN_SECONDS, nx=True):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Please wait a moment before requesting another code",
+        )
+
+    count_key = f"otp:resend_count:login:{challenge_token}"
+    count = await redis_client.incr(count_key)
+    if count == 1:
+        await redis_client.expire(count_key, settings.OTP_TTL_SECONDS)
+    if count > LOGIN_OTP_RESEND_MAX_PER_CHALLENGE:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many codes requested — please log in again",
+        )
+
+    user = await db.get(User, user_id)
+    if not user or not user.is_active or user.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+
+    code = await otp_service.generate_otp(LOGIN_OTP_PURPOSE, str(user.id))
+    await get_sms_notifier().send(
+        user.phone_number, f"Your RentFlow login code is {code}. It expires in 5 minutes."
+    )
+    return MessageResponse(message=f"A new code was sent to {_mask_phone(user.phone_number)}")
 
 
 async def complete_login(

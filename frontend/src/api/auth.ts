@@ -81,6 +81,9 @@ export const authApi = {
     remember_device?: boolean
   }) => (await apiClient.post<TokenResponse>('/auth/login/verify-otp', payload)).data,
 
+  resendLoginOtp: async (challenge_token: string) =>
+    (await apiClient.post<{ message: string }>('/auth/login/resend-otp', { challenge_token })).data,
+
   logout: async (refresh_token: string | null) =>
     (await apiClient.post<{ message: string }>('/auth/logout', { refresh_token })).data,
 
