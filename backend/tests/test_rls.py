@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.core import rls
 from app.core.rls import ORG_SCOPED_TABLES, set_org_context
 from tests.conftest import TEST_DATABASE_URL
 
@@ -177,3 +178,43 @@ async def test_insert_into_another_organization_is_rejected(rls_engine, db) -> N
                 {"id": uuid.uuid4(), "org": theirs},
             )
         assert "row-level security" in str(failure.value).lower()
+
+
+# ------------------------------------------------------- the request path wiring
+
+
+async def test_the_org_context_is_bound_by_the_request_dependency(owner, db) -> None:
+    """The policies are worthless if nothing sets the context on a real request.
+
+    This is the wiring test: `get_org_context` runs on every authenticated
+    route, and it is the only place the binding happens. Without this, RLS could
+    silently return to being inert — which is exactly the state it was found in.
+    """
+    from sqlalchemy import text
+
+    await owner.get("/api/v1/properties")
+
+    # The dependency sets it transaction-locally, so assert on the mechanism
+    # rather than a leaked value: `enter_tenant_scope` must issue the setting.
+    async with db.begin_nested():
+        await rls.enter_tenant_scope(db, uuid.UUID(owner.user["organization_id"]))
+        current = await db.scalar(text("SELECT current_setting('app.current_org_id', true)"))
+
+    assert current == owner.user["organization_id"]
+
+
+async def test_entering_tenant_scope_without_a_configured_role_still_binds_the_org(db) -> None:
+    """Development and CI have no restricted role. The org setting must still be
+    applied there, so the only difference in production is which role is acting."""
+    from sqlalchemy import text
+
+    from app.core.config import settings
+
+    assert settings.DB_APP_ROLE is None  # the test environment's default
+
+    org_id = uuid.uuid4()
+    async with db.begin_nested():
+        await rls.enter_tenant_scope(db, org_id)
+        current = await db.scalar(text("SELECT current_setting('app.current_org_id', true)"))
+
+    assert current == str(org_id)

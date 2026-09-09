@@ -21,6 +21,8 @@ from collections.abc import Sequence
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
+
 # Every tenant-owned table. `organizations` and `users` are keyed differently and
 # are handled by their own policies below.
 # Split by the migration that creates the tables: a migration can only build
@@ -303,6 +305,38 @@ def disable_statements(tables: Sequence[str] = ORG_SCOPED_TABLES) -> list[str]:
     statements.extend(disable_table_statements(tables))
     statements.append("DROP FUNCTION IF EXISTS app_current_org_id()")
     return statements
+
+
+async def enter_tenant_scope(db: AsyncSession, organization_id: uuid.UUID) -> None:
+    """Bind this transaction to one organisation *and* drop to the restricted role.
+
+    Both halves are needed. The policies compare against `app.current_org_id`,
+    but a table owner bypasses them entirely — so setting the context while
+    connected as the owner enforces nothing. `SET LOCAL ROLE` switches to a role
+    that owns no tables, for this transaction only, which is what makes the
+    policies bind.
+
+    Doing it this way rather than with a second connection pool is deliberate.
+    Plenty of legitimate work is cross-organisation — logging in (the user is
+    found by email before any org is known), Safaricom's callback, Celery
+    sweeps — and none of it passes through here, so all of it keeps the owner's
+    reach without a separate engine or a rewrite of every `Depends(get_db)`.
+
+    `SET LOCAL` unwinds when the transaction ends, so a pooled connection is
+    never handed to the next request still wearing the restricted role.
+
+    Skipped when `DB_APP_ROLE` is unset, which is the default for development
+    and CI: `SET ROLE` to a role that does not exist would turn every
+    authenticated request into a 500. Production sets it; `tests/test_rls.py`
+    exercises the policies directly against a role it creates itself.
+    """
+    await set_org_context(db, organization_id)
+
+    role = settings.DB_APP_ROLE
+    if role:
+        # The role name comes from configuration, never a request, and is
+        # validated on the way in — `SET ROLE` cannot take a bind parameter.
+        await db.execute(text(f"SET LOCAL ROLE {role}"))
 
 
 async def set_org_context(db: AsyncSession, organization_id: uuid.UUID | None) -> None:

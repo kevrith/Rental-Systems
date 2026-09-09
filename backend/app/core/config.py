@@ -1,5 +1,7 @@
+import re
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,6 +36,25 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str
     DATABASE_URL_SYNC: str | None = None
+    # The unprivileged role authenticated requests drop to, so PostgreSQL's
+    # row-level policies actually bind (a table owner bypasses them). Unset in
+    # development and CI, where the role does not exist; set in production once
+    # `scripts/create_app_role.sql` has been run. See
+    # docs/deployment-database-roles.md.
+    DB_APP_ROLE: str | None = None
+
+    @field_validator("DB_APP_ROLE")
+    @classmethod
+    def _validate_db_app_role(cls, value: str | None) -> str | None:
+        """A plain SQL identifier, because `SET ROLE` cannot take a parameter.
+
+        This comes from the deployment's own environment rather than a request,
+        so it is not an injection surface today — but it is interpolated into
+        SQL, and the cost of it becoming one later is the whole isolation model.
+        """
+        if value and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+            raise ValueError("DB_APP_ROLE must be a plain SQL identifier")
+        return value
 
     # Redis / Celery
     REDIS_URL: str = "redis://localhost:6379/0"

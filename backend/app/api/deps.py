@@ -19,6 +19,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import rls
 from app.core.database import get_db
 from app.core.permissions import (
     PROPERTY_SCOPED_ROLES,
@@ -94,6 +95,19 @@ async def get_org_context(
         if organization.suspension_reason:
             detail = f"{detail} Reason: {organization.suspension_reason}"
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+    # Bind the transaction to this organisation so Postgres' own row-level
+    # policies can enforce isolation underneath the application's WHERE clauses.
+    # Every authenticated request passes through here, which is what makes this
+    # the one place it has to happen.
+    #
+    # Whether it bites depends on the database role: a table owner bypasses RLS,
+    # so this is inert unless `DATABASE_URL` points at the restricted app role
+    # (see `docs/deployment-database-roles.md`). Setting it unconditionally is
+    # deliberate — the alternative is a security control that only works if
+    # someone remembers to switch it on at the same time as the role.
+    await rls.enter_tenant_scope(db, organization.id)
+
     return OrgContext(user=current_user, organization=organization)
 
 
