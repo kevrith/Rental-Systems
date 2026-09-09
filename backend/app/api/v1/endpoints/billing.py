@@ -1,3 +1,4 @@
+import json
 import logging
 import uuid
 from datetime import date
@@ -52,6 +53,7 @@ from app.services import (
     mpesa_service,
     notification_service,
     payment_service,
+    paystack_service,
     tenant_service,
 )
 from app.services.pdf_service import format_kes
@@ -62,6 +64,7 @@ invoices_router = APIRouter()
 payments_router = APIRouter()
 arrears_router = APIRouter()
 mpesa_router = APIRouter()
+paystack_router = APIRouter()
 
 
 async def _invoice_detail(db: AsyncSession, invoice: Invoice) -> InvoiceDetail:
@@ -549,6 +552,32 @@ async def mpesa_b2c_timeout(request: Request, db: AsyncSession = Depends(get_db)
             db, conversation_id, "M-Pesa timed out before processing the payout"
         )
     return {"ResultCode": "0", "ResultDesc": "Accepted"}
+
+
+# ------------------------------------------------------------------ Paystack webhook
+
+
+@paystack_router.post("/webhook")
+async def paystack_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+    """Paystack's charge webhook.
+
+    Unauthenticated in the session sense — Paystack calls it — but every body is
+    HMAC-verified against the secret key before it is parsed. An unsigned or
+    mis-signed delivery is refused with a 401 so it is visible in Paystack's own
+    dashboard; a verified one is always answered 200, because a non-200 makes
+    Paystack retry for days.
+    """
+    raw = await request.body()
+    if not paystack_service.verify_webhook_signature(raw, request.headers.get("x-paystack-signature")):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid signature")
+
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        return {"status": "accepted", "detail": "Ignored: malformed body"}
+
+    outcome = await payment_service.handle_paystack_event(db, body)
+    return {"status": "accepted", "detail": outcome}
 
 
 # ------------------------------------------------------------------ demand letters

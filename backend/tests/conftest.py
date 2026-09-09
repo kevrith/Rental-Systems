@@ -18,6 +18,7 @@ from app.core.database import Base, get_db
 from app.core.rls import enable_statements
 from app.main import app
 from app.models.user import UserRole
+from app.services import notifications
 
 # Tests run against a scratch database created and dropped per session, so they
 # never touch the developer's working data.
@@ -101,6 +102,7 @@ def fake_redis(monkeypatch: pytest.MonkeyPatch) -> fakeredis.FakeAsyncRedis:
         "app.services.otp_service",
         "app.services.auth_service",
         "app.services.mpesa_service",
+        "app.services.paystack_service",
         "app.services.api_key_service",
         "app.services.ai_service",
         "app.services.webauthn_service",
@@ -110,6 +112,39 @@ def fake_redis(monkeypatch: pytest.MonkeyPatch) -> fakeredis.FakeAsyncRedis:
     ):
         monkeypatch.setattr(f"{module}.redis_client", client, raising=False)
     return client
+
+
+@pytest.fixture(autouse=True)
+def offline_providers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the suite off the network.
+
+    A developer's `.env` carries real Africa's Talking, Resend and WhatsApp
+    credentials, and `settings` is loaded from it here just as it is in the app.
+    Without this the suite sends live SMS and email on every run — slow enough to
+    take the wall time from a couple of minutes to twenty-plus, dependent on a
+    provider being reachable, and one un-blacklisted fixture number away from
+    texting a real person at RentFlow's expense.
+
+    Blanking the credentials selects each provider's existing Console fallback,
+    which is the same path CI takes with no secrets configured — so this changes
+    which transport runs, never which notifications the app decides to send. The
+    `lru_cache`d selectors are cleared either side because they memoise the
+    choice on first use.
+    """
+    for name in (
+        "AFRICAS_TALKING_USERNAME",
+        "AFRICAS_TALKING_API_KEY",
+        "RESEND_API_KEY",
+        "WHATSAPP_API_TOKEN",
+        "WHATSAPP_PHONE_NUMBER_ID",
+    ):
+        monkeypatch.setattr(settings, name, None)
+
+    notifications.get_sms_notifier.cache_clear()
+    notifications.get_email_notifier.cache_clear()
+    yield
+    notifications.get_sms_notifier.cache_clear()
+    notifications.get_email_notifier.cache_clear()
 
 
 @pytest.fixture(autouse=True)

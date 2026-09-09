@@ -38,6 +38,7 @@ from app.services import (
     mpesa_service,
     notification_service,
     nps_service,
+    paystack_service,
     receipt_service,
     reference_service,
     webhook_service,
@@ -672,6 +673,151 @@ async def handle_callback(db: AsyncSession, body: dict) -> str:
     except IntegrityError:
         await db.rollback()
         return "Duplicate M-Pesa receipt ignored"
+    return "Payment confirmed"
+
+
+# ------------------------------------------------------------------ card (Paystack)
+
+
+async def initiate_card_payment(
+    db: AsyncSession,
+    context: OrgContext,
+    *,
+    tenancy_id: uuid.UUID,
+    amount: Decimal,
+    email: str | None = None,
+    callback_url: str,
+    request: Request | None = None,
+) -> tuple[Payment, str]:
+    """Create a pending card payment and get the Paystack URL to send them to."""
+    if amount <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Amount must be positive")
+    if not paystack_service.is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Card payments are not enabled for this organisation",
+        )
+
+    tenancy = await _load_tenancy(db, context, tenancy_id)
+    tenant = await db.get(Tenant, tenancy.tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+
+    # Paystack requires an email to open a transaction. A tenant who has never
+    # given one still gets to pay: the reference is unique per payment, so a
+    # per-tenant placeholder address is safe to route receipts we do not send.
+    payer_email = email or tenant.email or f"{tenant.reference_code.lower()}@tenants.rentflow.co.ke"
+
+    code = await reference_service.generate_reference(db, Payment, context.organization_id, "PMT")
+    payment = Payment(
+        organization_id=context.organization_id,
+        reference_code=code,
+        tenancy_id=tenancy.id,
+        amount=amount,
+        method=PaymentMethod.CARD,
+        status=PaymentStatus.PENDING,
+        recorded_by_id=context.user.id,
+    )
+    db.add(payment)
+    await db.flush()
+
+    try:
+        result = await paystack_service.initialize_transaction(
+            email=payer_email,
+            amount=amount,
+            payment_id=payment.id,
+            tenancy_reference=tenancy.reference_code,
+            callback_url=callback_url,
+        )
+    except paystack_service.PaystackError as exc:
+        payment.status = PaymentStatus.FAILED
+        payment.failure_reason = str(exc)[:500]
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Card payment failed: {exc}"
+        ) from exc
+
+    payment.paystack_reference = result.reference
+
+    audit_service.record(
+        db,
+        organization_id=context.organization_id,
+        action="payment.card_initiated",
+        entity_type="payment",
+        entity_id=payment.id,
+        actor=context.user,
+        summary=f"Card payment of KES {format_kes(amount)} opened with Paystack",
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(payment)
+    return payment, result.authorization_url
+
+
+async def handle_paystack_event(db: AsyncSession, body: dict) -> str:
+    """Process one signature-verified Paystack webhook. Never raises, so a
+    delivery is always answered 200 and Paystack stops retrying."""
+    try:
+        result = paystack_service.parse_event(body)
+    except paystack_service.PaystackError as exc:
+        # Unauthenticated endpoint — the exception's own message never goes back
+        # in the response, only a fixed string does.
+        logger.warning("Ignored Paystack webhook: %s", exc)
+        return "Ignored: invalid event"
+
+    if not await paystack_service.claim_webhook(result.reference):
+        return "Duplicate event ignored"
+
+    payment = await db.scalar(
+        select(Payment)
+        .options(selectinload(Payment.receipt), selectinload(Payment.invoice))
+        .where(Payment.paystack_reference == result.reference)
+    )
+    if payment is None:
+        return "No matching payment"
+    if payment.status == PaymentStatus.CONFIRMED:
+        return "Payment already confirmed"
+
+    if not result.success:
+        payment.status = PaymentStatus.FAILED
+        payment.failure_reason = (result.gateway_response or result.status)[:500]
+        await db.commit()
+        return "Payment marked failed"
+
+    # Confirm against Paystack before banking it — the webhook alone is not proof.
+    try:
+        verification = await paystack_service.verify_transaction(result.reference)
+    except paystack_service.PaystackError as exc:
+        logger.warning("Could not verify Paystack transaction %s: %s", result.reference, exc)
+        return "Verification against Paystack failed"
+
+    if not verification.success:
+        payment.status = PaymentStatus.FAILED
+        payment.failure_reason = (verification.gateway_response or verification.status)[:500]
+        await db.commit()
+        return "Verification against Paystack failed"
+
+    # Trust the verified amount over the one the tenant asked to pay: a card
+    # charge can be completed for a different figure than we opened it with.
+    if verification.amount is not None:
+        payment.amount = verification.amount
+
+    await _confirm(db, payment, verification.paid_at or datetime.now(UTC))
+
+    audit_service.record(
+        db,
+        organization_id=payment.organization_id,
+        action="payment.confirmed",
+        entity_type="payment",
+        entity_id=payment.id,
+        summary=f"Card payment {result.reference} confirmed KES {format_kes(payment.amount)}",
+    )
+
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        return "Duplicate card reference ignored"
     return "Payment confirmed"
 
 

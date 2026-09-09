@@ -49,6 +49,7 @@ api_router.include_router(health.router, tags=["health"])
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(team.public_router, prefix="/invitations", tags=["team"])
 api_router.include_router(billing.mpesa_router, prefix="/mpesa", tags=["mpesa"])
+api_router.include_router(billing.paystack_router, prefix="/paystack", tags=["paystack"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 api_router.include_router(files.local_router, prefix="/files/local", tags=["files"])
 

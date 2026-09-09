@@ -89,6 +89,7 @@ class PaymentRead(BaseModel):
     status: PaymentStatus
     mpesa_receipt: str | None
     bank_reference: str | None = None
+    paystack_reference: str | None = None
     phone_number: str | None
     failure_reason: str | None
     paid_at: datetime | None
@@ -127,6 +128,15 @@ class BankInstructions(BaseModel):
     account_name: str | None = None
     account_number: str | None = None
     branch: str | None = None
+
+
+class PortalPaymentMethods(BaseModel):
+    """Which payment routes the portal may offer, each gated on its provider
+    actually being configured."""
+
+    mpesa: bool
+    card: bool
+    bank_transfer: bool
 
 
 class BankStatementRow(BaseModel):

@@ -59,6 +59,7 @@ export const queryKeys = {
   vacateNotices: (filters?: unknown) => ['vacate-notices', filters ?? {}] as const,
   leaseTemplates: ['lease-templates'] as const,
   portalHome: ['portal', 'home'] as const,
+  portalPaymentMethods: ['portal', 'payment-methods'] as const,
   portalPayments: ['portal', 'payments'] as const,
   portalInvoices: ['portal', 'invoices'] as const,
   portalDocuments: ['portal', 'documents'] as const,

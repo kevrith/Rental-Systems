@@ -29,7 +29,7 @@ from app.models.session import TokenPurpose, VerificationToken
 from app.models.tenant import Tenancy, TenancyCoTenant, TenancyStatus, Tenant
 from app.models.user import DEFAULT_INACTIVITY_TIMEOUT_MINUTES, User, UserRole
 from app.schemas.auth import MessageResponse, TokenResponse
-from app.schemas.billing import BankInstructions, InvoiceRead, PaymentRead
+from app.schemas.billing import BankInstructions, InvoiceRead, PaymentRead, PortalPaymentMethods
 from app.schemas.maintenance import MaintenanceRate
 from app.schemas.operations import (
     MaintenanceCreate,
@@ -43,9 +43,11 @@ from app.services import (
     file_service,
     invoice_service,
     maintenance_service,
+    mpesa_service,
     notification_service,
     operations_service,
     payment_service,
+    paystack_service,
     session_service,
     tenant_service,
 )
@@ -382,6 +384,70 @@ async def pay_rent(
         request=request,
     )
     return PortalPayResponse(payment_id=payment.id, reference_code=payment.reference_code, message=message)
+
+
+class PortalCardPayRequest(BaseModel):
+    amount: Decimal = Field(gt=0)
+    email: str | None = Field(default=None, max_length=255)
+
+
+class PortalCardPayResponse(BaseModel):
+    payment_id: uuid.UUID
+    reference_code: str
+    authorization_url: str
+
+
+@router.get("/payment-methods", response_model=PortalPaymentMethods)
+async def portal_payment_methods(
+    tenant: Tenant = Depends(get_current_tenant), db: AsyncSession = Depends(get_db)
+) -> PortalPaymentMethods:
+    """Which ways of paying this tenant can actually be offered right now.
+
+    Each one is gated on its provider being configured, so the portal never
+    shows a button that dead-ends at a "not enabled" error.
+    """
+    from app.models.organization import Organization
+
+    organization = await db.get(Organization, tenant.organization_id)
+    bank = bank_transfer_service.instructions(organization) if organization else {"configured": False}
+    return PortalPaymentMethods(
+        mpesa=mpesa_service.is_configured(),
+        card=paystack_service.is_configured(),
+        bank_transfer=bool(bank.get("configured")),
+    )
+
+
+@router.post("/pay/card", response_model=PortalCardPayResponse, status_code=status.HTTP_202_ACCEPTED)
+async def pay_rent_by_card(
+    payload: PortalCardPayRequest,
+    request: Request,
+    tenant: Tenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PortalCardPayResponse:
+    """'Pay by card' — opens a Paystack checkout for tenants without M-Pesa."""
+    tenancy = await _active_tenancy(db, tenant)
+    if tenancy is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="You have no active tenancy to pay for"
+        )
+
+    context = await _operator_context(db, tenant, current_user)
+
+    payment, authorization_url = await payment_service.initiate_card_payment(
+        db,
+        context,
+        tenancy_id=tenancy.id,
+        amount=payload.amount,
+        email=payload.email or tenant.email,
+        callback_url=f"{settings.FRONTEND_URL}/portal/payments",
+        request=request,
+    )
+    return PortalCardPayResponse(
+        payment_id=payment.id,
+        reference_code=payment.reference_code,
+        authorization_url=authorization_url,
+    )
 
 
 @router.get("/payments", response_model=list[PaymentRead])

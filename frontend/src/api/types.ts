@@ -5,7 +5,7 @@ export type UnitStatus = 'vacant' | 'occupied' | 'under_maintenance' | 'reserved
 export type TenancyStatus = 'active' | 'expiring_soon' | 'expired' | 'notice_given' | 'vacated'
 export type InvoiceStatus = 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'cancelled'
 export type PaymentStatus = 'pending' | 'confirmed' | 'failed' | 'cancelled' | 'reversed'
-export type PaymentMethod = 'mpesa' | 'cash' | 'bank_transfer' | 'cheque'
+export type PaymentMethod = 'mpesa' | 'cash' | 'bank_transfer' | 'cheque' | 'card'
 export type MeterType = 'water' | 'electricity'
 export type MaintenanceStatus =
   | 'submitted'
@@ -270,6 +270,7 @@ export interface Payment {
   status: PaymentStatus
   mpesa_receipt: string | null
   bank_reference: string | null
+  paystack_reference: string | null
   phone_number: string | null
   failure_reason: string | null
   paid_at: string | null
@@ -2429,6 +2430,12 @@ export interface BankInstructions {
   account_name: string | null
   account_number: string | null
   branch: string | null
+}
+
+export interface PortalPaymentMethods {
+  mpesa: boolean
+  card: boolean
+  bank_transfer: boolean
 }
 
 export interface BankStatementRow {

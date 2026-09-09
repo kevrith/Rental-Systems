@@ -45,6 +45,7 @@ PUBLIC_PREFIXES: dict[str, str] = {
     "/api/v1/auth/verify-email": "Email confirmation link.",
     "/api/v1/invitations": "Accepting a team invitation before the account exists.",
     "/api/v1/mpesa": "Safaricom's callbacks. Authenticated by matching a checkout id.",
+    "/api/v1/paystack": "Paystack's charge webhooks. Authenticated by an HMAC-SHA512 body signature.",
     "/api/v1/webhooks": "Resend's delivery-event callbacks. Authenticated by a Svix HMAC signature.",
     "/api/v1/sign": "The tenant's signing link. Authenticated by a single-use token.",
     "/api/v1/renew": "The tenant's renewal link. Authenticated by a single-use token.",

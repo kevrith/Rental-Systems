@@ -88,6 +88,7 @@ import type {
   OwnerSummary,
   PaymentDetail,
   PortalHome,
+  PortalPaymentMethods,
   PortfolioDashboard,
   Property,
   PropertySummary,
@@ -938,6 +939,12 @@ export const portalApi = {
   home: () => get<PortalHome>('/portal/home'),
   pay: (body: { amount: string; phone_number?: string }) =>
     post<{ payment_id: string; reference_code: string; message: string }>('/portal/pay', body),
+  payByCard: (body: { amount: string; email?: string }) =>
+    post<{ payment_id: string; reference_code: string; authorization_url: string }>(
+      '/portal/pay/card',
+      body,
+    ),
+  paymentMethods: () => get<PortalPaymentMethods>('/portal/payment-methods'),
   paymentStatus: (id: string) => get<PaymentDetail>(`/portal/payments/${id}/status`),
   payments: () => get<PaymentDetail[]>('/portal/payments'),
   bankInstructions: () => get<BankInstructions>('/portal/bank-instructions'),

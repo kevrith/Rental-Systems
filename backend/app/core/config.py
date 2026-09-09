@@ -118,6 +118,13 @@ class Settings(BaseSettings):
     DARAJA_B2C_INITIATOR_NAME: str | None = None
     DARAJA_B2C_SECURITY_CREDENTIAL: str | None = None
 
+    # Paystack — card payments for tenants who do not want to pay by M-Pesa.
+    # The same secret key both authenticates our API calls and signs Paystack's
+    # webhooks, so an unset key disables the card option end to end rather than
+    # leaving a button that fails at the last step.
+    PAYSTACK_SECRET_KEY: str | None = None
+    PAYSTACK_BASE_URL: str = "https://api.paystack.co"
+
     # Resend (transactional email)
     RESEND_API_KEY: str | None = None
     EMAIL_FROM: str = "RentFlow <noreply@rentflow.co.ke>"

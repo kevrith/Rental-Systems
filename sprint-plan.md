@@ -3237,7 +3237,7 @@ Acceptance Criteria:
 ### 🔧 Technical Tasks
 - [ ] Integrate TransUnion Kenya or Metropol API with consent capture
 - [ ] Fold the credit result into the screening score calculation
-- [ ] Integrate a Flutterwave/Stripe card payment flow into the tenant portal payment options
+- [x] Integrate a Flutterwave/Stripe card payment flow into the tenant portal payment options — **built with Paystack** rather than Flutterwave/Stripe (native KES support on Kenyan card rails). Portal `Pay by card` opens a Paystack checkout; the charge webhook is HMAC-SHA512 verified, replay-locked in Redis, re-verified against Paystack's own API before banking, and then settles through the same `_confirm` path as M-Pesa, so reconciliation, receipts and the audit trail are identical. Hidden entirely unless `PAYSTACK_SECRET_KEY` is set. The rest of Sprint 29 is untouched.
 - [ ] Build a rent-roll export format for bank partner referrals
 - [ ] Build an insurance marketplace directory and lead capture UI
 - [ ] Build floor plan upload and click-to-pin unit mapping UI
