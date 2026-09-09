@@ -60,7 +60,8 @@ To eliminate the inefficiencies of manual rental management in Kenya by providin
 - Serve both individual landlords and professional agencies seamlessly
 - Expand to East Africa (Uganda, Tanzania, Rwanda) within 3 years
 - Build a partner ecosystem with banks, insurance companies, and real estate portals
-- Generate recurring subscription revenue + M-Pesa transaction fee revenue
+- Generate recurring subscription revenue. Rent itself is never touched: it goes
+  straight from tenant to landlord, into the landlord's own M-Pesa.
 
 ---
 
@@ -685,7 +686,7 @@ Young professional renting in Kilimani. Wants to pay rent via M-Pesa on his phon
 | Tax Compliance | KRA eTIMS API | Compliant receipt generation |
 | File Storage | Cloudflare R2 | Documents, photos, receipts |
 | Email | SendGrid / AWS SES | Transactional emails and reports |
-| Card Payments | Flutterwave / Stripe | International card payments (Phase 2) |
+| Subscription billing | Paystack | RentFlow's own subscription revenue only — never tenant rent |
 | Credit Bureau | TransUnion Kenya / Metropol | Tenant credit checks (Phase 2) |
 | Property Portals | BuyRentKenya, PigiaMe APIs | Vacancy listing syndication (Phase 2) |
 
@@ -952,7 +953,7 @@ Tap "Pay Rent" → see exact amount due breakdown (rent + utilities + arrears + 
 
 *All plans include: M-Pesa integration, WhatsApp + SMS notifications, PWA for caretakers and tenants, standard reports, 5GB document storage, eTIMS compliance receipts*
 
-*Starter is subscription-only — no per-transaction fee (see Transaction Fees below). A landlord switching from a spreadsheet is comparing this price against free; stacking a percentage fee on top of the subscription at the smallest tier is exactly the friction that keeps that comparison in the spreadsheet's favour.*
+*Every plan is subscription-only. RentFlow takes no percentage of rent on any tier, and rent never passes through the platform — see "Transaction Fees — deliberately not charged" below.*
 
 ### Plan Feature Differentiation
 
@@ -979,16 +980,30 @@ against the limit.*
 
 ### Additional Revenue Streams
 
-**Transaction Fees**
-- 0.5% on every M-Pesa payment processed through the platform
-- Capped at KES 500 maximum per transaction
-- **Professional, Business and Enterprise only — not charged on Starter.** At
-  50+ units the fee is a rounding error against the rent roll; at 1-10 units
-  it is the difference between "cheap enough to just try" and "another
-  percentage taken off my rent," and Starter's whole job is converting a
-  landlord off a spreadsheet, not maximising revenue per customer.
-- Automatically collected — scales with customer payment volumes
-- Estimated additional revenue: KES 50–500 per unit per month at average rents (Professional+)
+**Transaction Fees — deliberately not charged**
+
+RentFlow takes no percentage of rent, and rent never passes through the
+platform. A tenant pays the landlord's own paybill, till or phone number, and
+the money is theirs the moment it lands — exactly as it was before they signed
+up.
+
+This was reconsidered and reversed. A percentage fee requires the platform to
+sit in the payment path, and that is precisely the thing landlords in this
+market do not want: today their tenants send money directly to their phone and
+it is available immediately. Routing it through a platform that collects, holds
+and later disburses makes their working life *harder* — a delay and a
+counterparty where neither existed — while the product's entire promise is to
+make it easier. A tool that takes over the one part already working, in order
+to bill for it, gets uninstalled.
+
+It also avoided a serious problem: holding other people's rent between
+collection and payout is a regulated activity, with float, reconciliation and
+trust-account obligations attached. Not touching the money removes that
+question entirely rather than answering it.
+
+Subscription is therefore the only revenue stream from customers. It is charged
+for the software — reminders, receipts, reconciliation, records, reporting —
+not for the movement of money.
 
 **Premium Add-Ons**
 | Add-On | Monthly Fee |
@@ -1025,11 +1040,13 @@ operate legally.*
   (eTIMS) is never a paid add-on, on any plan. Paid add-ons are reserved for
   genuine enhancements (Advanced Analytics) a customer could operate
   without.
-- **The smallest tier optimises for adoption, not margin** — Starter has no
-  per-transaction fee, because the customer it targets is comparing the
-  price against free (a spreadsheet), and a stacked subscription-plus-
-  percentage fee is friction that costs more signups than it earns in
-  revenue.
+- **The smallest tier optimises for adoption, not margin** — the customer
+  Starter targets is comparing the price against free (a spreadsheet), so the
+  price has to be low enough to just try.
+- **Never stand between a landlord and their rent** — the money goes directly
+  to the landlord's own M-Pesa, and RentFlow charges for the software around it.
+  Any pricing idea that requires the platform to hold, route or take a cut of
+  rent is rejected on this principle, however good the revenue looks.
 - **Annual billing rewarded** — 2 months free for annual commitment (improves cash flow, reduces churn)
 - **30-day free trial** — full feature access, no credit card required, removes signup friction
 - **Early adopter pricing** — first 100 customers get current pricing locked for life (creates urgency and loyalty)
@@ -1047,12 +1064,17 @@ operate legally.*
 | Total units managed | 2,500 | 20,000 | 100,000 |
 | Average MRR per customer | KES 8,000 | KES 10,000 | KES 12,000 |
 | Base Subscription MRR | KES 800,000 | KES 5,000,000 | KES 24,000,000 |
-| Transaction Fee Revenue (est.) | KES 125,000 | KES 1,000,000 | KES 5,000,000 |
-| **Total Estimated MRR** | **KES 925,000** | **KES 6,000,000** | **KES 29,000,000** |
-| **Estimated ARR** | **KES 11,100,000** | **KES 72,000,000** | **KES 348,000,000** |
+| **Total Estimated MRR** | **KES 800,000** | **KES 5,000,000** | **KES 24,000,000** |
+| **Estimated ARR** | **KES 9,600,000** | **KES 60,000,000** | **KES 288,000,000** |
 
-*Transaction fees based on average KES 20,000 rent × 0.5% × units managed*
-*These are conservative projections — add-ons, enterprise contracts, and partnerships add significant upside*
+*Subscription is the only revenue line from customers — rent is not touched, so
+there is no transaction-fee income. Earlier drafts of this plan projected a
+further KES 125k–5m/month from a 0.5% cut of rent; that stream was removed
+deliberately, not lost. See "Transaction Fees — deliberately not charged".*
+
+*Growth therefore comes from customer count and plan mix rather than payment
+volume, which makes the model simpler and the regulatory position clean.
+Add-ons, enterprise contracts and partnership referrals remain upside.*
 
 ---
 

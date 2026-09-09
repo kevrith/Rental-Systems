@@ -2536,7 +2536,7 @@ was confirmed absent by grep before being added here.
 | 25 | Virus scanning, DSAR export/erasure, co-tenants, WebAuthn, visitor log | ✅ Done |
 | 26A | Masterplan gap closure — 16 promised features that were in no sprint | ✅ Done |
 | 26 | SSO/SAML, custom roles, session policy, security compliance pack | ⬜ Not started |
-| 27 | Subscription billing engine, referral credit, white-label | ⬜ Not started |
+| 27 | Subscription billing engine, referral credit, white-label | 🟡 Billing engine built; add-ons, proration and white-label outstanding |
 | 28 | General ledger, ML fraud scoring, two-way messaging, rent pricing | ⬜ Not started |
 | 29 | Credit bureau, card payments, bank/insurance foundations, floor plans | ⬜ Not started |
 
@@ -3015,15 +3015,19 @@ Acceptance Criteria:
 
 ## Sprint 27 — Subscription Billing Engine & White-Label
 **Weeks 53–54 | Story Points Target: 71**
-**🎯 Sprint Goal:** RentFlow can finally charge, meter, and bill its own customers automatically — on every revenue stream in masterplan §10, not just the monthly plan fee — and large agencies can run the platform under their own brand
+**🎯 Sprint Goal:** RentFlow can charge and bill its own customers automatically, and large agencies can run the platform under their own brand
 
-> **Scope note (Sprint 26 gap review):** this sprint originally covered the
-> subscription fee alone. Transaction fees, the six premium add-ons, annual
-> billing and the one-time fee schedule were all in masterplan §10 and in no
-> sprint. US-117a and US-117b close that, which is what takes the target from
-> 55 to 71 points — over a normal sprint's capacity, so if it has to be split,
-> **US-117a ships first**: transaction fees accrue per payment and cannot be
-> backfilled from history that was never metered.
+> **Scope note (revised):** the transaction-fee stream this sprint was built
+> around has been removed from the business model. Rent is collected by each
+> landlord into their own M-Pesa and never passes through RentFlow, so there is
+> no payment flow to take a percentage of and no float to hold. Subscription is
+> the only customer revenue line. **US-117a is cancelled** — see masterplan §10,
+> "Transaction Fees — deliberately not charged".
+>
+> **Built:** the subscription engine itself — Paystack checkout that saves a
+> card, server-side monthly renewal, dunning with a grace window, and read-only
+> lockout on lapse. Add-ons, proration, annual switching, the referral credit
+> ledger and white-label remain outstanding.
 
 ---
 
@@ -3064,22 +3068,14 @@ Acceptance Criteria:
 - "Powered by RentFlow" footer configurable (visible/hidden per plan tier)
 - White-label configuration isolated per organization — no bleed between agencies
 
-**US-117a — Transaction Fee Collection** `[8 pts]`
-*As the business, I want the 0.5% M-Pesa transaction fee to be metered and collected so that the revenue stream the pricing model is built on actually exists*
+**US-117a — Transaction Fee Collection** `[8 pts]` — ~~CANCELLED~~
 
-> Added in the Sprint 26 gap review. The masterplan's §10 puts transaction fees
-> at KES 50–500 per unit per month — on a 200-unit agency that is comparable to
-> the subscription itself — and the sprint that builds billing did not mention
-> them. Subscription-only billing would ship a revenue model that is materially
-> smaller than the one the business case assumes.
-
-Acceptance Criteria:
-- 0.5% accrued on every confirmed M-Pesa payment processed through the platform, capped at **KES 500 per transaction**
-- Fee accrues at confirmation, in its own ledger line — never deducted from the landlord's money in transit, and never from a payment that later reverses
-- Cash, bank transfer and cheque accrue nothing: the fee is for payments RentFlow actually processed
-- Accrued fees roll into the next subscription invoice, itemised separately from the plan fee
-- The landlord can see the running fee total for the current period before it is billed
-- Fee rate and cap are configurable per plan, so an enterprise contract can negotiate them
+*Removed from the plan.* RentFlow no longer sits in the rent payment path:
+tenants pay the landlord's own paybill, till or phone directly, so there is no
+processed payment to meter and no money in transit to deduct from. Taking a cut
+would have required re-inserting the platform into the one part of a landlord's
+workflow that already works, which is the opposite of what this product is for.
+See masterplan §10.
 
 **US-117b — Add-Ons, Annual Billing and One-Time Fees** `[8 pts]`
 *As the business, I want the six premium add-ons, the annual discount and the one-time fee schedule to be sellable so that the whole of §10's price list is billable, not just the monthly plan row*
@@ -3098,15 +3094,15 @@ Acceptance Criteria:
 - Special pricing programs supported as a per-organization discount percentage with a reason on the record: non-profit/faith-based 20%, student accommodation Starter pricing, early-adopter locked pricing
 
 ### 🔧 Technical Tasks
-- [ ] Build Plan/Subscription/Invoice data model for RentFlow's own billing
+- [x] Build Plan/Subscription/Invoice data model for RentFlow's own billing
 - [ ] Build plan-limit enforcement middleware (units, users, storage, API calls, SMS)
-- [ ] Build recurring billing via M-Pesa STK and card, reusing the existing Daraja integration where possible
-- [ ] Build dunning flow: retry, grace period, read-only lockout
+- [x] Build recurring billing — **Paystack**, not M-Pesa STK: a saved card can be charged server-side each month, while STK needs the customer to enter a PIN and so cannot renew unattended. Paystack carries RentFlow's own revenue only.
+- [x] Build dunning flow: retry, grace period, read-only lockout
 - [ ] Wire the `credit_months` ledger into invoice generation
 - [ ] Build usage metering aggregation and dashboard UI
 - [ ] Build custom domain routing and SSL provisioning per organization
 - [ ] Build white-label theming (logo, colors) applied to the app shell, PDFs, and notification templates
-- [ ] Build the transaction fee accrual: hook `payment_service._confirm`, 0.5% capped at KES 500, M-Pesa only, reversed if the payment reverses
+- [x] ~~Build the transaction fee accrual~~ — **cancelled**, see US-117a. RentFlow takes no cut of rent.
 - [ ] Build the add-on catalogue and per-organization subscriptions, with proration and feature-flag/quota grants
 - [ ] Build annual billing terms, the two-months-free price, and monthly→annual switching with credit
 - [ ] Build the one-time fee line item, raisable by platform staff onto a subscription invoice
