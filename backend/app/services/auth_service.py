@@ -85,7 +85,10 @@ async def _assert_not_locked_out(email: str) -> None:
         minutes = max(1, ttl // 60)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Too many failed attempts. Try again in {minutes} minute(s).",
+            detail={
+                "message": f"Too many failed attempts. Try again in {minutes} minute(s).",
+                "retry_after": int(ttl),
+            },
         )
 
 

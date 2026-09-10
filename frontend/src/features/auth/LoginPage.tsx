@@ -32,6 +32,7 @@ export function LoginPage() {
   const navigate = useNavigate()
   const setSession = useAuthStore((state) => state.setSession)
   const [serverError, setServerError] = useState<string | null>(null)
+  const [lockoutCountdown, setLockoutCountdown] = useState(0)
   const [challenge, setChallenge] = useState<{
     token: string
     message: string
@@ -78,7 +79,12 @@ export function LoginPage() {
         })
       }
     },
-    onError: (error) => setServerError(errorMessage(error)),
+    onError: (error) => {
+      const detail = (error as { response?: { data?: { detail?: { retry_after?: number } } } })
+        ?.response?.data?.detail
+      if (detail?.retry_after) setLockoutCountdown(detail.retry_after)
+      setServerError(errorMessage(error))
+    },
   })
 
   const otpMutation = useMutation({
@@ -93,6 +99,12 @@ export function LoginPage() {
     onSuccess: finishLogin,
     onError: (error) => setServerError(errorMessage(error, 'Invalid or expired code.')),
   })
+
+  useEffect(() => {
+    if (lockoutCountdown <= 0) return
+    const timer = setInterval(() => setLockoutCountdown((s) => Math.max(0, s - 1)), 1000)
+    return () => clearInterval(timer)
+  }, [lockoutCountdown])
 
   // Matches the backend's own 30-second cooldown between resends (it enforces
   // this regardless — the countdown here just avoids sending a request that
@@ -281,10 +293,20 @@ export function LoginPage() {
         {serverError && (
           <Alert tone="danger" icon={<AlertCircle className="h-4 w-4" />}>
             {serverError}
+            {lockoutCountdown > 0 && (
+              <span className="ml-1 font-medium tabular-nums">
+                ({Math.floor(lockoutCountdown / 60)}:{String(lockoutCountdown % 60).padStart(2, '0')})
+              </span>
+            )}
           </Alert>
         )}
 
-        <Button type="submit" className="w-full justify-center" loading={credentialsMutation.isPending}>
+        <Button
+          type="submit"
+          className="w-full justify-center"
+          loading={credentialsMutation.isPending}
+          disabled={lockoutCountdown > 0}
+        >
           Log in
         </Button>
 
