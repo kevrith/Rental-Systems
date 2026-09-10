@@ -340,6 +340,8 @@ export function AppShell() {
     queryKey: queryKeys.unreadCount,
     queryFn: notificationsApi.unreadCount,
     refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    enabled: !!user,
   })
 
   useEffect(() => {

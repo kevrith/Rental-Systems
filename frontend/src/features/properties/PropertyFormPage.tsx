@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router-dom'
 import { z } from 'zod'
 
-import { propertiesApi } from '@/api'
+import { propertiesApi, customerSuccessApi } from '@/api'
 import { FileUpload, type UploadedFile } from '@/components/FileUpload'
 import { PageHeader } from '@/components/PageHeader'
 import {
@@ -149,6 +149,11 @@ export function PropertyFormPage() {
     onSuccess: async (property) => {
       await queryClient.invalidateQueries({ queryKey: ['properties'] })
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      if (!isEdit) {
+        void customerSuccessApi.markOnboardingStep('added_property').then(() =>
+          queryClient.invalidateQueries({ queryKey: ['onboarding'] })
+        )
+      }
       navigate(`/properties/${property.id}`)
     },
     onError: (error) => setServerError(errorMessage(error)),

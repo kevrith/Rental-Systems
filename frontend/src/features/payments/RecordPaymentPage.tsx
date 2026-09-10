@@ -11,7 +11,7 @@ import {
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
-import { paymentsApi, tenanciesApi } from '@/api'
+import { organizationApi, paymentsApi, tenanciesApi } from '@/api'
 import type { PaymentDetail } from '@/api/types'
 import { PageHeader } from '@/components/PageHeader'
 import {
@@ -38,13 +38,25 @@ type Mode = 'mpesa' | 'manual'
 
 export function RecordPaymentPage() {
   const [params] = useSearchParams()
-  const [mode, setMode] = useState<Mode>('mpesa')
   const [tenancyId, setTenancyId] = useState(params.get('tenancy_id') ?? '')
 
   const tenancies = useQuery({
     queryKey: queryKeys.tenancies({ forPayment: true }),
     queryFn: () => tenanciesApi.list({ tenancy_status: 'active' }),
   })
+
+  const mpesaSetup = useQuery({
+    queryKey: queryKeys.mpesaSetup,
+    queryFn: organizationApi.mpesaSetup,
+    staleTime: 5 * 60_000,
+  })
+
+  const stkEnabled = mpesaSetup.data?.mode === 'automated' && mpesaSetup.data?.has_api_credentials
+  const [mode, setMode] = useState<Mode>('mpesa')
+
+  // If STK is not available default to manual so the tab is never pre-selected
+  // on a mode that does nothing useful.
+  const activeMode: Mode = stkEnabled ? mode : 'manual'
 
   const selected = tenancies.data?.find((tenancy) => tenancy.id === tenancyId)
 
@@ -85,12 +97,24 @@ export function RecordPaymentPage() {
         </CardBody>
       </Card>
 
-      <Tabs value={mode} onChange={(value) => setMode(value as Mode)} className="mb-4">
-        <Tab value="mpesa">M-Pesa prompt</Tab>
-        <Tab value="manual">Cash or bank</Tab>
-      </Tabs>
+      {stkEnabled ? (
+        <Tabs value={activeMode} onChange={(value) => setMode(value as Mode)} className="mb-4">
+          <Tab value="mpesa">M-Pesa prompt</Tab>
+          <Tab value="manual">Cash or bank</Tab>
+        </Tabs>
+      ) : (
+        mpesaSetup.data && (
+          <Alert tone="info" icon={<Smartphone className="h-4 w-4" />} className="mb-4">
+            M-Pesa prompt is only available when you have set up a Daraja API app in{' '}
+            <Link to="/settings/mpesa" className="font-medium underline">
+              M-Pesa settings
+            </Link>
+            .
+          </Alert>
+        )
+      )}
 
-      {mode === 'mpesa' ? (
+      {activeMode === 'mpesa' ? (
         <MpesaPanel tenancyId={tenancyId} suggested={selected?.balance} phone={selected?.tenant_phone} />
       ) : (
         <ManualPanel tenancyId={tenancyId} suggested={selected?.balance} />

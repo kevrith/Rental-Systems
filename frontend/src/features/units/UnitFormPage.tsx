@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { z } from 'zod'
 
-import { propertiesApi, unitsApi } from '@/api'
+import { propertiesApi, unitsApi, customerSuccessApi } from '@/api'
 import { FileUpload, type UploadedFile } from '@/components/FileUpload'
 import { PageHeader } from '@/components/PageHeader'
 import {
@@ -141,6 +141,11 @@ export function UnitFormPage() {
       await queryClient.invalidateQueries({ queryKey: ['units'] })
       await queryClient.invalidateQueries({ queryKey: ['properties'] })
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      if (!isEdit) {
+        void customerSuccessApi.markOnboardingStep('added_units').then(() =>
+          queryClient.invalidateQueries({ queryKey: ['onboarding'] })
+        )
+      }
       navigate(`/units/${unit.id}`)
     },
     onError: (error) => setServerError(errorMessage(error)),
@@ -372,6 +377,9 @@ export function BulkUnitsPage() {
       await queryClient.invalidateQueries({ queryKey: ['units'] })
       await queryClient.invalidateQueries({ queryKey: ['properties'] })
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      void customerSuccessApi.markOnboardingStep('added_units').then(() =>
+        queryClient.invalidateQueries({ queryKey: ['onboarding'] })
+      )
       navigate(`/properties/${formValues.property_id}`, {
         state: { message: `${result.created} units created` },
       })

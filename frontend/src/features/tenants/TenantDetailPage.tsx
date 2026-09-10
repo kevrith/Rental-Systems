@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
+  Archive,
   Download,
   FileText,
   FolderOpen,
@@ -13,7 +14,7 @@ import {
   UserPlus,
 } from 'lucide-react'
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { paymentsApi, portalApi, privacyApi, tenanciesApi, tenantsApi } from '@/api'
 import { PageHeader } from '@/components/PageHeader'
@@ -38,8 +39,11 @@ import { useAuthStore } from '@/store/auth-store'
 
 export function TenantDetailPage() {
   const { tenantId } = useParams<{ tenantId: string }>()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [notice, setNotice] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null)
+  const [archiveOpen, setArchiveOpen] = useState(false)
+  const [archiveError, setArchiveError] = useState<string | null>(null)
 
   const permissions = useAuthStore((state) => state.user?.permissions)
   const canManage = permissions?.includes('tenant:manage')
@@ -70,6 +74,16 @@ export function TenantDetailPage() {
     queryKey: queryKeys.payments({ tenancy_id: activeTenancy?.id }),
     queryFn: () => paymentsApi.list({ tenancy_id: activeTenancy!.id, limit: 10 }),
     enabled: Boolean(activeTenancy),
+  })
+
+  const archive = useMutation({
+    mutationFn: () => tenantsApi.archive(tenantId!),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['tenants'] })
+      setArchiveOpen(false)
+      navigate('/tenants')
+    },
+    onError: (error) => setArchiveError(errorMessage(error)),
   })
 
   const invitePortal = useMutation({
@@ -116,10 +130,21 @@ export function TenantDetailPage() {
               </Button>
             )}
             {canManage && (
-              <Link to={`/tenants/${tenantId}/edit`} className={linkButtonClass('outline')}>
-                <Pencil className="h-4 w-4" />
-                Edit
-              </Link>
+              <>
+                <Link to={`/tenants/${tenantId}/edit`} className={linkButtonClass('outline')}>
+                  <Pencil className="h-4 w-4" />
+                  Edit
+                </Link>
+                {!record.is_archived && !activeTenancy && (
+                  <Button
+                    variant="ghost"
+                    icon={<Archive className="h-4 w-4" />}
+                    onClick={() => setArchiveOpen(true)}
+                  >
+                    Archive
+                  </Button>
+                )}
+              </>
             )}
             {!activeTenancy && canManage && (
               <Link to={`/tenancies/new?tenant_id=${tenantId}`} className={linkButtonClass()}>
@@ -354,6 +379,31 @@ export function TenantDetailPage() {
           )}
         </div>
       </div>
+      <Dialog
+        open={archiveOpen}
+        onClose={() => setArchiveOpen(false)}
+        title={`Archive ${record.full_name}?`}
+        description="Archived tenants disappear from active views but keep all their history."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setArchiveOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" loading={archive.isPending} onClick={() => archive.mutate()}>
+              Archive tenant
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-slate-600">
+          Only tenants without an active tenancy can be archived. You can restore them at any time.
+        </p>
+        {archiveError && (
+          <Alert tone="danger" className="mt-3">
+            {archiveError}
+          </Alert>
+        )}
+      </Dialog>
     </div>
   )
 }

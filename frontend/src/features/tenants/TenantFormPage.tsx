@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { z } from 'zod'
 
-import { tenantsApi } from '@/api'
+import { tenantsApi, customerSuccessApi } from '@/api'
 import { SinglePhotoUpload, type UploadedFile } from '@/components/FileUpload'
 import { PageHeader } from '@/components/PageHeader'
 import {
@@ -114,6 +114,11 @@ export function TenantFormPage() {
         : tenantsApi.create(buildBody(values, acknowledge)),
     onSuccess: async (tenant) => {
       await queryClient.invalidateQueries({ queryKey: ['tenants'] })
+      if (!isEdit) {
+        void customerSuccessApi.markOnboardingStep('added_tenant').then(() =>
+          queryClient.invalidateQueries({ queryKey: ['onboarding'] })
+        )
+      }
       navigate(`/tenants/${tenant.id}`)
     },
     onError: (error) => {
