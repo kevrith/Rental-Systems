@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     OTP_TTL_SECONDS: int = 300
     OTP_MAX_ATTEMPTS: int = 5
     LOGIN_MAX_ATTEMPTS: int = 5
-    LOGIN_LOCKOUT_SECONDS: int = 900
+    LOGIN_LOCKOUT_SECONDS: int = 300
     # Set to false to skip the SMS OTP step entirely — useful for development
     # or when Africa's Talking credentials are not yet configured. Trusted-
     # device tokens are still issued; the OTP challenge is just never sent.
