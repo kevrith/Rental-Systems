@@ -4,8 +4,8 @@ Three hosts, one for each tier:
 
 | Tier | Host | What runs there |
 | --- | --- | --- |
-| Frontend | Vercel | The React SPA at `app.kastra.co.ke`, served from the edge |
-| Backend | Render (free) | FastAPI, plus the Celery worker and scheduler, at `api.kastra.co.ke` |
+| Frontend | Vercel | The React SPA at `rent.kastra.co.ke`, served from the edge |
+| Backend | Render (free) | FastAPI, plus the Celery worker and scheduler, at `api.rent.kastra.co.ke` |
 | Database | Supabase | Postgres, reached over the session pooler |
 | Cache / queue | Render Key Value | OTP codes, login lockouts, rate limits, Celery broker |
 | File storage | Cloudflare R2 | Uploaded documents — see [Step 5](#step-5--object-storage) |
@@ -232,7 +232,7 @@ workflow, and triple the RAM.
    VITE_API_URL=https://rentflow-api.onrender.com/api/v1
    ```
 
-   Change it to `https://api.kastra.co.ke/api/v1` after Step 6.
+   Change it to `https://api.rent.kastra.co.ke/api/v1` after Step 6.
 
    **`VITE_*` variables are baked into the bundle at build time.** Changing this
    value does nothing until you redeploy — there is no runtime config to edit.
@@ -249,7 +249,6 @@ workflow, and triple the RAM.
    WEBAUTHN_ORIGIN=https://rentflow.vercel.app
    WEBAUTHN_RP_ID=rentflow.vercel.app
    ```
-
    `CORS_ORIGINS=https://rentflow.vercel.app` without the brackets is the single
    most common way to make this fail: pydantic-settings rejects it and the
    service will not boot.
@@ -279,28 +278,29 @@ The full reasoning is in [deployment-domains.md](deployment-domains.md). The
 short version: RentFlow lives entirely on subdomains, and the existing Kastra
 site at the apex is untouched.
 
-1. **Vercel** → Project → Settings → Domains → add `app.kastra.co.ke`. Vercel
+1. **Vercel** → Project → Settings → Domains → add `rent.kastra.co.ke`. Vercel
    gives you a `CNAME` target; add it at your DNS provider.
 2. **Render** → `rentflow-api` → Settings → Custom Domains → add
-   `api.kastra.co.ke`, and add the `CNAME` it gives you.
+   `api.rent.kastra.co.ke`, and add the `CNAME` it gives you.
 3. Wait for both certificates to issue (usually minutes).
 4. Update the values that name a host, and redeploy each side:
 
    **Render:**
    ```
-   FRONTEND_URL=https://app.kastra.co.ke
-   CORS_ORIGINS=["https://app.kastra.co.ke"]
-   WEBAUTHN_RP_ID=app.kastra.co.ke
-   WEBAUTHN_ORIGIN=https://app.kastra.co.ke
-   DARAJA_CALLBACK_BASE_URL=https://api.kastra.co.ke
-   OAUTH_CALLBACK_BASE_URL=https://api.kastra.co.ke
+   FRONTEND_URL=https://rent.kastra.co.ke
+   # Keep the Vercel backup URL so rentflow.vercel.app stays functional.
+   CORS_ORIGINS=["https://rent.kastra.co.ke","https://rentflow.vercel.app"]
+   WEBAUTHN_RP_ID=rent.kastra.co.ke
+   WEBAUTHN_ORIGIN=https://rent.kastra.co.ke
+   DARAJA_CALLBACK_BASE_URL=https://api.rent.kastra.co.ke
+   OAUTH_CALLBACK_BASE_URL=https://api.rent.kastra.co.ke
    ```
 
-   **Vercel:** `VITE_API_URL=https://api.kastra.co.ke/api/v1`, then **redeploy**
+   **Vercel:** `VITE_API_URL=https://api.rent.kastra.co.ke/api/v1`, then **redeploy**
    — the old API URL is compiled into the current bundle until you do.
 
    **GitHub:** set the `RENDER_API_URL` repository variable to
-   `https://api.kastra.co.ke`.
+   `https://api.rent.kastra.co.ke`.
 
 Changing `WEBAUTHN_RP_ID` invalidates every passkey already registered against
 the old hostname. Do the domain move before customers enrol biometrics, not
@@ -342,7 +342,7 @@ than duplicated, and the password is only touched if you also set
 Work down this list. Each item catches a different class of misconfiguration.
 
 ```bash
-API=https://api.kastra.co.ke
+API=https://api.rent.kastra.co.ke
 
 # 1. The API process is up. Note this is a liveness check only — it returns
 #    {"status":"ok"} without touching Postgres, so it passing does not prove
@@ -355,7 +355,7 @@ curl -s "https://<project-ref>.supabase.co/rest/v1/verification_tokens?apikey=<a
 
 # 3. CORS names the real frontend. Look for access-control-allow-origin.
 curl -sI -X OPTIONS "$API/api/v1/auth/login" \
-  -H 'Origin: https://app.kastra.co.ke' \
+  -H 'Origin: https://rent.kastra.co.ke' \
   -H 'Access-Control-Request-Method: POST' | grep -i access-control
 
 # 4. /metrics is not world-readable.
@@ -364,8 +364,10 @@ curl -s -o /dev/null -w '%{http_code}\n' "$API/metrics"   # expect 401
 
 Then, in a browser:
 
-- [ ] `https://app.kastra.co.ke` loads, and the apex `kastra.co.ke` still serves
+- [ ] `https://rent.kastra.co.ke` loads, and the apex `kastra.co.ke` still serves
       the existing Kastra site unchanged.
+- [ ] `https://rentflow.vercel.app` also loads and calls the API correctly
+      (backup URL check).
 - [ ] Sign in end to end as the super admin. This exercises CORS,
       `FRONTEND_URL`, the database and Africa's Talking in one action — if the
       OTP SMS arrives and the session starts, most of the configuration is right.

@@ -58,20 +58,22 @@ envVarGroups:
       # CORS_ORIGINS is parsed as JSON by pydantic-settings: it must be a JSON
       # array, brackets and double quotes included, not a bare hostname.
       - key: FRONTEND_URL
-        value: https://app.kastra.co.ke
+        value: https://rent.kastra.co.ke
+      # Primary domain + Vercel backup URL. Both are accepted so the backup
+      # remains functional if the custom domain has a DNS/TLS issue.
       - key: CORS_ORIGINS
-        value: '["https://app.kastra.co.ke"]'
+        value: '["https://rent.kastra.co.ke","https://rentflow.vercel.app"]'
       - key: WEBAUTHN_RP_ID
-        value: app.kastra.co.ke
+        value: rent.kastra.co.ke
       - key: WEBAUTHN_ORIGIN
-        value: https://app.kastra.co.ke
+        value: https://rent.kastra.co.ke
       - key: WEBAUTHN_RP_NAME
         value: RentFlow
       # Third parties post to these, so they name the API host, not the app.
       - key: DARAJA_CALLBACK_BASE_URL
-        value: https://api.kastra.co.ke
+        value: https://api.rent.kastra.co.ke
       - key: OAUTH_CALLBACK_BASE_URL
-        value: https://api.kastra.co.ke
+        value: https://api.rent.kastra.co.ke
       - key: SUPPORT_EMAIL
         value: support@kastra.co.ke
       - key: EMAIL_FROM
@@ -111,6 +113,10 @@ envVarGroups:
       # --- M-Pesa -------------------------------------------------------------
       - key: DARAJA_ENVIRONMENT
         value: sandbox
+      # Set to false to skip the SMS OTP step (e.g. before Africa's Talking
+      # credentials are live). Flip back to true for production.
+      - key: REQUIRE_OTP
+        value: "true"
       - key: DARAJA_CONSUMER_KEY
         sync: false
       - key: DARAJA_CONSUMER_SECRET

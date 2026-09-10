@@ -172,6 +172,10 @@ export const queryKeys = {
   changelogUnseenCount: ['customer-success', 'changelog', 'unseen'] as const,
   internalOrganizations: ['internal', 'organizations'] as const,
   internalOrganizationHealth: (id: string) => ['internal', 'organizations', id, 'health'] as const,
+  internalSuspension: (id: string) => ['internal', 'organizations', id, 'suspension'] as const,
+  internalBreachDashboard: ['internal', 'breaches', 'dashboard'] as const,
+  internalBreaches: (openOnly?: boolean) => ['internal', 'breaches', openOnly] as const,
+  auditVerify: ['security', 'audit-verify'] as const,
   internalHelpArticles: ['internal', 'help-articles'] as const,
   internalChangelogEntries: ['internal', 'changelog-entries'] as const,
 

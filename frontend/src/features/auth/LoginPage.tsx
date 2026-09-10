@@ -78,7 +78,7 @@ export function LoginPage() {
         })
       }
     },
-    onError: (error) => setServerError(errorMessage(error, 'Invalid email or password.')),
+    onError: (error) => setServerError(errorMessage(error)),
   })
 
   const otpMutation = useMutation({

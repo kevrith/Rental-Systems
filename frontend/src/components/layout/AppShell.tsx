@@ -314,6 +314,7 @@ const NAV_SECTIONS: { heading: string; items: NavItem[] }[] = [
 const STAFF_ONLY_SECTION: { heading: string; items: NavItem[] } = {
   heading: 'RentFlow staff',
   items: [
+    { to: '/internal', label: 'Admin dashboard', icon: <ShieldAlert className="h-4 w-4" /> },
     { to: '/internal/health', label: 'Customer health', icon: <HeartPulse className="h-4 w-4" /> },
     { to: '/internal/content', label: 'Content', icon: <FileEdit className="h-4 w-4" /> },
   ],

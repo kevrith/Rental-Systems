@@ -66,7 +66,12 @@ export function initials(name: string | null | undefined): string {
 
 /** Turn any API error into a sentence worth showing a user. */
 export function errorMessage(error: unknown, fallback = 'Something went wrong. Please try again.'): string {
-  const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  // Axios wraps network failures — no response means the server was unreachable.
+  const axiosError = error as { response?: { data?: { detail?: unknown } }; request?: unknown; message?: string }
+  if (!axiosError.response && axiosError.request) {
+    return 'Could not reach the server. Check your connection and try again.'
+  }
+  const detail = axiosError?.response?.data?.detail
   if (typeof detail === 'string') return detail
   if (detail && typeof detail === 'object' && 'message' in detail) {
     return String((detail as { message: unknown }).message)
@@ -76,6 +81,6 @@ export function errorMessage(error: unknown, fallback = 'Something went wrong. P
     const first = detail[0] as { msg?: string }
     if (first?.msg) return first.msg
   }
-  if (error instanceof Error && error.message) return error.message
+  if (error instanceof Error && error.message && !error.message.includes('status code')) return error.message
   return fallback
 }

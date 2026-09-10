@@ -9,8 +9,8 @@ entirely on subdomains that do not exist yet.
 
 | Host | Type | Points at | Serves |
 | --- | --- | --- | --- |
-| `app.kastra.co.ke` | A / AAAA / CNAME | the frontend host | the React app and every public page (landing, help centre, tenant portal, public listings) |
-| `api.kastra.co.ke` | A / AAAA / CNAME | the API host | FastAPI, at `/api/v1` |
+| `rent.kastra.co.ke` | A / AAAA / CNAME | the frontend host | the React app and every public page (landing, help centre, tenant portal, public listings) |
+| `api.rent.kastra.co.ke` | A / AAAA / CNAME | the API host | FastAPI, at `/api/v1` |
 
 The existing apex records are left alone. Adding a subdomain never affects
 what the apex resolves to — they are independent records in the same zone.
@@ -43,31 +43,32 @@ These are the settings whose values are domain-dependent. Everything else in
 `backend/.env.example` is unaffected.
 
 ```bash
-FRONTEND_URL=https://app.kastra.co.ke
-CORS_ORIGINS=["https://app.kastra.co.ke"]
+FRONTEND_URL=https://rent.kastra.co.ke
+# Include the Vercel backup URL so it stays functional if the custom domain has a DNS/TLS issue.
+CORS_ORIGINS=["https://rent.kastra.co.ke","https://rentflow.vercel.app"]
 
 # Bare host, no scheme or port. A passkey registered against this value only
 # works on this exact hostname — set it to the apex only if the app will ever
 # be served from more than one subdomain.
-WEBAUTHN_RP_ID=app.kastra.co.ke
-WEBAUTHN_ORIGIN=https://app.kastra.co.ke
+WEBAUTHN_RP_ID=rent.kastra.co.ke
+WEBAUTHN_ORIGIN=https://rent.kastra.co.ke
 
 # Callback URLs must be reachable by the third party, so they point at the
 # API host rather than the app host.
-DARAJA_CALLBACK_BASE_URL=https://api.kastra.co.ke
-OAUTH_CALLBACK_BASE_URL=https://api.kastra.co.ke
+DARAJA_CALLBACK_BASE_URL=https://api.rent.kastra.co.ke
+OAUTH_CALLBACK_BASE_URL=https://api.rent.kastra.co.ke
 
 EMAIL_FROM=RentFlow <noreply@mail.kastra.co.ke>
 SUPPORT_EMAIL=support@kastra.co.ke
 ```
 
-The frontend needs `VITE_API_URL=https://api.kastra.co.ke/api/v1` at build
+The frontend needs `VITE_API_URL=https://api.rent.kastra.co.ke/api/v1` at build
 time — it is baked into the bundle, so it is a build argument, not a runtime
 variable.
 
 ## Checks before going live
 
-- `https://app.kastra.co.ke` and `https://api.kastra.co.ke` both serve valid
+- `https://rent.kastra.co.ke` and `https://api.rent.kastra.co.ke` both serve valid
   certificates, and the apex still serves the existing site untouched.
 - A login from a clean browser completes end to end — this exercises
   `CORS_ORIGINS`, `FRONTEND_URL` and SMS delivery in one go.

@@ -69,6 +69,9 @@ const AssetDetailPage = lazy(() =>
 const CompliancePage = lazy(() =>
   import('@/features/facilities/CompliancePage').then((m) => ({ default: m.CompliancePage })),
 )
+const SuperAdminDashboard = lazy(() =>
+  import('@/features/internal/SuperAdminDashboard').then((m) => ({ default: m.SuperAdminDashboard })),
+)
 const CustomerHealthPage = lazy(() =>
   import('@/features/success/CustomerHealthPage').then((m) => ({ default: m.CustomerHealthPage })),
 )
@@ -498,6 +501,7 @@ function App() {
             <Route path="/referrals" element={<ReferralPage />} />
             <Route path="/feedback" element={<FeatureBoardPage />} />
             <Route element={<ProtectedRoute requirePlatformStaff />}>
+              <Route path="/internal" element={<SuperAdminDashboard />} />
               <Route path="/internal/health" element={<CustomerHealthPage />} />
               <Route path="/internal/content" element={<InternalContentPage />} />
             </Route>

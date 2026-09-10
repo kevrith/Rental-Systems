@@ -2728,6 +2728,63 @@ export interface SearchResult {
   url: string
 }
 
+// ------------------------------------------------- internal / superadmin
+
+export type BreachCategory =
+  | 'unauthorised_access'
+  | 'data_loss'
+  | 'ransomware'
+  | 'accidental_disclosure'
+  | 'insider_threat'
+  | 'other'
+export type BreachSeverity = 'low' | 'medium' | 'high' | 'critical'
+export type BreachStatus =
+  | 'open'
+  | 'contained'
+  | 'notified'
+  | 'closed'
+  | 'no_notification_required'
+
+export interface BreachRecord {
+  id: string
+  reference_code: string
+  category: BreachCategory
+  severity: BreachSeverity
+  status: BreachStatus
+  summary: string
+  detail: string | null
+  detected_at: string
+  occurred_at: string | null
+  notification_due_at: string
+  affected_organization_ids: string[]
+  affected_subject_count: number | null
+  data_categories: string[]
+  detector: string | null
+  contained_at: string | null
+  regulator_notified_at: string | null
+  regulator_reference: string | null
+  customers_notified_at: string | null
+  no_notification_reason: string | null
+  closed_at: string | null
+  created_at: string
+  hours_remaining: number
+}
+
+export interface BreachDashboard {
+  open: number
+  awaiting_notification: number
+  overdue: number
+}
+
+export interface OrganizationSuspensionState {
+  organization_id: string
+  name: string
+  is_active: boolean
+  suspended_at: string | null
+  suspension_reason: string | null
+  reactivated_at: string | null
+}
+
 export interface AuditChainVerification {
   total: number
   verified: number

@@ -422,11 +422,12 @@ async def initiate_login(
     fingerprint = session_service.request_fingerprint(request)
     was_known = await session_service.is_known_device(db, user, fingerprint)
 
-    if await session_service.is_trusted_device(db, user, fingerprint):
-        tokens = await _finalize_login(db, user, request, remember_device=False, device_was_known=True)
-        return LoginChallengeResponse(
-            otp_required=False, message="Signed in on a trusted device", tokens=tokens
-        )
+    # OTP is bypassed when REQUIRE_OTP=false (dev/no-SMS-credentials mode)
+    # or when the device is already trusted ("remember this device" was ticked
+    # on a previous login from this browser).
+    if not settings.REQUIRE_OTP or await session_service.is_trusted_device(db, user, fingerprint):
+        tokens = await _finalize_login(db, user, request, remember_device=False, device_was_known=was_known)
+        return LoginChallengeResponse(otp_required=False, message="Signed in successfully", tokens=tokens)
 
     code = await otp_service.generate_otp(LOGIN_OTP_PURPOSE, str(user.id))
     await get_sms_notifier().send(

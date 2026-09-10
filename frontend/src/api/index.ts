@@ -9,6 +9,9 @@ import type {
   ApiKeyUsage,
   ArrearsReport,
   AuditChainVerification,
+  BreachRecord,
+  BreachDashboard,
+  OrganizationSuspensionState,
   CaretakerTaskList,
   Disbursement,
   DisbursementPreview,
@@ -1113,6 +1116,33 @@ export const internalApi = {
     patch<{ organization_id: string; plan: string }>(`/internal/organizations/${organizationId}/plan`, {
       plan,
     }),
+
+  suspensionState: (organizationId: string) =>
+    get<OrganizationSuspensionState>(`/internal/organizations/${organizationId}/suspension`),
+  suspendOrganization: (organizationId: string, body: { reason: string; notify_account: boolean }) =>
+    post<OrganizationSuspensionState>(`/internal/organizations/${organizationId}/suspend`, body),
+  reactivateOrganization: (organizationId: string) =>
+    post<OrganizationSuspensionState>(`/internal/organizations/${organizationId}/reactivate`),
+
+  breachDashboard: () => get<BreachDashboard>('/internal/breaches/dashboard'),
+  breaches: (open_only?: boolean) =>
+    get<BreachRecord[]>('/internal/breaches', open_only !== undefined ? { open_only } : undefined),
+  getBreach: (id: string) => get<BreachRecord>(`/internal/breaches/${id}`),
+  reportBreach: (body: {
+    category: string
+    severity: string
+    summary: string
+    detail?: string | null
+    detected_at?: string | null
+    occurred_at?: string | null
+    affected_organization_ids?: string[]
+    affected_subject_count?: number | null
+    data_categories?: string[]
+  }) => post<BreachRecord>('/internal/breaches', body),
+  advanceBreach: (id: string, body: { new_status: string; note?: string | null; regulator_reference?: string | null }) =>
+    post<BreachRecord>(`/internal/breaches/${id}/advance`, body),
+  notifyBreachCustomers: (id: string, message: string) =>
+    post<{ contacts_notified: number }>(`/internal/breaches/${id}/notify-customers`, { message }),
 
   helpArticles: () => get<HelpArticle[]>('/internal/help-articles'),
   createHelpArticle: (body: {
