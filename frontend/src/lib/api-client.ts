@@ -59,8 +59,12 @@ apiClient.interceptors.response.use(
     // no amount of refreshing will change that. Auth endpoints that return 401
     // as part of their normal flow (login, OTP verify) must not trigger a
     // refresh attempt — there is no session to refresh yet.
+    if (status !== 401 || !config || config._retried) {
+      return Promise.reject(error)
+    }
+
     const isAuthEndpoint = config.url?.includes('/auth/')
-    if (status !== 401 || !config || config._retried || isAuthEndpoint) {
+    if (isAuthEndpoint) {
       return Promise.reject(error)
     }
 
