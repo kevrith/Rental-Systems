@@ -56,8 +56,11 @@ apiClient.interceptors.response.use(
     const status = error.response?.status
 
     // Only a 401 is recoverable. A 403 means the role or tenant is wrong, and
-    // no amount of refreshing will change that.
-    if (status !== 401 || !config || config._retried) {
+    // no amount of refreshing will change that. Auth endpoints that return 401
+    // as part of their normal flow (login, OTP verify) must not trigger a
+    // refresh attempt — there is no session to refresh yet.
+    const isAuthEndpoint = config.url?.includes('/auth/')
+    if (status !== 401 || !config || config._retried || isAuthEndpoint) {
       return Promise.reject(error)
     }
 
