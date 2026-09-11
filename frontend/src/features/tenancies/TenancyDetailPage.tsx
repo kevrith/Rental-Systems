@@ -25,7 +25,6 @@ import {
   Textarea,
   linkButtonClass,
 } from '@/components/ui'
-import { API_BASE_URL } from '@/lib/api-client'
 import { errorMessage, humanize, kes, shortDate, today } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
 import { useAuthStore } from '@/store/auth-store'
@@ -316,15 +315,18 @@ export function TenancyDetailPage() {
                     <Download className="h-4 w-4" />
                     Download lease
                   </a>
-                  <a
-                    href={`${API_BASE_URL}${tenanciesApi.leasePreviewUrl(tenancyId!)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={`${linkButtonClass('ghost')} w-full justify-center`}
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-center"
+                    icon={<Eye className="h-4 w-4" />}
+                    onClick={async () => {
+                      const blob = await tenanciesApi.leasePreview(tenancyId!)
+                      const url = URL.createObjectURL(blob)
+                      window.open(url, '_blank')
+                    }}
                   >
-                    <Eye className="h-4 w-4" />
                     Preview in browser
-                  </a>
+                  </Button>
                 </>
               ) : (
                 <p className="text-sm text-slate-500">

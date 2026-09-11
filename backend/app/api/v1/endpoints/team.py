@@ -1,7 +1,7 @@
 import uuid
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +28,12 @@ class UpdateAccessRequest(BaseModel):
     is_active: bool | None = None
     property_ids: list[uuid.UUID] | None = None
     cash_limit: float | None = Field(default=None, ge=0)
+
+
+class UpdateProfileRequest(BaseModel):
+    full_name: str | None = Field(default=None, min_length=2, max_length=255)
+    email: str | None = None
+    phone_number: str | None = Field(default=None, min_length=10, max_length=32)
 
 
 class AcceptInvitationResponse(BaseModel):
@@ -86,6 +92,51 @@ async def revoke_invitation(
 ) -> MessageResponse:
     await user_service.revoke_invitation(db, context, invitation_id)
     return MessageResponse(message="Invitation revoked")
+
+
+@router.post("/invitations/{invitation_id}/resend", response_model=InvitationRead)
+async def resend_invitation(
+    invitation_id: uuid.UUID,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.USER_INVITE)),
+    db: AsyncSession = Depends(get_db),
+) -> Invitation:
+    invitation = await db.get(Invitation, invitation_id)
+    if invitation is None or invitation.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+    if invitation.status != InvitationStatus.PENDING:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invitation is no longer pending")
+    return await user_service.resend_invitation(db, context, invitation, request)
+
+
+@router.patch("/{user_id}/profile", response_model=UserRead)
+async def update_profile(
+    user_id: uuid.UUID,
+    payload: UpdateProfileRequest,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.USER_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await user_service.update_member_profile(
+        db,
+        context,
+        user_id,
+        full_name=payload.full_name,
+        email=payload.email,
+        phone_number=payload.phone_number,
+        request=request,
+    )
+
+
+@router.delete("/{user_id}", response_model=MessageResponse)
+async def remove_member(
+    user_id: uuid.UUID,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.USER_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    await user_service.remove_member(db, context, user_id, request=request)
+    return MessageResponse(message="Team member removed")
 
 
 @router.patch("/{user_id}/access", response_model=UserRead)

@@ -422,6 +422,92 @@ async def revoke_invitation(db: AsyncSession, context: OrgContext, invitation_id
     await db.commit()
 
 
+async def resend_invitation(
+    db: AsyncSession, context: OrgContext, invitation: Invitation, request: Request | None = None
+) -> Invitation:
+    """Refresh the token and re-send the SMS for a pending invitation."""
+    raw_token = generate_url_token()
+    invitation.token_hash = hash_token(raw_token)
+    invitation.expires_at = datetime.now(UTC) + timedelta(hours=settings.INVITATION_TTL_HOURS)
+    link = f"{settings.FRONTEND_URL}/accept-invite?token={raw_token}"
+    invitation.invite_link = link
+    await get_sms_notifier().send(
+        invitation.phone_number,
+        f"{context.user.full_name} invited you to {context.organization.name} on RentFlow. "
+        f"Set your password here: {link}",
+    )
+    audit_service.record(
+        db,
+        organization_id=context.organization_id,
+        action="user.invitation_resent",
+        entity_type="invitation",
+        entity_id=invitation.id,
+        actor=context.user,
+        summary=f"Resent invitation to {invitation.full_name}",
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(invitation)
+    return invitation
+
+
+async def update_member_profile(
+    db: AsyncSession,
+    context: OrgContext,
+    user_id: uuid.UUID,
+    *,
+    full_name: str | None = None,
+    email: str | None = None,
+    phone_number: str | None = None,
+    request: Request | None = None,
+) -> User:
+    user = await db.get(User, user_id)
+    if user is None or user.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if full_name is not None:
+        user.full_name = full_name
+    if email is not None:
+        user.email = email
+    if phone_number is not None:
+        user.phone_number = normalize_phone(phone_number)
+    audit_service.record(
+        db,
+        organization_id=context.organization_id,
+        action="user.profile_updated",
+        entity_type="user",
+        entity_id=user.id,
+        actor=context.user,
+        summary=f"Updated profile for {user.full_name}",
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def remove_member(
+    db: AsyncSession, context: OrgContext, user_id: uuid.UUID, *, request: Request | None = None
+) -> None:
+    user = await db.get(User, user_id)
+    if user is None or user.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.id == context.user.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot remove yourself")
+    await session_service.revoke_all(db, user.id)
+    audit_service.record(
+        db,
+        organization_id=context.organization_id,
+        action="user.removed",
+        entity_type="user",
+        entity_id=user.id,
+        actor=context.user,
+        summary=f"Removed {user.full_name} from the team",
+        request=request,
+    )
+    await db.delete(user)
+    await db.commit()
+
+
 async def set_user_access(
     db: AsyncSession,
     context: OrgContext,

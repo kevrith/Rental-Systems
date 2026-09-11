@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Clock, Copy, MessageCircle, Send, UserCog, UserPlus, X } from 'lucide-react'
+import { Clock, Copy, MessageCircle, Pencil, RefreshCw, Send, Trash2, UserCog, UserPlus, X } from 'lucide-react'
 import { useState } from 'react'
 
 import { propertiesApi, teamApi } from '@/api'
@@ -35,6 +35,7 @@ const INVITABLE_ROLES = [
 export function TeamPage() {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [accessFor, setAccessFor] = useState<TeamMember | null>(null)
+  const [editFor, setEditFor] = useState<TeamMember | null>(null)
   const queryClient = useQueryClient()
 
   const canInvite = useAuthStore((state) => state.user?.permissions?.includes('user:invite'))
@@ -49,6 +50,11 @@ export function TeamPage() {
 
   const revoke = useMutation({
     mutationFn: (id: string) => teamApi.revokeInvitation(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.invitations }),
+  })
+
+  const resend = useMutation({
+    mutationFn: (id: string) => teamApi.resendInvitation(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.invitations }),
   })
 
@@ -83,7 +89,9 @@ export function TeamPage() {
                 invitation={invitation}
                 canInvite={!!canInvite}
                 revoking={revoke.isPending}
+                resending={resend.isPending}
                 onRevoke={() => revoke.mutate(invitation.id)}
+                onResend={() => resend.mutate(invitation.id)}
               />
             ))}
           </ul>
@@ -148,14 +156,24 @@ export function TeamPage() {
                     <div className="flex items-center gap-2">
                       {!member.is_active && <Badge tone="danger">Disabled</Badge>}
                       {canManage && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon={<UserCog className="h-3.5 w-3.5" />}
-                          onClick={() => setAccessFor(member)}
-                        >
-                          Access
-                        </Button>
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<Pencil className="h-3.5 w-3.5" />}
+                            onClick={() => setEditFor(member)}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<UserCog className="h-3.5 w-3.5" />}
+                            onClick={() => setAccessFor(member)}
+                          >
+                            Access
+                          </Button>
+                        </>
                       )}
                     </div>
                   </Td>
@@ -172,6 +190,9 @@ export function TeamPage() {
       {accessFor && (
         <AccessDialog member={accessFor} onClose={() => setAccessFor(null)} />
       )}
+      {editFor && (
+        <EditMemberDialog member={editFor} onClose={() => setEditFor(null)} />
+      )}
     </div>
   )
 }
@@ -180,12 +201,16 @@ function PendingInvitationRow({
   invitation,
   canInvite,
   revoking,
+  resending,
   onRevoke,
+  onResend,
 }: {
   invitation: import('@/api/types').Invitation
   canInvite: boolean
   revoking: boolean
+  resending: boolean
   onRevoke: () => void
+  onResend: () => void
 }) {
   const [copied, setCopied] = useState(false)
   const link = invitation.invite_link
@@ -208,15 +233,26 @@ function PendingInvitationRow({
             Pending
           </Badge>
           {canInvite && (
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<X className="h-3.5 w-3.5" />}
-              loading={revoking}
-              onClick={onRevoke}
-            >
-              Revoke
-            </Button>
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<RefreshCw className="h-3.5 w-3.5" />}
+                loading={resending}
+                onClick={onResend}
+              >
+                Resend
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<X className="h-3.5 w-3.5" />}
+                loading={revoking}
+                onClick={onRevoke}
+              >
+                Revoke
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -475,6 +511,94 @@ function InviteDialog({ open, onClose }: { open: boolean; onClose: () => void })
             </>
           )}
 
+          {error && <Alert tone="danger">{error}</Alert>}
+        </div>
+      )}
+    </Dialog>
+  )
+}
+
+function EditMemberDialog({ member, onClose }: { member: TeamMember; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [fullName, setFullName] = useState(member.full_name)
+  const [email, setEmail] = useState(member.email ?? '')
+  const [phone, setPhone] = useState(member.phone_number)
+  const [error, setError] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const update = useMutation({
+    mutationFn: () =>
+      teamApi.updateProfile(member.id, {
+        full_name: fullName || undefined,
+        email: email || undefined,
+        phone_number: phone || undefined,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.team })
+      onClose()
+    },
+    onError: (err) => setError(errorMessage(err)),
+  })
+
+  const remove = useMutation({
+    mutationFn: () => teamApi.removeMember(member.id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.team })
+      onClose()
+    },
+    onError: (err) => setError(errorMessage(err)),
+  })
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Edit ${member.full_name}`}
+      footer={
+        confirmDelete ? (
+          <>
+            <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+            <Button
+              variant="danger"
+              loading={remove.isPending}
+              onClick={() => remove.mutate()}
+            >
+              Yes, remove
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              variant="ghost"
+              icon={<Trash2 className="h-4 w-4" />}
+              onClick={() => setConfirmDelete(true)}
+            >
+              Remove member
+            </Button>
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button loading={update.isPending} onClick={() => { setError(null); update.mutate() }}>
+              Save
+            </Button>
+          </>
+        )
+      }
+    >
+      {confirmDelete ? (
+        <Alert tone="danger">
+          This will immediately sign {member.full_name} out of all devices and remove their account.
+          Are you sure?
+        </Alert>
+      ) : (
+        <div className="space-y-4">
+          <Field label="Full name">
+            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          </Field>
+          <Field label="Email">
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </Field>
+          <Field label="Phone number">
+            <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </Field>
           {error && <Alert tone="danger">{error}</Alert>}
         </div>
       )}

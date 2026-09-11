@@ -250,7 +250,9 @@ export const tenanciesApi = {
     post<{ file_id: string; filename: string; url: string }>(
       `/tenancies/${id}/lease${templateId ? `?template_id=${templateId}` : ''}`,
     ),
-  leasePreviewUrl: (id: string) => `/tenancies/${id}/lease/preview`,
+  /** Fetches the live-rendered lease PDF as a Blob — opens in-browser without
+   *  exposing the Bearer token in the URL (plain <a href> does not send auth). */
+  leasePreview: (id: string) => getBlob(`/tenancies/${id}/lease/preview`),
 }
 
 export const leaseTemplatesApi = {
@@ -713,7 +715,10 @@ export const teamApi = {
   invitations: () => get<Invitation[]>('/team/invitations'),
   invite: (body: unknown) => post<Invitation>('/team/invitations', body),
   revokeInvitation: (id: string) => del<{ message: string }>(`/team/invitations/${id}`),
+  resendInvitation: (id: string) => post<Invitation>(`/team/invitations/${id}/resend`),
   updateAccess: (id: string, body: unknown) => patch<TeamMember>(`/team/${id}/access`, body),
+  updateProfile: (id: string, body: unknown) => patch<TeamMember>(`/team/${id}/profile`, body),
+  removeMember: (id: string) => del<{ message: string }>(`/team/${id}`),
   previewInvitation: (token: string) =>
     get<{ full_name: string; organization_name: string; role: string; phone_number: string }>(
       '/invitations/preview',
