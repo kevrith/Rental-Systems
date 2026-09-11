@@ -116,7 +116,7 @@ export function TenantFormPage() {
       await queryClient.invalidateQueries({ queryKey: ['tenants'] })
       if (!isEdit) {
         void customerSuccessApi.markOnboardingStep('added_tenant').then(() =>
-          queryClient.invalidateQueries({ queryKey: ['onboarding'] })
+          queryClient.invalidateQueries({ queryKey: queryKeys.onboarding })
         )
       }
       navigate(`/tenants/${tenant.id}`)

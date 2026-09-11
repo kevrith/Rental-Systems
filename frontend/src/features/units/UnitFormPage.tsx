@@ -143,7 +143,7 @@ export function UnitFormPage() {
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       if (!isEdit) {
         void customerSuccessApi.markOnboardingStep('added_units').then(() =>
-          queryClient.invalidateQueries({ queryKey: ['onboarding'] })
+          queryClient.invalidateQueries({ queryKey: queryKeys.onboarding })
         )
       }
       navigate(`/units/${unit.id}`)
@@ -378,7 +378,7 @@ export function BulkUnitsPage() {
       await queryClient.invalidateQueries({ queryKey: ['properties'] })
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       void customerSuccessApi.markOnboardingStep('added_units').then(() =>
-        queryClient.invalidateQueries({ queryKey: ['onboarding'] })
+        queryClient.invalidateQueries({ queryKey: queryKeys.onboarding })
       )
       navigate(`/properties/${formValues.property_id}`, {
         state: { message: `${result.created} units created` },

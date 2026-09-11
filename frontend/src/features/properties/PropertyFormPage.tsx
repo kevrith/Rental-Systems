@@ -151,7 +151,7 @@ export function PropertyFormPage() {
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       if (!isEdit) {
         void customerSuccessApi.markOnboardingStep('added_property').then(() =>
-          queryClient.invalidateQueries({ queryKey: ['onboarding'] })
+          queryClient.invalidateQueries({ queryKey: queryKeys.onboarding })
         )
       }
       navigate(`/properties/${property.id}`)
