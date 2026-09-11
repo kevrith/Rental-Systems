@@ -39,6 +39,7 @@ import {
 } from '@/components/ui'
 import { errorMessage, humanize, shortDate } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
+import { OrgDetailDrawer } from './OrgDetailDrawer'
 
 const PLAN_TONE: Record<string, 'neutral' | 'info' | 'brand' | 'success' | 'warn' | 'danger'> = {
   trial: 'warn',
@@ -57,6 +58,7 @@ export function OrganizationsTab() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [suspendTarget, setSuspendTarget] = useState<OrgDetail | null>(null)
   const [planTarget, setPlanTarget] = useState<OrgDetail | null>(null)
+  const [drillTarget, setDrillTarget] = useState<OrgDetail | null>(null)
 
   const params = {
     search: search || undefined,
@@ -154,6 +156,13 @@ export function OrganizationsTab() {
                           ) : (
                             <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
                           )}
+                        </button>
+                        <button
+                          type="button"
+                          className="mt-0.5 block text-[11px] text-brand-600 hover:underline dark:text-brand-400"
+                          onClick={() => setDrillTarget(row)}
+                        >
+                          View units &amp; tenants
                         </button>
                       </Td>
                       <Td>
@@ -279,6 +288,9 @@ export function OrganizationsTab() {
       )}
       {planTarget && (
         <PlanDialog org={planTarget} onClose={() => setPlanTarget(null)} />
+      )}
+      {drillTarget && (
+        <OrgDetailDrawer org={drillTarget} onClose={() => setDrillTarget(null)} />
       )}
     </div>
   )

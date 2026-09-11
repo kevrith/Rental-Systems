@@ -1144,6 +1144,16 @@ export const internalApi = {
   reactivateOrganization: (organizationId: string) =>
     post<OrganizationSuspensionState>(`/internal/organizations/${organizationId}/reactivate`),
 
+  // Cross-org drill-down (read-only)
+  orgUnits: (organizationId: string) =>
+    get<{ id: string; unit_number: string; property_name: string | null; status: string; monthly_rent: string; unit_type: string | null; bedrooms: number | null; created_at: string }[]>(`/internal/organizations/${organizationId}/units`),
+  orgTenants: (organizationId: string) =>
+    get<{ id: string; full_name: string; phone_number: string; email: string | null; created_at: string }[]>(`/internal/organizations/${organizationId}/tenants`),
+  orgPayments: (organizationId: string) =>
+    get<{ id: string; reference_code: string; amount: string; method: string; status: string; paid_at: string | null; created_at: string }[]>(`/internal/organizations/${organizationId}/payments`),
+  orgDemoData: (organizationId: string) =>
+    get<{ loaded: boolean; row_count: number; recipe: string | null; loaded_at: string | null }>(`/internal/organizations/${organizationId}/demo-data`),
+
   breachDashboard: () => get<BreachDashboard>('/internal/breaches/dashboard'),
   breaches: (open_only?: boolean) =>
     get<BreachRecord[]>('/internal/breaches', open_only !== undefined ? { open_only } : undefined),

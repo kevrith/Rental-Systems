@@ -15,10 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_platform_staff
 from app.core.config import settings
 from app.core.database import get_db
+from app.models.billing import Payment
 from app.models.customer_success import CustomerSuccessAlert, OrganizationHealthScore
+from app.models.demo import DemoDataset
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.organization import Organization
-from app.models.property import Unit
+from app.models.property import Property, Unit
 from app.models.security import BreachCategory, BreachSeverity, BreachStatus
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
@@ -264,6 +266,120 @@ async def update_organization_plan(
     await referral_service.handle_plan_upgraded(db, organization)
     await db.commit()
     return {"organization_id": str(organization.id), "plan": payload.plan.value}
+
+
+# ------------------------------------------------- cross-org drill-down reads
+
+
+@router.get("/organizations/{organization_id}/units")
+async def org_units(
+    organization_id: uuid.UUID,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    rows = list(
+        await db.scalars(
+            select(Unit)
+            .where(Unit.organization_id == organization_id, Unit.is_archived.is_(False))
+            .order_by(Unit.created_at.desc())
+            .limit(500)
+        )
+    )
+    props = {}
+    for row in rows:
+        if row.property_id not in props:
+            p = await db.get(Property, row.property_id)
+            props[row.property_id] = p.name if p else None
+    return [
+        {
+            "id": str(r.id),
+            "unit_number": r.unit_number,
+            "property_name": props.get(r.property_id),
+            "status": r.status.value,
+            "monthly_rent": str(r.monthly_rent),
+            "unit_type": r.unit_type,
+            "bedrooms": r.bedrooms,
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+@router.get("/organizations/{organization_id}/tenants")
+async def org_tenants(
+    organization_id: uuid.UUID,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    rows = list(
+        await db.scalars(
+            select(Tenant)
+            .where(Tenant.organization_id == organization_id, Tenant.is_archived.is_(False))
+            .order_by(Tenant.created_at.desc())
+            .limit(500)
+        )
+    )
+    return [
+        {
+            "id": str(r.id),
+            "full_name": r.full_name,
+            "phone_number": r.phone_number,
+            "email": r.email,
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+@router.get("/organizations/{organization_id}/payments")
+async def org_payments(
+    organization_id: uuid.UUID,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    rows = list(
+        await db.scalars(
+            select(Payment)
+            .where(Payment.organization_id == organization_id)
+            .order_by(Payment.created_at.desc())
+            .limit(200)
+        )
+    )
+    return [
+        {
+            "id": str(r.id),
+            "reference_code": r.reference_code,
+            "amount": str(r.amount),
+            "method": r.method.value,
+            "status": r.status.value,
+            "paid_at": r.paid_at.isoformat() if r.paid_at else None,
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+@router.get("/organizations/{organization_id}/demo-data")
+async def org_demo_data(
+    organization_id: uuid.UUID,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    dataset = await db.scalar(
+        select(DemoDataset)
+        .where(
+            DemoDataset.organization_id == organization_id,
+            DemoDataset.removed_at.is_(None),
+        )
+        .order_by(DemoDataset.created_at.desc())
+        .limit(1)
+    )
+    return {
+        "loaded": dataset is not None,
+        "row_count": dataset.row_count if dataset else 0,
+        "recipe": dataset.recipe if dataset else None,
+        "loaded_at": dataset.created_at.isoformat() if dataset else None,
+    }
 
 
 # ------------------------------------------------------------- help articles

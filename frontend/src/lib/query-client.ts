@@ -181,6 +181,11 @@ export const queryKeys = {
   auditVerify: ['security', 'audit-verify'] as const,
   internalHelpArticles: ['internal', 'help-articles'] as const,
   internalChangelogEntries: ['internal', 'changelog-entries'] as const,
+  internalOrgUnits: (id: string) => ['internal', 'organizations', id, 'units'] as const,
+  internalOrgTenants: (id: string) => ['internal', 'organizations', id, 'tenants'] as const,
+  internalOrgPayments: (id: string) => ['internal', 'organizations', id, 'payments'] as const,
+  internalOrgDemoData: (id: string) => ['internal', 'organizations', id, 'demo-data'] as const,
+  internalTaskOverview: ['internal', 'tasks'] as const,
 
   // Reports (Phase 4, Sprint 21)
   analyticsVacancyRisk: ['analytics', 'vacancy-risk'] as const,

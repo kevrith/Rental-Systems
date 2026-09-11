@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   ScrollText,
   ShieldAlert,
+  Terminal,
   Users,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -17,9 +18,10 @@ import { BreachRegisterTab } from './tabs/BreachRegisterTab'
 import { ContentTab } from './tabs/ContentTab'
 import { OrganizationsTab } from './tabs/OrganizationsTab'
 import { OverviewTab } from './tabs/OverviewTab'
+import { TaskRunnerTab } from './tabs/TaskRunnerTab'
 import { UsersTab } from './tabs/UsersTab'
 
-type TabId = 'overview' | 'organizations' | 'users' | 'breaches' | 'audit' | 'content'
+type TabId = 'overview' | 'organizations' | 'users' | 'breaches' | 'audit' | 'content' | 'tasks'
 
 const NAV: {
   id: TabId
@@ -62,6 +64,12 @@ const NAV: {
     label: 'Content',
     icon: <FileEdit className="h-4 w-4" />,
     description: 'Help articles & changelog',
+  },
+  {
+    id: 'tasks',
+    label: 'Task runner',
+    icon: <Terminal className="h-4 w-4" />,
+    description: 'Celery jobs & run history',
   },
 ]
 
@@ -143,6 +151,7 @@ export function SuperAdminDashboard() {
           {tab === 'breaches' && <BreachRegisterTab />}
           {tab === 'audit' && <AuditLogTab />}
           {tab === 'content' && <ContentTab />}
+          {tab === 'tasks' && <TaskRunnerTab />}
         </main>
       </div>
     </div>
