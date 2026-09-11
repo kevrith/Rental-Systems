@@ -78,35 +78,13 @@ export function TeamPage() {
           </CardHeader>
           <ul className="divide-y divide-slate-100">
             {invitations.data.map((invitation) => (
-              <li
+              <PendingInvitationRow
                 key={invitation.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900">{invitation.full_name}</p>
-                  <p className="text-xs text-slate-500">
-                    {invitation.phone_number} · {humanize(invitation.role)} · expires{' '}
-                    {dateTime(invitation.expires_at)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge tone="warn">
-                    <Clock className="h-3 w-3" />
-                    Pending
-                  </Badge>
-                  {canInvite && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      icon={<X className="h-3.5 w-3.5" />}
-                      loading={revoke.isPending}
-                      onClick={() => revoke.mutate(invitation.id)}
-                    >
-                      Revoke
-                    </Button>
-                  )}
-                </div>
-              </li>
+                invitation={invitation}
+                canInvite={!!canInvite}
+                revoking={revoke.isPending}
+                onRevoke={() => revoke.mutate(invitation.id)}
+              />
             ))}
           </ul>
         </Card>
@@ -195,6 +173,84 @@ export function TeamPage() {
         <AccessDialog member={accessFor} onClose={() => setAccessFor(null)} />
       )}
     </div>
+  )
+}
+
+function PendingInvitationRow({
+  invitation,
+  canInvite,
+  revoking,
+  onRevoke,
+}: {
+  invitation: import('@/api/types').Invitation
+  canInvite: boolean
+  revoking: boolean
+  onRevoke: () => void
+}) {
+  const [copied, setCopied] = useState(false)
+  const link = invitation.invite_link
+  const waPhone = invitation.phone_number.replace('+', '')
+  const waText = `Hi ${invitation.full_name}, here is your RentFlow setup link: ${link}`
+
+  return (
+    <li className="space-y-2 px-5 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-slate-900">{invitation.full_name}</p>
+          <p className="text-xs text-slate-500">
+            {invitation.phone_number} · {humanize(invitation.role)} · expires{' '}
+            {dateTime(invitation.expires_at)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge tone="warn">
+            <Clock className="h-3 w-3" />
+            Pending
+          </Badge>
+          {canInvite && (
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<X className="h-3.5 w-3.5" />}
+              loading={revoking}
+              onClick={onRevoke}
+            >
+              Revoke
+            </Button>
+          )}
+        </div>
+      </div>
+      {link && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <span className="min-w-0 flex-1 truncate font-mono text-xs text-slate-600">{link}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Copy className="h-3.5 w-3.5" />}
+            onClick={() => {
+              void navigator.clipboard.writeText(link)
+              setCopied(true)
+              setTimeout(() => setCopied(false), 2000)
+            }}
+          >
+            {copied ? 'Copied!' : 'Copy'}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<MessageCircle className="h-3.5 w-3.5" />}
+            onClick={() =>
+              window.open(
+                `https://wa.me/${waPhone}?text=${encodeURIComponent(waText)}`,
+                '_blank',
+              )
+            }
+          >
+            WhatsApp
+          </Button>
+        </div>
+      )}
+    </li>
   )
 }
 

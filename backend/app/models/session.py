@@ -105,6 +105,7 @@ class Invitation(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
     property_ids: Mapped[list[Any]] = mapped_column(JSONB, default=list, nullable=False)
 
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    invite_link: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     status: Mapped[InvitationStatus] = mapped_column(
         Enum(InvitationStatus, name="invitation_status"), default=InvitationStatus.PENDING, nullable=False
     )

@@ -326,6 +326,7 @@ async def invite_user(
     db.add(invitation)
 
     link = f"{settings.FRONTEND_URL}/accept-invite?token={raw_token}"
+    invitation.invite_link = link
     await get_sms_notifier().send(
         phone,
         f"{context.user.full_name} invited you to {context.organization.name} on RentFlow. "
