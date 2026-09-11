@@ -108,6 +108,10 @@ class Tenant(OrgScopedMixin, ArchivableMixin, UUIDPrimaryKeyMixin, TimestampMixi
     # no-op, which this timestamp is what makes checkable.
     erased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Saved signature — drawn once in the tenant portal and reused in every
+    # document that requires this tenant's signature (lease agreements, etc.).
+    saved_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     tenancies: Mapped[list["Tenancy"]] = relationship(back_populates="tenant", lazy="selectin")
 
     __table_args__ = (

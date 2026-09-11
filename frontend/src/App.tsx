@@ -243,6 +243,9 @@ const PortalPaymentsPage = lazy(() =>
 const PortalPrivacyPage = lazy(() =>
   import('@/features/portal/PortalPages').then((m) => ({ default: m.PortalPrivacyPage })),
 )
+const PortalSignaturePage = lazy(() =>
+  import('@/features/portal/PortalPages').then((m) => ({ default: m.PortalSignaturePage })),
+)
 const ProfileSettings = lazy(() =>
   import('@/features/settings/SettingsPage').then((m) => ({ default: m.ProfileSettings })),
 )
@@ -289,6 +292,9 @@ const AccountingSettingsPage = lazy(() =>
   import('@/features/settings/AccountingSettingsPage').then((m) => ({
     default: m.AccountingSettingsPage,
   })),
+)
+const SignatureSettingsPage = lazy(() =>
+  import('@/features/settings/SettingsPage').then((m) => ({ default: m.SignatureSettings })),
 )
 const SecuritySettings = lazy(() =>
   import('@/features/settings/SettingsPage').then((m) => ({ default: m.SecuritySettings })),
@@ -388,6 +394,7 @@ function App() {
             <Route path="/portal/documents" element={<PortalDocumentsPage />} />
             <Route path="/portal/maintenance" element={<PortalMaintenancePage />} />
             <Route path="/portal/privacy" element={<PortalPrivacyPage />} />
+            <Route path="/portal/signature" element={<PortalSignaturePage />} />
           </Route>
         </Route>
 
@@ -519,6 +526,7 @@ function App() {
               <Route path="etims" element={<EtimsSettingsPage />} />
               <Route path="portals" element={<PortalsSettingsPage />} />
               <Route path="accounting" element={<AccountingSettingsPage />} />
+              <Route path="signature" element={<SignatureSettingsPage />} />
             </Route>
           </Route>
         </Route>

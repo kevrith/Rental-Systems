@@ -24,6 +24,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { notificationsApi, organizationApi, securityApi } from '@/api'
 import { authApi } from '@/api/auth'
 import { PageHeader } from '@/components/PageHeader'
+import { SignaturePad } from '@/components/SignaturePad'
 import {
   Alert,
   Badge,
@@ -66,6 +67,7 @@ const TABS = [
   { to: '/settings/etims', label: 'KRA eTIMS', icon: <Receipt className="h-4 w-4" /> },
   { to: '/settings/portals', label: 'Property portals', icon: <Plug className="h-4 w-4" /> },
   { to: '/settings/accounting', label: 'Accounting', icon: <Plug className="h-4 w-4" /> },
+  { to: '/settings/signature', label: 'Signature', icon: <Sparkles className="h-4 w-4" /> },
 ]
 
 export function SettingsLayout() {
@@ -294,6 +296,102 @@ export function ProfileSettings() {
           retained as the law requires.
         </p>
       </Dialog>
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------ signature
+
+export function SignatureSettings() {
+  const queryClient = useQueryClient()
+  const [draft, setDraft] = useState<string | null>(null)
+  const [initialised, setInitialised] = useState(false)
+
+  const saved = useQuery({
+    queryKey: queryKeys.mySignature,
+    queryFn: authApi.getSignature,
+    select: (data) => data.signature,
+  })
+
+  // Seed the pad with the current saved signature once, but don't reset it
+  // every time the query refetches.
+  useEffect(() => {
+    if (!initialised && saved.data !== undefined) {
+      setDraft(saved.data ?? null)
+      setInitialised(true)
+    }
+  }, [saved.data, initialised])
+
+  const save = useMutation({
+    mutationFn: (sig: string) => authApi.saveSignature(sig),
+    onSuccess: (user) => {
+      queryClient.setQueryData(queryKeys.mySignature, { signature: user.saved_signature })
+      queryClient.setQueryData(queryKeys.me, user)
+    },
+  })
+
+  const remove = useMutation({
+    mutationFn: authApi.deleteSignature,
+    onSuccess: () => {
+      setDraft(null)
+      setInitialised(false)
+      queryClient.setQueryData(queryKeys.mySignature, { signature: null })
+    },
+  })
+
+  const hasChanged = draft !== (saved.data ?? null)
+  const canSave = hasChanged && draft !== null
+
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardHeader>
+          <CardTitle>Your signature</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Draw your signature once and it will be pre-filled automatically whenever a document
+            needs your sign-off — leases, management agreements, and any other document you are
+            asked to sign through this platform.
+          </p>
+
+          <SignaturePad
+            value={draft}
+            onChange={setDraft}
+            height={200}
+            disabled={save.isPending || remove.isPending}
+          />
+
+          {save.isError && (
+            <p className="text-sm text-danger-600">{errorMessage(save.error)}</p>
+          )}
+
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={() => draft && save.mutate(draft)}
+              disabled={!canSave}
+              loading={save.isPending}
+            >
+              Save signature
+            </Button>
+            {saved.data && (
+              <Button
+                variant="outline"
+                onClick={() => remove.mutate()}
+                loading={remove.isPending}
+                disabled={save.isPending}
+              >
+                <Trash2 className="h-4 w-4" />
+                Remove
+              </Button>
+            )}
+          </div>
+
+          {save.isSuccess && (
+            <p className="text-sm text-money-600">Signature saved successfully.</p>
+          )}
+        </CardBody>
+      </Card>
     </div>
   )
 }

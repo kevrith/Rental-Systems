@@ -54,8 +54,38 @@ async def get_signing_request(
     token: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """Return signing request details for the public signing page."""
+    """Return signing request details for the public signing page.
+
+    When the signer is a known tenant, their saved signature is included so
+    the signing page can pre-fill the pad rather than requiring a fresh drawing.
+    """
     sig = await signature_service.get_by_token(db, token)
+
+    # Attempt to look up a saved signature for this signer so the signing UI
+    # can pre-fill it. We check the tenant table first (most common), then the
+    # user table. The caller never learns whether or not a match was found —
+    # the saved_signature field simply stays null when there is no match.
+    from sqlalchemy import select
+
+    from app.models.tenant import Tenant
+    from app.models.user import User
+
+    saved_signature: str | None = None
+    if sig.tenancy_id:
+        from app.models.tenant import Tenancy
+
+        tenancy = await db.get(Tenancy, sig.tenancy_id)
+        if tenancy:
+            tenant = await db.get(Tenant, tenancy.tenant_id)
+            if tenant:
+                saved_signature = tenant.saved_signature
+
+    if saved_signature is None:
+        # Fall back to a user record matching by phone (owner/manager signing).
+        user = await db.scalar(select(User).where(User.phone_number == sig.signer_phone))
+        if user:
+            saved_signature = user.saved_signature
+
     return {
         "id": str(sig.id),
         "signer_name": sig.signer_name,
@@ -63,6 +93,7 @@ async def get_signing_request(
         "document_id": str(sig.document_id),
         "expires_at": sig.expires_at.isoformat(),
         "status": sig.status.value,
+        "saved_signature": saved_signature,
     }
 
 

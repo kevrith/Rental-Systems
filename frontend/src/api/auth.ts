@@ -148,4 +148,14 @@ export const authApi = {
 
   webauthnDeleteCredential: async (id: string) =>
     (await apiClient.delete<{ message: string }>(`/auth/webauthn/credentials/${id}`)).data,
+
+  // Saved reusable signature
+  getSignature: async () =>
+    (await apiClient.get<{ signature: string | null }>('/auth/me/signature')).data,
+
+  saveSignature: async (signature: string) =>
+    (await apiClient.put<AuthUser>('/auth/me/signature', { signature })).data,
+
+  deleteSignature: async () =>
+    (await apiClient.delete<{ message: string }>('/auth/me/signature')).data,
 }

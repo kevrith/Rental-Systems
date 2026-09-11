@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -73,6 +73,12 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Account deletion with a 30-day grace period (US-004)
     deletion_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Saved signature — drawn once in Settings and reused in every document
+    # that requires this user's signature (leases, management agreements, etc.).
+    # Stored as a base64 PNG data URL so it renders without a separate file
+    # fetch, kept in Text so length is not artificially capped.
+    saved_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     organization: Mapped["Organization"] = relationship(
         back_populates="users", foreign_keys=[organization_id]

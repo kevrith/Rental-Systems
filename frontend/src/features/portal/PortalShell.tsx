@@ -1,4 +1,4 @@
-import { CreditCard, FileText, Home, LogOut, Settings, Wrench } from 'lucide-react'
+import { CreditCard, FileText, Home, LogOut, PenLine, Settings, Wrench } from 'lucide-react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 
 import { authApi } from '@/api/auth'
@@ -12,6 +12,7 @@ const TABS = [
   { to: '/portal/payments', label: 'Payments', icon: <CreditCard className="h-5 w-5" /> },
   { to: '/portal/documents', label: 'Documents', icon: <FileText className="h-5 w-5" /> },
   { to: '/portal/maintenance', label: 'Requests', icon: <Wrench className="h-5 w-5" /> },
+  { to: '/portal/signature', label: 'Signature', icon: <PenLine className="h-5 w-5" /> },
 ]
 
 /**

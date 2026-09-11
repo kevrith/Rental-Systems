@@ -18,6 +18,7 @@ export interface AuthUser {
   deletion_requested_at?: string | null
   last_login_at?: string | null
   permissions?: string[]
+  saved_signature?: string | null
 }
 
 export interface AuthOrganization {

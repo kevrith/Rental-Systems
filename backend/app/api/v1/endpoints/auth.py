@@ -1,6 +1,7 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -253,6 +254,53 @@ async def cancel_account_deletion(
 ) -> MessageResponse:
     await user_service.cancel_account_deletion(db, current_user, request)
     return MessageResponse(message="Deletion cancelled. Your account is active again.")
+
+
+# ------------------------------------------------------------------ saved signature
+
+
+class SaveSignatureRequest(BaseModel):
+    signature: str  # base64 PNG data URL, e.g. "data:image/png;base64,..."
+
+
+@router.get("/me/signature")
+async def get_my_signature(
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Return the caller's saved signature, or null if none has been set."""
+    return {"signature": current_user.saved_signature}
+
+
+@router.put("/me/signature", response_model=UserProfile)
+async def save_my_signature(
+    body: SaveSignatureRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserProfile:
+    """Save (or replace) the caller's reusable signature."""
+    if not body.signature.startswith("data:image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Signature must be a valid image data URL",
+        )
+    current_user.saved_signature = body.signature
+    await db.commit()
+    await db.refresh(current_user)
+    return UserProfile(
+        **UserRead.model_validate(current_user).model_dump(),
+        permissions=permissions_for(current_user.role),
+    )
+
+
+@router.delete("/me/signature", response_model=MessageResponse)
+async def delete_my_signature(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """Remove the caller's saved signature."""
+    current_user.saved_signature = None
+    await db.commit()
+    return MessageResponse(message="Signature removed.")
 
 
 # --------------------------------------------------------------------- sessions

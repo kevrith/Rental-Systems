@@ -24,6 +24,7 @@ class UserRead(BaseModel):
     inactivity_timeout_minutes: int = 30
     deletion_requested_at: datetime | None = None
     last_login_at: datetime | None = None
+    saved_signature: str | None = None
 
 
 class UserProfile(UserRead):

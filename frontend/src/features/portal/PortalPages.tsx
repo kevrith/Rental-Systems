@@ -8,15 +8,17 @@ import {
   Plus,
   ShieldAlert,
   Star,
+  Trash2,
   Wrench,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { portalApi } from '@/api'
 import { authApi } from '@/api/auth'
 import type { MaintenanceRequest, MaintenanceStatus } from '@/api/types'
 import { FileUpload, type UploadedFile } from '@/components/FileUpload'
+import { SignaturePad } from '@/components/SignaturePad'
 import {
   Alert,
   Badge,
@@ -594,6 +596,98 @@ export function PortalPrivacyPage() {
           who it's linked to.
         </Alert>
       </Dialog>
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------ signature
+
+export function PortalSignaturePage() {
+  const queryClient = useQueryClient()
+  const [draft, setDraft] = useState<string | null>(null)
+  const [initialised, setInitialised] = useState(false)
+
+  const saved = useQuery({
+    queryKey: queryKeys.portalSignature,
+    queryFn: portalApi.getSignature,
+    select: (data) => data.signature,
+  })
+
+  useEffect(() => {
+    if (!initialised && saved.data !== undefined) {
+      setDraft(saved.data ?? null)
+      setInitialised(true)
+    }
+  }, [saved.data, initialised])
+
+  const save = useMutation({
+    mutationFn: (sig: string) => portalApi.saveSignature(sig),
+    onSuccess: () => {
+      queryClient.setQueryData(queryKeys.portalSignature, { signature: draft })
+    },
+  })
+
+  const remove = useMutation({
+    mutationFn: portalApi.deleteSignature,
+    onSuccess: () => {
+      setDraft(null)
+      setInitialised(false)
+      queryClient.setQueryData(queryKeys.portalSignature, { signature: null })
+    },
+  })
+
+  const hasChanged = draft !== (saved.data ?? null)
+  const canSave = hasChanged && draft !== null
+
+  return (
+    <div className="space-y-5">
+      <h1 className="text-xl font-semibold text-slate-900">My signature</h1>
+
+      <Card>
+        <CardBody className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Draw your signature once and it will be pre-filled automatically whenever your
+            landlord sends you a document to sign — such as your lease agreement. You can update
+            or remove it at any time.
+          </p>
+
+          <SignaturePad
+            value={draft}
+            onChange={setDraft}
+            height={200}
+            disabled={save.isPending || remove.isPending}
+          />
+
+          {save.isError && (
+            <p className="text-sm text-danger-600">{errorMessage(save.error)}</p>
+          )}
+
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={() => draft && save.mutate(draft)}
+              disabled={!canSave}
+              loading={save.isPending}
+              className="flex-1 justify-center"
+            >
+              Save signature
+            </Button>
+            {saved.data && (
+              <Button
+                variant="outline"
+                onClick={() => remove.mutate()}
+                loading={remove.isPending}
+                disabled={save.isPending}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+
+          {save.isSuccess && (
+            <p className="text-center text-sm text-money-600">Signature saved.</p>
+          )}
+        </CardBody>
+      </Card>
     </div>
   )
 }

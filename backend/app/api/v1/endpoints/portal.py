@@ -642,6 +642,49 @@ async def portal_update_profile(
     return MessageResponse(message="Profile updated")
 
 
+# ---------------------------------------------------------------- saved signature
+
+
+class SaveSignatureRequest(BaseModel):
+    signature: str  # base64 PNG data URL
+
+
+@router.get("/signature")
+async def portal_get_signature(
+    tenant: Tenant = Depends(get_current_tenant),
+) -> dict:
+    """Return the tenant's saved signature, or null if none has been set."""
+    return {"signature": tenant.saved_signature}
+
+
+@router.put("/signature", response_model=MessageResponse)
+async def portal_save_signature(
+    body: SaveSignatureRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """Save (or replace) the tenant's reusable signature."""
+    if not body.signature.startswith("data:image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Signature must be a valid image data URL",
+        )
+    tenant.saved_signature = body.signature
+    await db.commit()
+    return MessageResponse(message="Signature saved")
+
+
+@router.delete("/signature", response_model=MessageResponse)
+async def portal_delete_signature(
+    tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """Remove the tenant's saved signature."""
+    tenant.saved_signature = None
+    await db.commit()
+    return MessageResponse(message="Signature removed")
+
+
 @router.post("/change-password", response_model=MessageResponse)
 async def portal_change_password(
     current_password: str,

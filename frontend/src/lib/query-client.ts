@@ -219,4 +219,8 @@ export const queryKeys = {
   // Configurable approval chains (Sprint 26A, item 13)
   approvalRules: ['approvals', 'rules'] as const,
   approvalRequests: (status?: string) => ['approvals', 'requests', status ?? 'all'] as const,
+
+  // Saved reusable signatures
+  mySignature: ['signature', 'me'] as const,
+  portalSignature: ['signature', 'portal'] as const,
 }

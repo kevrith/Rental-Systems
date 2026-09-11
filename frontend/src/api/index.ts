@@ -1010,6 +1010,12 @@ export const portalApi = {
     }>('/portal/magic-link/verify', body),
   requestDataExport: () => post<{ id: string; download_url: string | null }>('/portal/data-requests/export'),
   requestDataErasure: () => post<{ message: string }>('/portal/data-requests/erase'),
+
+  // Saved reusable signature
+  getSignature: () => get<{ signature: string | null }>('/portal/signature'),
+  saveSignature: (signature: string) =>
+    put<{ message: string }>('/portal/signature', { signature }),
+  deleteSignature: () => del<{ message: string }>('/portal/signature'),
 }
 
 // ---------------------------------------------------------------- agency mode
