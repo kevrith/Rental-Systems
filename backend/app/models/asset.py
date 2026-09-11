@@ -186,11 +186,14 @@ class RentalAgreement(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base)
     asset_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("rental_assets.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    # The hirer is a `Tenant`: the same person record, the same KYC, the same
-    # payment history. A rental business's customer is not a different species.
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    # The hirer is either a tenant in the system or a walk-in customer.
+    # Walk-ins carry their details directly on the agreement.
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    hirer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    hirer_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    hirer_id_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     start_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     end_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)

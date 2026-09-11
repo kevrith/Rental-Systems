@@ -111,7 +111,11 @@ class AssetDetail(AssetRead):
 
 class AgreementCreate(BaseModel):
     asset_id: uuid.UUID
-    tenant_id: uuid.UUID
+    # Either link to an existing tenant OR supply walk-in details.
+    tenant_id: uuid.UUID | None = None
+    hirer_name: str | None = Field(default=None, min_length=2, max_length=255)
+    hirer_phone: str | None = Field(default=None, max_length=32)
+    hirer_id_number: str | None = Field(default=None, max_length=64)
     start_date: date
     end_date: date
     rate_basis: RateBasis = RateBasis.DAILY
@@ -123,6 +127,8 @@ class AgreementCreate(BaseModel):
     def _sane_window(self) -> "AgreementCreate":
         if self.end_date < self.start_date:
             raise ValueError("The hire ends before it starts")
+        if not self.tenant_id and not (self.hirer_name and self.hirer_phone):
+            raise ValueError("Provide either a tenant or a walk-in hirer name and phone")
         return self
 
 
@@ -164,7 +170,10 @@ class AgreementRead(BaseModel):
     organization_id: uuid.UUID
     reference_code: str
     asset_id: uuid.UUID
-    tenant_id: uuid.UUID
+    tenant_id: uuid.UUID | None
+    hirer_name: str | None
+    hirer_phone: str | None
+    hirer_id_number: str | None
     start_date: date
     end_date: date
     rate_basis: RateBasis

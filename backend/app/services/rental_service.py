@@ -233,7 +233,7 @@ async def availability(
 
     booked = []
     for agreement in rows:
-        tenant = await db.get(Tenant, agreement.tenant_id)
+        tenant = await db.get(Tenant, agreement.tenant_id) if agreement.tenant_id else None
         booked.append(
             {
                 "agreement_id": str(agreement.id),
@@ -241,7 +241,7 @@ async def availability(
                 "start_date": agreement.start_date.isoformat(),
                 "end_date": agreement.end_date.isoformat(),
                 "status": agreement.status.value,
-                "hirer": tenant.full_name if tenant else None,
+                "hirer": tenant.full_name if tenant else agreement.hirer_name,
             }
         )
     return booked
@@ -271,7 +271,10 @@ async def book(
     db: AsyncSession, context: OrgContext, payload, request: Request | None = None
 ) -> RentalAgreement:
     asset = assert_in_org(await db.get(RentalAsset, payload.asset_id), context, label="asset")
-    assert_in_org(await db.get(Tenant, payload.tenant_id), context, label="hirer")
+
+    tenant: Tenant | None = None
+    if payload.tenant_id:
+        tenant = assert_in_org(await db.get(Tenant, payload.tenant_id), context, label="hirer")
 
     if asset.status == AssetStatus.RETIRED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"{asset.name} has been retired")
@@ -298,7 +301,10 @@ async def book(
         organization_id=context.organization_id,
         reference_code=code,
         asset_id=asset.id,
-        tenant_id=payload.tenant_id,
+        tenant_id=tenant.id if tenant else None,
+        hirer_name=tenant.full_name if tenant else payload.hirer_name,
+        hirer_phone=tenant.phone_number if tenant else payload.hirer_phone,
+        hirer_id_number=None if tenant else payload.hirer_id_number,
         start_date=payload.start_date,
         end_date=payload.end_date,
         rate_basis=payload.rate_basis,
@@ -421,12 +427,26 @@ async def _render_agreement(db: AsyncSession, agreement: RentalAgreement, asset:
     from app.models.organization import Organization
     from app.services import file_service, pdf_service
 
-    hirer = await db.get(Tenant, agreement.tenant_id)
+    tenant_hirer = await db.get(Tenant, agreement.tenant_id) if agreement.tenant_id else None
     organization = await db.get(Organization, agreement.organization_id)
-    if not (hirer and organization):
+    if not organization:
         return None
 
-    hirer.national_id = await tenant_pii.decrypt_national_id(db, hirer)
+    class _HirerProxy:
+        def __init__(self, name: str, phone: str | None, national_id: str | None) -> None:
+            self.full_name = name
+            self.phone_number = phone
+            self.national_id = national_id
+
+    if tenant_hirer:
+        tenant_hirer.national_id = await tenant_pii.decrypt_national_id(db, tenant_hirer)
+        hirer_ctx = tenant_hirer
+    else:
+        hirer_ctx = _HirerProxy(  # type: ignore[assignment]
+            name=agreement.hirer_name or "",
+            phone=agreement.hirer_phone,
+            national_id=agreement.hirer_id_number,
+        )
 
     try:
         pdf_bytes = pdf_service.render_pdf(
@@ -436,7 +456,7 @@ async def _render_agreement(db: AsyncSession, agreement: RentalAgreement, asset:
                 "logo_url": None,
                 "agreement": agreement,
                 "asset": asset,
-                "hirer": hirer,
+                "hirer": hirer_ctx,
                 "generated_at": date.today(),
             },
         )
@@ -444,14 +464,16 @@ async def _render_agreement(db: AsyncSession, agreement: RentalAgreement, asset:
         logger.exception("Hire agreement rendering failed for %s", agreement.reference_code)
         return None
 
+    entity_type = "tenant" if tenant_hirer else "organization"
+    entity_id = tenant_hirer.id if tenant_hirer else agreement.organization_id
     return await file_service.register_generated(
         db,
         agreement.organization_id,
         data=pdf_bytes,
         filename=f"Hire-{agreement.reference_code}.pdf",
         category=FileCategory.LEASE,
-        entity_type="tenant",
-        entity_id=hirer.id,
+        entity_type=entity_type,
+        entity_id=entity_id,
     )
 
 

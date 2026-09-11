@@ -322,8 +322,12 @@ function BookDialog({
   onClose: () => void
 }) {
   const queryClient = useQueryClient()
+  const [walkin, setWalkin] = useState(false)
   const [form, setForm] = useState({
     tenant_id: '',
+    hirer_name: '',
+    hirer_phone: '',
+    hirer_id_number: '',
     start_date: today(),
     end_date: '',
     rate_basis: 'daily',
@@ -333,14 +337,17 @@ function BookDialog({
   const hirers = useQuery({
     queryKey: queryKeys.tenants({ forHire: true }),
     queryFn: () => tenantsApi.list(),
-    enabled: open,
+    enabled: open && !walkin,
   })
 
   const book = useMutation({
     mutationFn: () =>
       rentalAgreementsApi.book({
         asset_id: asset.id,
-        tenant_id: form.tenant_id,
+        tenant_id: walkin ? null : form.tenant_id || null,
+        hirer_name: walkin ? form.hirer_name : null,
+        hirer_phone: walkin ? form.hirer_phone : null,
+        hirer_id_number: walkin ? form.hirer_id_number || null : null,
         start_date: form.start_date,
         end_date: form.end_date,
         rate_basis: form.rate_basis,
@@ -352,6 +359,10 @@ function BookDialog({
     },
     onError: (bookError) => setError(errorMessage(bookError)),
   })
+
+  const valid = form.start_date && form.end_date && (
+    walkin ? (form.hirer_name.length > 1 && form.hirer_phone.length > 6) : Boolean(form.tenant_id)
+  )
 
   return (
     <Dialog
@@ -365,7 +376,7 @@ function BookDialog({
             Cancel
           </Button>
           <Button
-            disabled={!form.tenant_id || !form.end_date}
+            disabled={!valid}
             loading={book.isPending}
             onClick={() => {
               setError(null)
@@ -378,19 +389,69 @@ function BookDialog({
       }
     >
       <div className="space-y-4">
-        <Field label="Hirer" required hint="Anyone on your tenant book">
-          <Select
-            value={form.tenant_id}
-            onChange={(event) => setForm({ ...form, tenant_id: event.target.value })}
-          >
-            <option value="">Choose a hirer</option>
-            {hirers.data?.map((tenant) => (
-              <option key={tenant.id} value={tenant.id}>
-                {tenant.full_name} — {tenant.phone_number}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              className="accent-brand-600"
+              checked={!walkin}
+              onChange={() => setWalkin(false)}
+            />
+            Existing tenant
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              className="accent-brand-600"
+              checked={walkin}
+              onChange={() => setWalkin(true)}
+            />
+            Walk-in / external hirer
+          </label>
+        </div>
+
+        {walkin ? (
+          <>
+            <Field label="Full name" required>
+              <Input
+                placeholder="John Kamau"
+                value={form.hirer_name}
+                onChange={(e) => setForm({ ...form, hirer_name: e.target.value })}
+              />
+            </Field>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Phone" required>
+                <Input
+                  type="tel"
+                  placeholder="0712 345 678"
+                  value={form.hirer_phone}
+                  onChange={(e) => setForm({ ...form, hirer_phone: e.target.value })}
+                />
+              </Field>
+              <Field label="ID / Passport number">
+                <Input
+                  placeholder="12345678"
+                  value={form.hirer_id_number}
+                  onChange={(e) => setForm({ ...form, hirer_id_number: e.target.value })}
+                />
+              </Field>
+            </div>
+          </>
+        ) : (
+          <Field label="Hirer" required>
+            <Select
+              value={form.tenant_id}
+              onChange={(event) => setForm({ ...form, tenant_id: event.target.value })}
+            >
+              <option value="">Choose a hirer</option>
+              {hirers.data?.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.full_name} — {tenant.phone_number}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="From" required>
@@ -543,8 +604,8 @@ function CheckOutDialog({
           onChange={setPhotos}
           category="inspection_photo"
           max={10}
-          label="Photos"
-          hint="Walk around it — these are the ones that settle an argument later"
+          label="Photos at hand-over"
+          hint="Required — walk around the full vehicle/equipment. These photos are the evidence if a damage dispute arises on return."
         />
 
         {blocked && (
@@ -755,6 +816,7 @@ function CheckInDialog({
           category="inspection_photo"
           max={10}
           label="Photos on return"
+          hint="Required — photograph every panel and any new damage. Compared directly against the hand-over photos."
         />
 
         {agreement && (

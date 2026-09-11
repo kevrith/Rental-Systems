@@ -43,27 +43,27 @@ async def _urls(db: AsyncSession, file_ids: list) -> list[str]:
 
 async def _asset_detail(db: AsyncSession, asset: RentalAsset) -> AssetDetail:
     live = await rental_service._live_agreement(db, asset.id)
-    hirer = await db.get(Tenant, live.tenant_id) if live else None
+    hirer = await db.get(Tenant, live.tenant_id) if (live and live.tenant_id) else None
 
     return AssetDetail(
         **AssetRead.model_validate(asset).model_dump(),
         photo_urls=await _urls(db, asset.photo_file_ids),
         current_hire=live.reference_code if live else None,
-        current_hirer=hirer.full_name if hirer else None,
+        current_hirer=hirer.full_name if hirer else (live.hirer_name if live else None),
     )
 
 
 async def _agreement_detail(db: AsyncSession, agreement: RentalAgreement) -> AgreementDetail:
     asset = await db.get(RentalAsset, agreement.asset_id)
-    tenant = await db.get(Tenant, agreement.tenant_id)
+    tenant = await db.get(Tenant, agreement.tenant_id) if agreement.tenant_id else None
 
     return AgreementDetail(
         **AgreementRead.model_validate(agreement).model_dump(),
         asset_name=asset.name if asset else None,
         asset_kind=asset.kind if asset else None,
         registration_number=asset.registration_number if asset else None,
-        hirer_name=tenant.full_name if tenant else None,
-        hirer_phone=tenant.phone_number if tenant else None,
+        hirer_name=tenant.full_name if tenant else agreement.hirer_name,
+        hirer_phone=tenant.phone_number if tenant else agreement.hirer_phone,
         photos_out_urls=await _urls(db, agreement.photos_out),
         photos_in_urls=await _urls(db, agreement.photos_in),
     )
