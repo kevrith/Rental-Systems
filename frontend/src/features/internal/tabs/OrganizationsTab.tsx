@@ -5,10 +5,7 @@ import {
   ChevronDown,
   ChevronUp,
   CreditCard,
-  ExternalLink,
   Search,
-  TrendingDown,
-  TrendingUp,
 } from 'lucide-react'
 import { useState } from 'react'
 import {
@@ -40,7 +37,7 @@ import {
   Textarea,
   Th,
 } from '@/components/ui'
-import { errorMessage, humanize, relative, shortDate } from '@/lib/format'
+import { errorMessage, humanize, shortDate } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
 
 const PLAN_TONE: Record<string, 'neutral' | 'info' | 'brand' | 'success' | 'warn' | 'danger'> = {

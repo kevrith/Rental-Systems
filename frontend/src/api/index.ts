@@ -167,6 +167,9 @@ import type {
   ApprovalRequest,
   ApprovalRequestDetail,
   ApprovalRequestStatus,
+  PlatformStats,
+  OrgDetail,
+  PlatformUser,
 } from './types'
 
 const get = async <T>(url: string, params?: unknown): Promise<T> =>

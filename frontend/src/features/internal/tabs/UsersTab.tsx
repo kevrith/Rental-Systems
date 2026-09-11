@@ -16,7 +16,7 @@ import {
   Td,
   Th,
 } from '@/components/ui'
-import { errorMessage, humanize, relative, shortDate } from '@/lib/format'
+import { humanize, relative, shortDate } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
 
 const ROLE_TONE: Record<string, 'neutral' | 'info' | 'brand' | 'success' | 'warn' | 'danger'> = {

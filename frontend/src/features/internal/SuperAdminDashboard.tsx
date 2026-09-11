@@ -1,5 +1,4 @@
 import {
-  Activity,
   AlertOctagon,
   Building2,
   FileEdit,
