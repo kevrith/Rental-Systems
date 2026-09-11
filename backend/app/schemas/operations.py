@@ -32,6 +32,11 @@ class MeterReadingCreate(BaseModel):
     # overrode it. Absent when no suggestion was asked for.
     ocr_reading: Decimal | None = Field(default=None, ge=0)
     ocr_confidence: Decimal | None = Field(default=None, ge=0, le=100)
+    # Set to True by the frontend when the caretaker's typed value differed from
+    # a high-confidence OCR reading and the photo value was used instead. The
+    # service validates this flag and enforces the override so the frontend
+    # cannot misrepresent what happened.
+    photo_superseded: bool = Field(default=False)
 
 
 class MeterPhotoReadRequest(BaseModel):
@@ -70,6 +75,7 @@ class MeterReadingRead(BaseModel):
     ocr_reading: Decimal | None
     ocr_confidence: Decimal | None
     ocr_accepted: bool | None
+    photo_reading_used: bool | None
     created_at: datetime
 
 

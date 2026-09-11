@@ -395,6 +395,10 @@ export interface MeterReading {
   photo_file_id: string | null
   billed_invoice_id: string | null
   notes: string | null
+  ocr_reading: string | null
+  ocr_confidence: string | null
+  ocr_accepted: boolean | null
+  photo_reading_used: boolean | null
   created_at: string
   unit_number?: string | null
   property_name?: string | null

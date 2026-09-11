@@ -134,11 +134,38 @@ async def record_meter_reading(
         else existing.previous_reading
     )
 
-    if payload.current_reading < previous:
+    # High-confidence OCR reading supersedes whatever the caretaker typed.
+    # The photo is the authoritative evidence of what the meter shows; if the
+    # OCR is confident and the typed value differs, the photo wins.  We
+    # re-derive this server-side rather than trusting the `photo_superseded`
+    # flag alone — the flag is advisory (used for the audit trail) but the
+    # actual substitution is enforced here.
+    HIGH_CONFIDENCE_THRESHOLD = Decimal("80")
+    ocr_reading = Decimal(payload.ocr_reading) if payload.ocr_reading is not None else None
+    ocr_confidence = Decimal(payload.ocr_confidence) if payload.ocr_confidence is not None else None
+    photo_reading_used: bool | None = None
+    effective_current: Decimal
+
+    if (
+        ocr_reading is not None
+        and ocr_confidence is not None
+        and ocr_confidence >= HIGH_CONFIDENCE_THRESHOLD
+        and ocr_reading != Decimal(payload.current_reading)
+    ):
+        # Photo overrides the typed value.
+        effective_current = ocr_reading
+        photo_reading_used = True
+    else:
+        effective_current = Decimal(payload.current_reading)
+        # False (not None) when OCR ran but the values agreed or confidence was
+        # low — we know the photo was present, it just didn't need to override.
+        photo_reading_used = False if ocr_reading is not None else None  # No OCR run at all
+
+    if effective_current < previous:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"Current reading ({payload.current_reading}) is below the previous reading "
+                f"Current reading ({effective_current}) is below the previous reading "
                 f"({previous}). Check the meter, or record a meter replacement first."
             ),
         )
@@ -161,7 +188,7 @@ async def record_meter_reading(
         if payload.rate is not None
         else (_configured_rate(property_record, payload.meter_type) if property_record else None) or ZERO
     )
-    consumption = Decimal(payload.current_reading) - previous
+    consumption = effective_current - previous
     amount = (consumption * Decimal(rate)).quantize(Decimal("0.01"))
 
     reading = MeterReading(
@@ -169,7 +196,7 @@ async def record_meter_reading(
         unit_id=unit.id,
         meter_type=payload.meter_type,
         previous_reading=previous,
-        current_reading=payload.current_reading,
+        current_reading=effective_current,
         consumption=consumption,
         rate=rate,
         amount=amount,
@@ -179,16 +206,13 @@ async def record_meter_reading(
         gps_latitude=payload.gps_latitude,
         gps_longitude=payload.gps_longitude,
         notes=payload.notes,
-        ocr_reading=payload.ocr_reading,
-        ocr_confidence=payload.ocr_confidence,
+        ocr_reading=ocr_reading,
+        ocr_confidence=ocr_confidence,
         # None, not False, when no suggestion was offered: "the caretaker
         # rejected the machine" and "the machine never spoke" are different
         # facts, and only the first says anything about OCR accuracy.
-        ocr_accepted=(
-            None
-            if payload.ocr_reading is None
-            else Decimal(payload.ocr_reading) == Decimal(payload.current_reading)
-        ),
+        ocr_accepted=(None if ocr_reading is None else ocr_reading == effective_current),
+        photo_reading_used=photo_reading_used,
     )
     db.add(reading)
     await db.flush()

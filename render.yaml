@@ -62,7 +62,7 @@ envVarGroups:
       # Primary domain + Vercel backup URL. Both are accepted so the backup
       # remains functional if the custom domain has a DNS/TLS issue.
       - key: CORS_ORIGINS
-        value: '["https://rent.kastra.co.ke","https://rentflow.vercel.app"]'
+        value: '["https://rent.kastra.co.ke","https://rental-systems.vercel.app"]'
       - key: WEBAUTHN_RP_ID
         value: rent.kastra.co.ke
       - key: WEBAUTHN_ORIGIN

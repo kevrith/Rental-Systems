@@ -78,6 +78,10 @@ class MeterReading(OrgScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # True when the submitted reading matched the OCR suggestion exactly. Null
     # when no OCR was run at all, which is not the same as a rejected suggestion.
     ocr_accepted: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # True when a high-confidence OCR reading overrode the value the caretaker
+    # typed. The photo is the authoritative evidence; this flag makes that
+    # override auditable without rewriting the caretaker's original input.
+    photo_reading_used: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     unit: Mapped["Unit"] = relationship()
 

@@ -181,6 +181,10 @@ export function RecordMeterReadingPage() {
   const [unitId, setUnitId] = useState(params.get('unit_id') ?? '')
   const [meterType, setMeterType] = useState(params.get('meter_type') ?? 'water')
   const [currentReading, setCurrentReading] = useState('')
+  // The previous reading field is pre-filled from context but the caretaker
+  // can override it when bringing in a meter for the first time or correcting
+  // a historical error. An empty string means "use what the API provides".
+  const [previousReadingOverride, setPreviousReadingOverride] = useState<string>('')
   const [readingDate, setReadingDate] = useState(today())
   const [photo, setPhoto] = useState<UploadedFile | null>(null)
   const [notes, setNotes] = useState('')
@@ -189,6 +193,9 @@ export function RecordMeterReadingPage() {
   // What the OCR pass proposed, kept alongside whatever the caretaker ends up
   // submitting so the record shows whether they accepted it or corrected it.
   const [ocr, setOcr] = useState<MeterPhotoRead | null>(null)
+  // When true the caretaker has explicitly chosen to keep their typed value
+  // over the high-confidence OCR reading.
+  const [ocrOverrideAcknowledged, setOcrOverrideAcknowledged] = useState(false)
 
   const units = useQuery({
     queryKey: queryKeys.units({ occupied: true }),
@@ -199,31 +206,78 @@ export function RecordMeterReadingPage() {
     queryKey: queryKeys.meterContext(unitId, meterType),
     queryFn: () => metersApi.context(unitId, meterType),
     enabled: Boolean(unitId && meterType),
+    // When the context loads, seed the previous reading field only if the
+    // caretaker hasn't already typed something.
+    select: (data) => data,
   })
+
+  // Whenever the unit/meter type changes, reset the previous reading override
+  // so it re-seeds from the new context.
+  const handleUnitChange = (id: string) => {
+    setUnitId(id)
+    setPreviousReadingOverride('')
+    setOcr(null)
+    setCurrentReading('')
+    setOcrOverrideAcknowledged(false)
+  }
+  const handleMeterTypeChange = (type: string) => {
+    setMeterType(type)
+    setPreviousReadingOverride('')
+    setOcr(null)
+    setCurrentReading('')
+    setOcrOverrideAcknowledged(false)
+  }
+
+  // Effective previous reading: caretaker's override takes precedence, then
+  // the context value, then zero.
+  const contextPrevious = Number(context.data?.previous_reading ?? 0)
+  const previous =
+    previousReadingOverride !== '' ? Number(previousReadingOverride) : contextPrevious
+
+  // True when a high-confidence OCR reading contradicts what the caretaker typed
+  // and they haven't yet acknowledged the conflict.
+  const ocrConflict =
+    ocr !== null &&
+    ocr.high_confidence &&
+    ocr.reading !== null &&
+    currentReading !== '' &&
+    ocr.reading !== currentReading &&
+    !ocrOverrideAcknowledged
+
+  // The reading that will actually be submitted: OCR wins on high-confidence
+  // conflict (unless the caretaker explicitly overrode). This mirrors what
+  // the backend service will enforce — making it visible before submission
+  // prevents surprises.
+  const effectiveCurrent =
+    ocr !== null && ocr.high_confidence && ocr.reading !== null && !ocrOverrideAcknowledged
+      ? ocr.reading
+      : currentReading
 
   // Live preview of what the tenant will be charged, so a typo is obvious before
   // it lands on an invoice.
-  const previous = Number(context.data?.previous_reading ?? 0)
-  const current = Number(currentReading || 0)
+  const current = Number(effectiveCurrent || 0)
   const consumption = Number.isFinite(current) ? Math.max(0, current - previous) : 0
   const rate = Number(context.data?.rate ?? 0)
   const estimated = consumption * rate
-  const belowPrevious = currentReading !== '' && current < previous
+  const belowPrevious = effectiveCurrent !== '' && current < previous
 
   /**
    * Read the dial off the photo (Module 5).
    *
-   * Only ever pre-fills the field when the reader is confident. Below the
-   * threshold the number is shown but the caretaker still has to type it —
-   * a misread meter becomes a wrong bill, and a bill nobody looked at is
-   * exactly the failure this is meant to prevent.
+   * High-confidence results supersede what the caretaker typed (the photo is
+   * the authoritative evidence). Low-confidence results are shown but the
+   * caretaker must actively choose to use them.
    */
   const readPhoto = useMutation({
     mutationFn: (fileId: string) =>
       metersApi.readPhoto({ photo_file_id: fileId, meter_type: meterType }),
     onSuccess: (result) => {
       setOcr(result)
-      if (result.reading && result.high_confidence && !currentReading) {
+      setOcrOverrideAcknowledged(false)
+      // High-confidence: pre-fill the field so the caretaker can see and
+      // confirm. The backend will use this value regardless, but showing it
+      // in the field makes the override transparent.
+      if (result.reading && result.high_confidence) {
         setCurrentReading(result.reading)
       }
     },
@@ -234,10 +288,20 @@ export function RecordMeterReadingPage() {
   const record = useMutation({
     mutationFn: async () => {
       const position = await currentPosition()
+      // photo_superseded tells the backend (and the audit log) that the photo
+      // value was used over the caretaker's typed value.
+      const photoSuperseded =
+        ocr !== null &&
+        ocr.high_confidence &&
+        ocr.reading !== null &&
+        ocr.reading !== currentReading &&
+        !ocrOverrideAcknowledged
       const body = {
         unit_id: unitId,
         meter_type: meterType,
-        current_reading: currentReading,
+        current_reading: effectiveCurrent,
+        previous_reading:
+          previousReadingOverride !== '' ? previousReadingOverride : undefined,
         reading_date: readingDate,
         photo_file_id: photo!.id,
         notes: notes || null,
@@ -245,6 +309,7 @@ export function RecordMeterReadingPage() {
         gps_longitude: position?.coords.longitude ?? null,
         ocr_reading: ocr?.reading ?? null,
         ocr_confidence: ocr?.confidence ?? null,
+        photo_superseded: photoSuperseded,
       }
       return submitOrQueue({
         run: () => metersApi.record(body),
@@ -292,7 +357,7 @@ export function RecordMeterReadingPage() {
       <Card>
         <CardBody className="space-y-4">
           <Field label="Unit" required>
-            <Select value={unitId} onChange={(event) => setUnitId(event.target.value)}>
+            <Select value={unitId} onChange={(event) => handleUnitChange(event.target.value)}>
               <option value="">Choose a unit</option>
               {units.data?.map((unit) => (
                 <option key={unit.id} value={unit.id}>
@@ -308,13 +373,13 @@ export function RecordMeterReadingPage() {
                 icon={<Droplets className="h-4 w-4" />}
                 label="Water"
                 selected={meterType === 'water'}
-                onSelect={() => setMeterType('water')}
+                onSelect={() => handleMeterTypeChange('water')}
               />
               <MeterOption
                 icon={<Zap className="h-4 w-4" />}
                 label="Electricity"
                 selected={meterType === 'electricity'}
-                onSelect={() => setMeterType('electricity')}
+                onSelect={() => handleMeterTypeChange('electricity')}
               />
             </div>
           </Field>
@@ -326,18 +391,33 @@ export function RecordMeterReadingPage() {
             </Alert>
           )}
 
-          {context.data && (
-            <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
-              <span className="text-slate-600">Previous reading</span>
-              <span className="font-medium text-slate-900">
-                {context.data.previous_reading}
-                {context.data.previous_reading_date && (
-                  <span className="ml-1.5 text-xs font-normal text-slate-400">
-                    on {shortDate(context.data.previous_reading_date)}
-                  </span>
-                )}
-              </span>
-            </div>
+          {/* Previous reading — editable so caretakers can set the correct
+              starting point for units being brought in for the first time or
+              after a manual correction. Pre-filled from the last recorded
+              reading but the caretaker can change it. */}
+          {unitId && meterType && (
+            <Field
+              label="Previous reading"
+              hint={
+                context.data?.previous_reading_date
+                  ? `Last recorded on ${shortDate(context.data.previous_reading_date)}`
+                  : 'No prior reading on record — enter the meter value at the start of this period.'
+              }
+            >
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                inputMode="decimal"
+                placeholder={
+                  context.isPending
+                    ? 'Loading…'
+                    : String(context.data?.previous_reading ?? '0')
+                }
+                value={previousReadingOverride}
+                onChange={(event) => setPreviousReadingOverride(event.target.value)}
+              />
+            </Field>
           )}
 
           <Field
@@ -353,7 +433,15 @@ export function RecordMeterReadingPage() {
               placeholder="Reading on the meter"
               value={currentReading}
               invalid={belowPrevious}
-              onChange={(event) => setCurrentReading(event.target.value)}
+              onChange={(event) => {
+                setCurrentReading(event.target.value)
+                // If the caretaker is editing, and OCR was high-confidence,
+                // treat any deviation as an intentional override attempt —
+                // the conflict banner will ask them to confirm.
+                if (ocr?.high_confidence) {
+                  setOcrOverrideAcknowledged(false)
+                }
+              }}
             />
           </Field>
 
@@ -431,6 +519,46 @@ export function RecordMeterReadingPage() {
             </Alert>
           )}
 
+          {/* OCR conflict banner — shown when the caretaker has typed a value
+              that differs from a high-confidence photo reading. The photo value
+              will be submitted unless they explicitly override it here. */}
+          {ocrConflict && (
+            <Alert tone="danger" icon={<AlertCircle className="h-4 w-4" />}>
+              <span className="font-medium">
+                The photo reads {ocr!.reading} but you entered {currentReading}.
+              </span>{' '}
+              The photo reading will be used because it is highly confident. If you are
+              sure your value is correct, you can override it — but please recheck the
+              meter first.
+              <div className="mt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentReading(ocr!.reading ?? '')
+                    setOcrOverrideAcknowledged(false)
+                  }}
+                  className="font-medium underline"
+                >
+                  Use photo value ({ocr!.reading})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOcrOverrideAcknowledged(true)}
+                  className="font-medium text-danger-700 underline"
+                >
+                  Keep my value ({currentReading}) instead
+                </button>
+              </div>
+            </Alert>
+          )}
+
+          {ocrOverrideAcknowledged && ocr?.high_confidence && (
+            <Alert tone="warn" icon={<AlertCircle className="h-4 w-4" />}>
+              Your typed value ({currentReading}) will be used instead of the photo reading (
+              {ocr.reading}). Make sure you have verified this against the physical meter.
+            </Alert>
+          )}
+
           <Field label="Notes">
             <Textarea
               placeholder="Meter was hard to read; tenant present."
@@ -454,7 +582,7 @@ export function RecordMeterReadingPage() {
           <Button
             className="w-full justify-center"
             size="lg"
-            disabled={!unitId || !currentReading || !photo || belowPrevious}
+            disabled={!unitId || !effectiveCurrent || !photo || belowPrevious || ocrConflict}
             loading={record.isPending}
             onClick={() => {
               setError(null)
