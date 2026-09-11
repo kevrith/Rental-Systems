@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  AlertTriangle,
   Ban,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   CreditCard,
+  ExternalLink,
+  Search,
   TrendingDown,
   TrendingUp,
 } from 'lucide-react'
@@ -21,8 +22,7 @@ import {
 } from 'recharts'
 
 import { internalApi } from '@/api'
-import type { OrganizationHealthSummary, OrganizationSuspensionState } from '@/api/types'
-import { StatCard } from '@/components/PageHeader'
+import type { OrgDetail, OrganizationSuspensionState } from '@/api/types'
 import {
   Alert,
   Badge,
@@ -32,6 +32,7 @@ import {
   Dialog,
   EmptyState,
   Field,
+  Input,
   PageLoader,
   Select,
   Table,
@@ -39,57 +40,86 @@ import {
   Textarea,
   Th,
 } from '@/components/ui'
-import { errorMessage, shortDate } from '@/lib/format'
+import { errorMessage, humanize, relative, shortDate } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
+
+const PLAN_TONE: Record<string, 'neutral' | 'info' | 'brand' | 'success' | 'warn' | 'danger'> = {
+  trial: 'warn',
+  free: 'neutral',
+  starter: 'info',
+  professional: 'brand',
+  business: 'success',
+}
 
 const PLAN_OPTIONS = ['free', 'starter', 'professional', 'business']
 
-const TREND_BADGE = {
-  improving: { tone: 'success' as const, icon: <TrendingUp className="mr-1 inline h-3 w-3" /> },
-  declining: { tone: 'warn' as const, icon: <TrendingDown className="mr-1 inline h-3 w-3" /> },
-  stable: { tone: 'neutral' as const, icon: null },
-}
-
 export function OrganizationsTab() {
-  const [selected, setSelected] = useState<string | null>(null)
-  const [suspendTarget, setSuspendTarget] = useState<OrganizationHealthSummary | null>(null)
-  const [planTarget, setPlanTarget] = useState<OrganizationHealthSummary | null>(null)
+  const [search, setSearch] = useState('')
+  const [planFilter, setPlanFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [suspendTarget, setSuspendTarget] = useState<OrgDetail | null>(null)
+  const [planTarget, setPlanTarget] = useState<OrgDetail | null>(null)
+
+  const params = {
+    search: search || undefined,
+    plan: planFilter || undefined,
+    is_active: statusFilter === '' ? undefined : statusFilter === 'active',
+  }
 
   const orgs = useQuery({
-    queryKey: queryKeys.internalOrganizations,
-    queryFn: internalApi.organizations,
+    queryKey: queryKeys.internalOrganizationsDetail(params),
+    queryFn: () => internalApi.organizationsDetail(params),
   })
 
   const history = useQuery({
-    queryKey: queryKeys.internalOrganizationHealth(selected ?? ''),
-    queryFn: () => internalApi.organizationHealthHistory(selected!),
-    enabled: Boolean(selected),
+    queryKey: queryKeys.internalOrganizationHealth(expanded ?? ''),
+    queryFn: () => internalApi.organizationHealthHistory(expanded!),
+    enabled: Boolean(expanded),
   })
 
-  if (orgs.isPending) return <PageLoader />
-
   const rows = orgs.data ?? []
-  const atRisk = rows.filter((r) => r.is_at_risk).length
-  const scored = rows.filter((r) => r.latest_score !== null)
-  const avg = scored.length
-    ? Math.round(scored.reduce((s, r) => s + (r.latest_score ?? 0), 0) / scored.length)
-    : null
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <StatCard label="Total organizations" value={String(rows.length)} />
-        <StatCard label="Average health score" value={avg === null ? '—' : String(avg)} />
-        <StatCard
-          label="At risk"
-          value={String(atRisk)}
-          tone={atRisk > 0 ? 'danger' : 'default'}
-          icon={atRisk > 0 ? <AlertTriangle className="h-4 w-4" /> : undefined}
-        />
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-48">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            className="pl-9"
+            placeholder="Search by name…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select
+          value={planFilter}
+          onChange={(e) => setPlanFilter(e.target.value)}
+          className="w-40"
+        >
+          <option value="">All plans</option>
+          {['trial', ...PLAN_OPTIONS].map((p) => (
+            <option key={p} value={p}>
+              {p.charAt(0).toUpperCase() + p.slice(1)}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="w-40"
+        >
+          <option value="">All statuses</option>
+          <option value="active">Active</option>
+          <option value="suspended">Suspended</option>
+        </Select>
       </div>
 
-      {rows.length === 0 ? (
-        <EmptyState title="No organizations yet" description="Health scores compute weekly." />
+      {orgs.isPending ? (
+        <PageLoader />
+      ) : rows.length === 0 ? (
+        <EmptyState title="No organizations match" description="Try adjusting the filters." />
       ) : (
         <Card>
           <CardBody className="overflow-x-auto p-0">
@@ -97,105 +127,152 @@ export function OrganizationsTab() {
               <thead>
                 <tr>
                   <Th>Organization</Th>
-                  <Th>Score</Th>
-                  <Th>Trend</Th>
-                  <Th>Week of</Th>
-                  <Th>Actions</Th>
+                  <Th>Owner</Th>
+                  <Th>Plan</Th>
+                  <Th>Mode</Th>
+                  <Th>Units</Th>
+                  <Th>Tenants</Th>
+                  <Th>Users</Th>
+                  <Th>Joined</Th>
+                  <Th>Status</Th>
+                  <Th />
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.organization_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <Td className="font-medium text-slate-900 dark:text-slate-100">
-                      <button
-                        type="button"
-                        className="flex items-center gap-2 text-left hover:underline"
-                        onClick={() =>
-                          setSelected(selected === row.organization_id ? null : row.organization_id)
-                        }
-                      >
-                        {row.organization_name}
-                        {selected === row.organization_id ? (
-                          <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
-                        ) : (
-                          <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                  <>
+                    <tr
+                      key={row.id}
+                      className="hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    >
+                      <Td>
+                        <button
+                          type="button"
+                          className="flex items-center gap-1.5 text-left font-medium text-slate-900 hover:text-brand-700 dark:text-slate-100"
+                          onClick={() => setExpanded(expanded === row.id ? null : row.id)}
+                        >
+                          {row.name}
+                          {expanded === row.id ? (
+                            <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
+                          ) : (
+                            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                          )}
+                        </button>
+                      </Td>
+                      <Td>
+                        <p className="text-sm text-slate-800 dark:text-slate-200">
+                          {row.owner_name ?? '—'}
+                        </p>
+                        {row.owner_email && (
+                          <p className="text-xs text-slate-400">{row.owner_email}</p>
                         )}
-                      </button>
-                      {row.is_at_risk && (
-                        <Badge tone="danger" className="ml-2">
-                          At risk
+                      </Td>
+                      <Td>
+                        <Badge tone={PLAN_TONE[row.subscription_plan] ?? 'neutral'}>
+                          {row.subscription_plan}
                         </Badge>
-                      )}
-                    </Td>
-                    <Td className="tabular-nums">{row.latest_score ?? '—'}</Td>
-                    <Td>
-                      {row.trend ? (
-                        <Badge tone={TREND_BADGE[row.trend].tone}>
-                          {TREND_BADGE[row.trend].icon}
-                          {row.trend}
-                        </Badge>
-                      ) : (
-                        '—'
-                      )}
-                    </Td>
-                    <Td>{row.week_of ? shortDate(row.week_of) : '—'}</Td>
-                    <Td>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          icon={<CreditCard className="h-3.5 w-3.5" />}
-                          onClick={() => setPlanTarget(row)}
-                        >
-                          Plan
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          icon={<Ban className="h-3.5 w-3.5" />}
-                          onClick={() => setSuspendTarget(row)}
-                        >
-                          Suspend
-                        </Button>
-                      </div>
-                    </Td>
-                  </tr>
+                        {row.is_trial_expired && (
+                          <Badge tone="danger" className="ml-1">expired</Badge>
+                        )}
+                      </Td>
+                      <Td>
+                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                          {humanize(row.operating_mode)}
+                        </span>
+                      </Td>
+                      <Td className="tabular-nums text-slate-700 dark:text-slate-300">
+                        {row.unit_count.toLocaleString()}
+                      </Td>
+                      <Td className="tabular-nums text-slate-700 dark:text-slate-300">
+                        {row.tenant_count.toLocaleString()}
+                      </Td>
+                      <Td className="tabular-nums text-slate-700 dark:text-slate-300">
+                        {row.user_count}
+                      </Td>
+                      <Td className="text-xs text-slate-500">{shortDate(row.created_at)}</Td>
+                      <Td>
+                        {row.is_active ? (
+                          <Badge tone="success">Active</Badge>
+                        ) : (
+                          <Badge tone="danger">Suspended</Badge>
+                        )}
+                      </Td>
+                      <Td>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={<CreditCard className="h-3.5 w-3.5" />}
+                            onClick={() => setPlanTarget(row)}
+                          >
+                            Plan
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={<Ban className="h-3.5 w-3.5" />}
+                            onClick={() => setSuspendTarget(row)}
+                          >
+                            {row.is_active ? 'Suspend' : 'Reactivate'}
+                          </Button>
+                        </div>
+                      </Td>
+                    </tr>
+
+                    {expanded === row.id && (
+                      <tr key={`${row.id}-expand`}>
+                        <td colSpan={10} className="bg-slate-50 px-6 py-4 dark:bg-slate-800/40">
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div className="space-y-1 text-sm">
+                              <p className="font-semibold text-slate-700 dark:text-slate-300">
+                                Account details
+                              </p>
+                              <Detail label="ID" value={row.id} mono />
+                              <Detail label="Phone" value={row.owner_phone ?? '—'} />
+                              <Detail
+                                label="Trial ends"
+                                value={row.trial_ends_at ? shortDate(row.trial_ends_at) : '—'}
+                              />
+                              {row.suspended_at && (
+                                <Detail label="Suspended" value={shortDate(row.suspended_at)} />
+                              )}
+                            </div>
+                            <div>
+                              <p className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                Health score history
+                              </p>
+                              {history.isPending ? (
+                                <PageLoader />
+                              ) : history.data && history.data.length > 0 ? (
+                                <div className="h-40">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={[...history.data].reverse()}>
+                                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-slate-200)" />
+                                      <XAxis dataKey="week_of" tickFormatter={(v) => shortDate(v)} fontSize={11} />
+                                      <YAxis domain={[0, 100]} fontSize={11} />
+                                      <Tooltip labelFormatter={(v) => shortDate(v as string)} />
+                                      <Line
+                                        type="monotone"
+                                        dataKey="score"
+                                        stroke="var(--color-brand-600)"
+                                        strokeWidth={2}
+                                        dot={false}
+                                      />
+                                    </LineChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              ) : (
+                                <p className="text-sm text-slate-400">No health data yet.</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))}
               </tbody>
             </Table>
-          </CardBody>
-        </Card>
-      )}
-
-      {selected && (
-        <Card>
-          <CardBody>
-            <p className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {rows.find((r) => r.organization_id === selected)?.organization_name} — score history
-            </p>
-            {history.isPending ? (
-              <PageLoader />
-            ) : history.data && history.data.length > 0 ? (
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={[...history.data].reverse()}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-slate-100)" />
-                    <XAxis dataKey="week_of" tickFormatter={(v) => shortDate(v)} fontSize={12} />
-                    <YAxis domain={[0, 100]} fontSize={12} />
-                    <Tooltip labelFormatter={(v) => shortDate(v as string)} />
-                    <Line
-                      type="monotone"
-                      dataKey="score"
-                      stroke="var(--color-brand-600)"
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500">No history yet.</p>
-            )}
           </CardBody>
         </Card>
       )}
@@ -210,37 +287,54 @@ export function OrganizationsTab() {
   )
 }
 
-function SuspendDialog({
-  org,
-  onClose,
+function Detail({
+  label,
+  value,
+  mono,
 }: {
-  org: OrganizationHealthSummary
-  onClose: () => void
+  label: string
+  value: string
+  mono?: boolean
 }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="w-24 shrink-0 text-xs text-slate-400">{label}</span>
+      <span
+        className={`truncate text-slate-800 dark:text-slate-200 ${mono ? 'font-mono text-xs' : ''}`}
+      >
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function SuspendDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }) {
   const queryClient = useQueryClient()
   const [reason, setReason] = useState('')
   const [notify, setNotify] = useState(true)
   const [mode, setMode] = useState<'suspend' | 'reactivate' | null>(null)
 
   const suspension = useQuery({
-    queryKey: queryKeys.internalSuspension(org.organization_id),
-    queryFn: () => internalApi.suspensionState(org.organization_id),
+    queryKey: queryKeys.internalSuspension(org.id),
+    queryFn: () => internalApi.suspensionState(org.id),
   })
 
   const suspend = useMutation({
     mutationFn: () =>
-      internalApi.suspendOrganization(org.organization_id, { reason, notify_account: notify }),
+      internalApi.suspendOrganization(org.id, { reason, notify_account: notify }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.internalSuspension(org.organization_id) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.internalSuspension(org.id) })
+      queryClient.invalidateQueries({ queryKey: ['internal', 'organizations', 'detail'] })
       setMode(null)
       setReason('')
     },
   })
 
   const reactivate = useMutation({
-    mutationFn: () => internalApi.reactivateOrganization(org.organization_id),
+    mutationFn: () => internalApi.reactivateOrganization(org.id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.internalSuspension(org.organization_id) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.internalSuspension(org.id) })
+      queryClient.invalidateQueries({ queryKey: ['internal', 'organizations', 'detail'] })
       setMode(null)
     },
   })
@@ -248,7 +342,7 @@ function SuspendDialog({
   const state: OrganizationSuspensionState | undefined = suspension.data
 
   return (
-    <Dialog open onClose={onClose} title={`Account status — ${org.organization_name}`} size="md">
+    <Dialog open onClose={onClose} title={`Account status — ${org.name}`} size="md">
       {suspension.isPending ? (
         <PageLoader />
       ) : (
@@ -298,17 +392,10 @@ function SuspendDialog({
               </label>
               {suspend.isError && <Alert tone="danger">{errorMessage(suspend.error)}</Alert>}
               <div className="flex gap-2">
-                <Button
-                  type="submit"
-                  variant="danger"
-                  loading={suspend.isPending}
-                  className="flex-1"
-                >
+                <Button type="submit" variant="danger" loading={suspend.isPending} className="flex-1">
                   Confirm suspension
                 </Button>
-                <Button variant="ghost" onClick={() => setMode(null)}>
-                  Cancel
-                </Button>
+                <Button variant="ghost" onClick={() => setMode(null)}>Cancel</Button>
               </div>
             </form>
           )}
@@ -316,12 +403,9 @@ function SuspendDialog({
           {mode === 'reactivate' && (
             <div className="space-y-3">
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                This will restore access. Users will need to sign in again — their sessions were
-                revoked when the account was suspended.
+                This will restore access. Users will need to sign in again.
               </p>
-              {reactivate.isError && (
-                <Alert tone="danger">{errorMessage(reactivate.error)}</Alert>
-              )}
+              {reactivate.isError && <Alert tone="danger">{errorMessage(reactivate.error)}</Alert>}
               <div className="flex gap-2">
                 <Button
                   variant="secondary"
@@ -332,9 +416,7 @@ function SuspendDialog({
                 >
                   Confirm reactivation
                 </Button>
-                <Button variant="ghost" onClick={() => setMode(null)}>
-                  Cancel
-                </Button>
+                <Button variant="ghost" onClick={() => setMode(null)}>Cancel</Button>
               </div>
             </div>
           )}
@@ -368,26 +450,20 @@ function SuspendDialog({
   )
 }
 
-function PlanDialog({
-  org,
-  onClose,
-}: {
-  org: OrganizationHealthSummary
-  onClose: () => void
-}) {
+function PlanDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }) {
   const queryClient = useQueryClient()
-  const [plan, setPlan] = useState('free')
+  const [plan, setPlan] = useState(org.subscription_plan)
 
   const update = useMutation({
-    mutationFn: () => internalApi.updateOrganizationPlan(org.organization_id, plan),
+    mutationFn: () => internalApi.updateOrganizationPlan(org.id, plan),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.internalOrganizations })
+      queryClient.invalidateQueries({ queryKey: ['internal', 'organizations', 'detail'] })
       onClose()
     },
   })
 
   return (
-    <Dialog open onClose={onClose} title={`Change plan — ${org.organization_name}`} size="sm">
+    <Dialog open onClose={onClose} title={`Change plan — ${org.name}`} size="sm">
       <form
         className="space-y-4"
         onSubmit={(e) => {

@@ -2226,6 +2226,48 @@ export interface ChangelogEntry {
 
 export type HealthTrend = 'improving' | 'declining' | 'stable'
 
+export interface PlatformStats {
+  total_organizations: number
+  active_organizations: number
+  suspended_organizations: number
+  total_users: number
+  total_units: number
+  total_tenants: number
+  plan_breakdown: Record<string, number>
+  mode_breakdown: Record<string, number>
+}
+
+export interface OrgDetail {
+  id: string
+  name: string
+  subscription_plan: string
+  operating_mode: string
+  is_active: boolean
+  trial_ends_at: string | null
+  is_trial_expired: boolean
+  created_at: string
+  suspended_at: string | null
+  owner_name: string | null
+  owner_email: string | null
+  owner_phone: string | null
+  unit_count: number
+  tenant_count: number
+  user_count: number
+}
+
+export interface PlatformUser {
+  id: string
+  full_name: string
+  email: string
+  phone_number: string
+  role: string
+  is_active: boolean
+  last_login_at: string | null
+  created_at: string
+  organization_id: string
+  organization_name: string | null
+}
+
 export interface OrganizationHealthSummary {
   organization_id: string
   organization_name: string

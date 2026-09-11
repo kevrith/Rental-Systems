@@ -7,9 +7,9 @@ every organisation on the platform.
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, computed_field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_platform_staff
@@ -18,7 +18,9 @@ from app.core.database import get_db
 from app.models.customer_success import CustomerSuccessAlert, OrganizationHealthScore
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.organization import Organization
+from app.models.property import Unit
 from app.models.security import BreachCategory, BreachSeverity, BreachStatus
+from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.schemas.customer_success import (
     ChangelogEntryRead,
@@ -40,6 +42,154 @@ from app.services import (
 )
 
 router = APIRouter()
+
+
+@router.get("/platform-stats")
+async def platform_stats(
+    staff: User = Depends(require_platform_staff), db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Single-call summary for the superadmin overview card row."""
+    total_orgs = await db.scalar(select(func.count(Organization.id))) or 0
+    active_orgs = (
+        await db.scalar(select(func.count(Organization.id)).where(Organization.is_active.is_(True))) or 0
+    )
+    total_users = await db.scalar(select(func.count(User.id))) or 0
+    total_units = await db.scalar(select(func.count(Unit.id))) or 0
+    total_tenants = await db.scalar(select(func.count(Tenant.id))) or 0
+
+    plan_rows = await db.execute(
+        select(Organization.subscription_plan, func.count(Organization.id)).group_by(
+            Organization.subscription_plan
+        )
+    )
+    plan_breakdown = {str(plan.value): count for plan, count in plan_rows}
+
+    mode_rows = await db.execute(
+        select(Organization.operating_mode, func.count(Organization.id)).group_by(Organization.operating_mode)
+    )
+    mode_breakdown = {str(mode.value): count for mode, count in mode_rows}
+
+    return {
+        "total_organizations": total_orgs,
+        "active_organizations": active_orgs,
+        "suspended_organizations": total_orgs - active_orgs,
+        "total_users": total_users,
+        "total_units": total_units,
+        "total_tenants": total_tenants,
+        "plan_breakdown": plan_breakdown,
+        "mode_breakdown": mode_breakdown,
+    }
+
+
+@router.get("/organizations/detail")
+async def list_organizations_detail(
+    search: str | None = Query(default=None),
+    plan: str | None = Query(default=None),
+    is_active: bool | None = Query(default=None),
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Enriched org list: plan, mode, status, owner, unit/tenant counts."""
+    query = select(Organization).order_by(Organization.created_at.desc())
+    if search:
+        term = f"%{search.strip()}%"
+        query = query.where(Organization.name.ilike(term))
+    if plan:
+        query = query.where(Organization.subscription_plan == plan)
+    if is_active is not None:
+        query = query.where(Organization.is_active.is_(is_active))
+
+    orgs = list(await db.scalars(query.limit(200)))
+    result = []
+    for org in orgs:
+        owner = await db.scalar(
+            select(User)
+            .where(
+                User.organization_id == org.id,
+                User.role == UserRole.OWNER,
+            )
+            .limit(1)
+        )
+        unit_count = await db.scalar(select(func.count(Unit.id)).where(Unit.organization_id == org.id)) or 0
+        tenant_count = (
+            await db.scalar(select(func.count(Tenant.id)).where(Tenant.organization_id == org.id)) or 0
+        )
+        user_count = await db.scalar(select(func.count(User.id)).where(User.organization_id == org.id)) or 0
+        result.append(
+            {
+                "id": str(org.id),
+                "name": org.name,
+                "subscription_plan": org.subscription_plan.value,
+                "operating_mode": org.operating_mode.value,
+                "is_active": org.is_active,
+                "trial_ends_at": org.trial_ends_at.isoformat() if org.trial_ends_at else None,
+                "is_trial_expired": org.is_trial_expired,
+                "created_at": org.created_at.isoformat(),
+                "suspended_at": org.suspended_at.isoformat() if org.suspended_at else None,
+                "owner_name": owner.full_name if owner else None,
+                "owner_email": owner.email if owner else None,
+                "owner_phone": owner.phone_number if owner else None,
+                "unit_count": unit_count,
+                "tenant_count": tenant_count,
+                "user_count": user_count,
+            }
+        )
+    return result
+
+
+@router.get("/users")
+async def list_all_users(
+    search: str | None = Query(default=None),
+    role: str | None = Query(default=None),
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Cross-tenant user search for superadmin."""
+    query = select(User).order_by(User.created_at.desc())
+    if search:
+        term = f"%{search.strip()}%"
+        query = query.where(
+            User.full_name.ilike(term) | User.email.ilike(term) | User.phone_number.ilike(term)
+        )
+    if role:
+        query = query.where(User.role == role)
+
+    users = list(await db.scalars(query.limit(200)))
+    result = []
+    for user in users:
+        org = await db.get(Organization, user.organization_id)
+        result.append(
+            {
+                "id": str(user.id),
+                "full_name": user.full_name,
+                "email": user.email,
+                "phone_number": user.phone_number,
+                "role": user.role.value,
+                "is_active": user.is_active,
+                "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
+                "created_at": user.created_at.isoformat(),
+                "organization_id": str(user.organization_id),
+                "organization_name": org.name if org else None,
+            }
+        )
+    return result
+
+
+@router.patch("/users/{user_id}/toggle-active")
+async def toggle_user_active(
+    user_id: uuid.UUID,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Enable or disable any user account platform-wide."""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    user.is_active = not user.is_active
+    if not user.is_active:
+        await session_service.revoke_all(db, user.id)
+    await db.commit()
+    return {"id": str(user.id), "is_active": user.is_active}
 
 
 @router.get("/organizations", response_model=list[OrganizationHealthSummary])

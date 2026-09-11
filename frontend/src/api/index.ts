@@ -1119,6 +1119,12 @@ export const customerSuccessApi = {
 // ------------------------------------------------------------------- internal
 
 export const internalApi = {
+  platformStats: () => get<PlatformStats>('/internal/platform-stats'),
+  organizationsDetail: (params?: { search?: string; plan?: string; is_active?: boolean }) =>
+    get<OrgDetail[]>('/internal/organizations/detail', params),
+  allUsers: (params?: { search?: string; role?: string }) =>
+    get<PlatformUser[]>('/internal/users', params),
+  toggleUserActive: (id: string) => patch<{ id: string; is_active: boolean }>(`/internal/users/${id}/toggle-active`),
   organizations: () => get<OrganizationHealthSummary[]>('/internal/organizations'),
   organizationHealthHistory: (organizationId: string) =>
     get<OrganizationHealthScorePoint[]>(`/internal/organizations/${organizationId}/health-history`),
