@@ -57,9 +57,13 @@ async def invite(
     request: Request,
     context: OrgContext = Depends(require_write(Permission.USER_INVITE)),
     db: AsyncSession = Depends(get_db),
-) -> Invitation:
-    invitation, _ = await user_service.invite_user(db, context, payload, request)
-    return invitation
+) -> InvitationRead:
+    from app.core.config import settings
+
+    invitation, raw_token = await user_service.invite_user(db, context, payload, request)
+    data = InvitationRead.model_validate(invitation)
+    data.invite_link = f"{settings.FRONTEND_URL}/accept-invite?token={raw_token}"
+    return data
 
 
 @router.get("/invitations", response_model=list[InvitationRead])

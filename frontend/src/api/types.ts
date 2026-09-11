@@ -566,6 +566,7 @@ export interface Invitation {
   property_ids: string[]
   expires_at: string
   created_at: string
+  invite_link: string | null
 }
 
 export interface SessionRow {

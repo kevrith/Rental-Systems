@@ -66,6 +66,7 @@ class InvitationRead(BaseModel):
     property_ids: list[uuid.UUID]
     expires_at: datetime
     created_at: datetime
+    invite_link: str | None = None
 
 
 class AcceptInvitationRequest(BaseModel):

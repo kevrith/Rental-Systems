@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Clock, Send, UserCog, UserPlus, X } from 'lucide-react'
+import { Clock, Copy, MessageCircle, Send, UserCog, UserPlus, X } from 'lucide-react'
 import { useState } from 'react'
 
 import { propertiesApi, teamApi } from '@/api'
@@ -208,6 +208,9 @@ function InviteDialog({ open, onClose }: { open: boolean; onClose: () => void })
   const [cashLimit, setCashLimit] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [invitePhone, setInvitePhone] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const properties = useQuery({
     queryKey: queryKeys.properties({ forInvite: true }),
@@ -225,8 +228,10 @@ function InviteDialog({ open, onClose }: { open: boolean; onClose: () => void })
         property_ids: role === 'caretaker' ? propertyIds : [],
         cash_limit: cashLimit ? Number(cashLimit) : null,
       }),
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.invitations })
+      setInviteLink(data.invite_link ?? null)
+      setInvitePhone(data.phone_number)
       setSent(true)
     },
     onError: (inviteError) => setError(errorMessage(inviteError)),
@@ -234,6 +239,9 @@ function InviteDialog({ open, onClose }: { open: boolean; onClose: () => void })
 
   const close = () => {
     setSent(false)
+    setInviteLink(null)
+    setInvitePhone(null)
+    setCopied(false)
     setFullName('')
     setPhone('')
     setEmail('')
@@ -279,9 +287,48 @@ function InviteDialog({ open, onClose }: { open: boolean; onClose: () => void })
       }
     >
       {sent ? (
-        <Alert tone="success">
-          {fullName} has been sent a setup link by SMS. It expires in 7 days.
-        </Alert>
+        <div className="space-y-3">
+          <Alert tone="success">
+            {fullName} has been sent a setup link by SMS. It expires in 7 days.
+          </Alert>
+          {inviteLink && (
+            <div className="space-y-2">
+              <p className="text-xs text-slate-500">Share the link manually if SMS didn't arrive:</p>
+              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <span className="min-w-0 flex-1 truncate font-mono text-xs text-slate-700">
+                  {inviteLink}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Copy className="h-3.5 w-3.5" />}
+                  onClick={() => {
+                    void navigator.clipboard.writeText(inviteLink)
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 2000)
+                  }}
+                >
+                  {copied ? 'Copied!' : 'Copy link'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<MessageCircle className="h-3.5 w-3.5" />}
+                  onClick={() =>
+                    window.open(
+                      `https://wa.me/${(invitePhone ?? '').replace('+', '')}?text=${encodeURIComponent(`Hi ${fullName}, here is your RentFlow setup link: ${inviteLink}`)}`,
+                      '_blank',
+                    )
+                  }
+                >
+                  Send via WhatsApp
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="space-y-4">
           <Field label="Full name" required>
