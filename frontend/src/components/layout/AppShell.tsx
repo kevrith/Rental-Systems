@@ -382,7 +382,7 @@ export function AppShell() {
     .filter((section) => section.items.length > 0)
 
   return (
-    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
       {/* Desktop sidebar */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white lg:flex dark:border-slate-800 dark:bg-slate-900">
         <Brand />
@@ -416,8 +416,8 @@ export function AppShell() {
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center gap-1 border-b border-slate-200 bg-white px-2 py-3 sm:gap-3 sm:px-4 dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="shrink-0 flex items-center gap-1 border-b border-slate-200 bg-white px-2 py-3 sm:gap-3 sm:px-4 dark:border-slate-800 dark:bg-slate-900 z-30">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
@@ -492,7 +492,7 @@ export function AppShell() {
 
         <TrialBanner organization={org} />
 
-        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        <main className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
           <Outlet />
         </main>
       </div>
