@@ -99,11 +99,11 @@
   <div class="signatures">
     <div>
       <div class="sig-line">The Hirer &mdash; {{ hirer.full_name }}</div>
-      <div style="font-size:8.5pt;color:#64748b">Date: ____________________</div>
+      <div style="font-size:8.5pt;color:#64748b">Date: {{ generated_at|longdate }}</div>
     </div>
     <div>
       <div class="sig-line">For the Owner &mdash; {{ organization.legal_name or organization.name }}</div>
-      <div style="font-size:8.5pt;color:#64748b">Date: ____________________</div>
+      <div style="font-size:8.5pt;color:#64748b">Date: {{ generated_at|longdate }}</div>
     </div>
   </div>
 {% endblock %}

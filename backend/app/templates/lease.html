@@ -73,11 +73,11 @@
   <div class="signatures">
     <div>
       <div class="sig-line">Landlord — {{ landlord.name }}</div>
-      <div style="font-size:8.5pt;color:#64748b">Date: ____________________</div>
+      <div style="font-size:8.5pt;color:#64748b">Date: {{ generated_at|longdate }}</div>
     </div>
     <div>
       <div class="sig-line">Tenant — {{ tenant.full_name }}</div>
-      <div style="font-size:8.5pt;color:#64748b">Date: ____________________</div>
+      <div style="font-size:8.5pt;color:#64748b">Date: {{ generated_at|longdate }}</div>
     </div>
   </div>
 {% endblock %}
