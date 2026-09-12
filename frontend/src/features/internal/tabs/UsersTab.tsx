@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Search, ToggleLeft, ToggleRight } from 'lucide-react'
+import { ArrowUpDown, ChevronDown, ChevronUp, Search, ToggleLeft, ToggleRight } from 'lucide-react'
 import { useState } from 'react'
 
 import { internalApi } from '@/api'
@@ -40,11 +40,28 @@ const ROLES = [
   'system_admin',
 ]
 
+type SortKey = 'full_name' | 'organization_name' | 'role' | 'last_login_at' | 'created_at' | 'is_active'
+type SortDir = 'asc' | 'desc'
+
 export function UsersTab() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const [toggling, setToggling] = useState<string | null>(null)
+  const [sortKey, setSortKey] = useState<SortKey>('created_at')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
+  function SortIcon({ col }: { col: SortKey }) {
+    if (sortKey !== col) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-slate-400" />
+    return sortDir === 'asc'
+      ? <ChevronUp className="ml-1 inline h-3 w-3" />
+      : <ChevronDown className="ml-1 inline h-3 w-3" />
+  }
 
   const params = {
     search: search || undefined,
@@ -64,7 +81,12 @@ export function UsersTab() {
     },
   })
 
-  const rows = users.data ?? []
+  const rows = [...(users.data ?? [])].sort((a, b) => {
+    const av = a[sortKey] ?? ''
+    const bv = b[sortKey] ?? ''
+    const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true })
+    return sortDir === 'asc' ? cmp : -cmp
+  })
 
   return (
     <div className="space-y-4">
@@ -102,12 +124,17 @@ export function UsersTab() {
             <Table>
               <thead>
                 <tr>
-                  <Th>User</Th>
-                  <Th>Organization</Th>
-                  <Th>Role</Th>
-                  <Th>Last login</Th>
-                  <Th>Joined</Th>
-                  <Th>Status</Th>
+                  {(['full_name', 'organization_name', 'role', 'last_login_at', 'created_at', 'is_active'] as SortKey[]).map((col, i) => (
+                    <Th key={col}>
+                      <button
+                        className="flex items-center gap-0.5 hover:text-slate-900 dark:hover:text-white"
+                        onClick={() => handleSort(col)}
+                      >
+                        {['User', 'Organization', 'Role', 'Last login', 'Joined', 'Status'][i]}
+                        <SortIcon col={col} />
+                      </button>
+                    </Th>
+                  ))}
                   <Th />
                 </tr>
               </thead>

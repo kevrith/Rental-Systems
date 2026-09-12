@@ -1145,10 +1145,24 @@ export const internalApi = {
     post<OrganizationSuspensionState>(`/internal/organizations/${organizationId}/reactivate`),
 
   // Cross-org drill-down (read-only)
+  orgProperties: (organizationId: string) =>
+    get<{ id: string; name: string }[]>(`/internal/organizations/${organizationId}/properties`),
   orgUnits: (organizationId: string) =>
-    get<{ id: string; unit_number: string; property_name: string | null; status: string; monthly_rent: string; unit_type: string | null; bedrooms: number | null; created_at: string }[]>(`/internal/organizations/${organizationId}/units`),
+    get<{ id: string; unit_number: string; property_name: string | null; property_id: string; status: string; monthly_rent: string; unit_type: string | null; bedrooms: number | null; created_at: string }[]>(`/internal/organizations/${organizationId}/units`),
+  createOrgUnit: (organizationId: string, body: { property_id: string; unit_number: string; unit_type?: string | null; bedrooms?: number | null; monthly_rent?: string; deposit_amount?: string }) =>
+    post<{ id: string; unit_number: string; property_name: string | null; property_id: string; status: string; monthly_rent: string; unit_type: string | null; bedrooms: number | null; created_at: string }>(`/internal/organizations/${organizationId}/units`, body),
+  updateOrgUnit: (organizationId: string, unitId: string, body: { unit_number?: string; unit_type?: string | null; bedrooms?: number | null; monthly_rent?: string }) =>
+    patch<{ id: string; unit_number: string; property_name: string | null; property_id: string; status: string; monthly_rent: string; unit_type: string | null; bedrooms: number | null; created_at: string }>(`/internal/organizations/${organizationId}/units/${unitId}`, body),
+  deleteOrgUnit: (organizationId: string, unitId: string) =>
+    del<void>(`/internal/organizations/${organizationId}/units/${unitId}`),
   orgTenants: (organizationId: string) =>
     get<{ id: string; full_name: string; phone_number: string; email: string | null; created_at: string }[]>(`/internal/organizations/${organizationId}/tenants`),
+  createOrgTenant: (organizationId: string, body: { full_name: string; phone_number: string; email?: string | null }) =>
+    post<{ id: string; full_name: string; phone_number: string; email: string | null; created_at: string }>(`/internal/organizations/${organizationId}/tenants`, body),
+  updateOrgTenant: (organizationId: string, tenantId: string, body: { full_name?: string; phone_number?: string; email?: string | null }) =>
+    patch<{ id: string; full_name: string; phone_number: string; email: string | null; created_at: string }>(`/internal/organizations/${organizationId}/tenants/${tenantId}`, body),
+  deleteOrgTenant: (organizationId: string, tenantId: string) =>
+    del<void>(`/internal/organizations/${organizationId}/tenants/${tenantId}`),
   orgPayments: (organizationId: string) =>
     get<{ id: string; reference_code: string; amount: string; method: string; status: string; paid_at: string | null; created_at: string }[]>(`/internal/organizations/${organizationId}/payments`),
   orgDemoData: (organizationId: string) =>

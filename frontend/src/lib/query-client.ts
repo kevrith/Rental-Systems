@@ -181,6 +181,7 @@ export const queryKeys = {
   auditVerify: ['security', 'audit-verify'] as const,
   internalHelpArticles: ['internal', 'help-articles'] as const,
   internalChangelogEntries: ['internal', 'changelog-entries'] as const,
+  internalOrgProperties: (id: string) => ['internal', 'organizations', id, 'properties'] as const,
   internalOrgUnits: (id: string) => ['internal', 'organizations', id, 'units'] as const,
   internalOrgTenants: (id: string) => ['internal', 'organizations', id, 'tenants'] as const,
   internalOrgPayments: (id: string) => ['internal', 'organizations', id, 'payments'] as const,

@@ -268,7 +268,66 @@ async def update_organization_plan(
     return {"organization_id": str(organization.id), "plan": payload.plan.value}
 
 
-# ------------------------------------------------- cross-org drill-down reads
+# ----------------------------------------- cross-org drill-down reads + CRUD
+
+
+class InternalUnitCreate(BaseModel):
+    property_id: uuid.UUID
+    unit_number: str = Field(min_length=1, max_length=64)
+    unit_type: str | None = None
+    bedrooms: int | None = None
+    monthly_rent: str = "0.00"
+    deposit_amount: str = "0.00"
+
+
+class InternalUnitUpdate(BaseModel):
+    unit_number: str | None = Field(default=None, min_length=1, max_length=64)
+    unit_type: str | None = None
+    bedrooms: int | None = None
+    monthly_rent: str | None = None
+    deposit_amount: str | None = None
+
+
+class InternalTenantCreate(BaseModel):
+    full_name: str = Field(min_length=1, max_length=255)
+    phone_number: str = Field(min_length=1, max_length=32)
+    email: str | None = None
+
+
+class InternalTenantUpdate(BaseModel):
+    full_name: str | None = Field(default=None, min_length=1, max_length=255)
+    phone_number: str | None = Field(default=None, min_length=1, max_length=32)
+    email: str | None = None
+
+
+def _unit_dict(r: Unit, property_name: str | None) -> dict:
+    return {
+        "id": str(r.id),
+        "unit_number": r.unit_number,
+        "property_name": property_name,
+        "property_id": str(r.property_id),
+        "status": r.status.value,
+        "monthly_rent": str(r.monthly_rent),
+        "unit_type": r.unit_type,
+        "bedrooms": r.bedrooms,
+        "created_at": r.created_at.isoformat(),
+    }
+
+
+@router.get("/organizations/{organization_id}/properties")
+async def org_properties(
+    organization_id: uuid.UUID,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    rows = list(
+        await db.scalars(
+            select(Property)
+            .where(Property.organization_id == organization_id, Property.is_archived.is_(False))
+            .order_by(Property.name)
+        )
+    )
+    return [{"id": str(r.id), "name": r.name} for r in rows]
 
 
 @router.get("/organizations/{organization_id}/units")
@@ -290,19 +349,69 @@ async def org_units(
         if row.property_id not in props:
             p = await db.get(Property, row.property_id)
             props[row.property_id] = p.name if p else None
-    return [
-        {
-            "id": str(r.id),
-            "unit_number": r.unit_number,
-            "property_name": props.get(r.property_id),
-            "status": r.status.value,
-            "monthly_rent": str(r.monthly_rent),
-            "unit_type": r.unit_type,
-            "bedrooms": r.bedrooms,
-            "created_at": r.created_at.isoformat(),
-        }
-        for r in rows
-    ]
+    return [_unit_dict(r, props.get(r.property_id)) for r in rows]
+
+
+@router.post("/organizations/{organization_id}/units", status_code=201)
+async def create_org_unit(
+    organization_id: uuid.UUID,
+    payload: InternalUnitCreate,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    prop = await db.get(Property, payload.property_id)
+    if not prop or prop.organization_id != organization_id:
+        raise HTTPException(status_code=404, detail="Property not found in this organization")
+    from app.services import reference_service
+
+    reference = await reference_service.generate_reference(db, Unit, organization_id, "UNT")
+    unit = Unit(
+        organization_id=organization_id,
+        property_id=payload.property_id,
+        reference_code=reference,
+        unit_number=payload.unit_number,
+        unit_type=payload.unit_type,
+        bedrooms=payload.bedrooms,
+        monthly_rent=payload.monthly_rent,
+        deposit_amount=payload.deposit_amount,
+    )
+    db.add(unit)
+    await db.commit()
+    await db.refresh(unit)
+    return _unit_dict(unit, prop.name)
+
+
+@router.patch("/organizations/{organization_id}/units/{unit_id}")
+async def update_org_unit(
+    organization_id: uuid.UUID,
+    unit_id: uuid.UUID,
+    payload: InternalUnitUpdate,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    unit = await db.get(Unit, unit_id)
+    if not unit or unit.organization_id != organization_id:
+        raise HTTPException(status_code=404, detail="Unit not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(unit, field, value)
+    await db.commit()
+    await db.refresh(unit)
+    prop = await db.get(Property, unit.property_id)
+    return _unit_dict(unit, prop.name if prop else None)
+
+
+@router.delete("/organizations/{organization_id}/units/{unit_id}", status_code=204)
+async def delete_org_unit(
+    organization_id: uuid.UUID,
+    unit_id: uuid.UUID,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    unit = await db.get(Unit, unit_id)
+    if not unit or unit.organization_id != organization_id:
+        raise HTTPException(status_code=404, detail="Unit not found")
+    unit.is_archived = True
+    await db.commit()
 
 
 @router.get("/organizations/{organization_id}/tenants")
@@ -329,6 +438,73 @@ async def org_tenants(
         }
         for r in rows
     ]
+
+
+@router.post("/organizations/{organization_id}/tenants", status_code=201)
+async def create_org_tenant(
+    organization_id: uuid.UUID,
+    payload: InternalTenantCreate,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.services import reference_service
+
+    reference = await reference_service.generate_reference(db, Tenant, organization_id, "TNT")
+    tenant = Tenant(
+        organization_id=organization_id,
+        reference_code=reference,
+        full_name=payload.full_name,
+        phone_number=payload.phone_number,
+        email=payload.email,
+    )
+    db.add(tenant)
+    await db.commit()
+    await db.refresh(tenant)
+    return {
+        "id": str(tenant.id),
+        "full_name": tenant.full_name,
+        "phone_number": tenant.phone_number,
+        "email": tenant.email,
+        "created_at": tenant.created_at.isoformat(),
+    }
+
+
+@router.patch("/organizations/{organization_id}/tenants/{tenant_id}")
+async def update_org_tenant(
+    organization_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    payload: InternalTenantUpdate,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    tenant = await db.get(Tenant, tenant_id)
+    if not tenant or tenant.organization_id != organization_id:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(tenant, field, value)
+    await db.commit()
+    await db.refresh(tenant)
+    return {
+        "id": str(tenant.id),
+        "full_name": tenant.full_name,
+        "phone_number": tenant.phone_number,
+        "email": tenant.email,
+        "created_at": tenant.created_at.isoformat(),
+    }
+
+
+@router.delete("/organizations/{organization_id}/tenants/{tenant_id}", status_code=204)
+async def delete_org_tenant(
+    organization_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    tenant = await db.get(Tenant, tenant_id)
+    if not tenant or tenant.organization_id != organization_id:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    tenant.is_archived = True
+    await db.commit()
 
 
 @router.get("/organizations/{organization_id}/payments")
