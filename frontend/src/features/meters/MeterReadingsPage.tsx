@@ -516,6 +516,16 @@ export function RecordMeterReadingPage() {
               ) : (
                 (ocr.message ?? 'The meter could not be read from that photo. Type it in.')
               )}
+              {photo && (
+                <button
+                  type="button"
+                  onClick={() => readPhoto.mutate(photo.id)}
+                  disabled={readPhoto.isPending}
+                  className="mt-1 block text-sm font-medium underline disabled:opacity-50"
+                >
+                  Re-read photo
+                </button>
+              )}
             </Alert>
           )}
 
