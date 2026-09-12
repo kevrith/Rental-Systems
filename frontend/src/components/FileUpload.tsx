@@ -171,7 +171,6 @@ export function FileUpload({
         type="file"
         accept={ACCEPTED}
         multiple={max > 1 && !capture}
-        capture={capture ? 'environment' : undefined}
         className="sr-only"
         onChange={(event) => void handleFiles(event.target.files)}
       />
