@@ -33,7 +33,15 @@ from app.schemas.tenant import (
     TenantUpdate,
     VacateTenancyRequest,
 )
-from app.services import ai_service, audit_service, file_service, lease_service, tenant_pii, tenant_service
+from app.services import (
+    ai_service,
+    audit_service,
+    file_service,
+    lease_service,
+    signature_service,
+    tenant_pii,
+    tenant_service,
+)
 from app.services.ai_service import AiServiceError
 
 router = APIRouter()
@@ -418,8 +426,29 @@ async def regenerate_lease(
     context: OrgContext = Depends(require_write(Permission.TENANCY_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    from sqlalchemy import select
+
+    from app.models.signature import DigitalSignature, SignatureStatus
+
     tenancy = await tenant_service.get_tenancy(db, context, tenancy_id)
     record = await lease_service.generate_and_store_lease(db, tenancy, template_id)
+
+    # Re-overlay any existing signature so the regenerated PDF is not unsigned.
+    sig = await db.scalar(
+        select(DigitalSignature)
+        .where(
+            DigitalSignature.tenancy_id == tenancy_id,
+            DigitalSignature.status == SignatureStatus.SIGNED,
+        )
+        .order_by(DigitalSignature.signed_at.desc())
+    )
+    if sig is not None:
+        try:
+            signed_doc_id = await signature_service._overlay_signature(db, sig)
+            sig.signed_document_id = signed_doc_id
+        except Exception:
+            pass
+
     audit_service.record(
         db,
         organization_id=context.organization_id,
