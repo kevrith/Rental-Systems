@@ -218,3 +218,30 @@ exist.
 ## License
 
 Proprietary. All rights reserved.
+
+
+
+Gaps worth addressing
+1. No organization creation from the dashboard
+You can suspend, change plan, drill into data — but you can't create a new org. Right now the only path is the public /register flow. For enterprise onboarding (white-glove setup, migrating a customer) this is a gap.
+
+2. No user impersonation / "sign in as"
+There's no way to log in as a user to debug their experience. This is standard in enterprise SaaS admin panels. The audit log is append-only so it's safe to add — every impersonation session would be logged.
+
+3. Users tab has no way to reset a user's password or force a re-login
+You can disable/enable a user but can't trigger a password reset email or revoke just their sessions (only all sessions on disable). The backend has session_service.revoke_all already.
+
+4. No pagination on any table
+Organizations is capped at 200 rows, users at 200, units/tenants at 500 — all loaded at once. Fine now, but will become slow as the platform grows. The backend queries already have .limit() but there's no "load more" or page control in the UI.
+
+5. Audit log tab has no live viewer
+You can export but can't browse the log in the UI. There's no table showing recent entries, no filter by org/user/action. You have to export to CSV to see anything.
+
+6. No email/SMS broadcast tool
+No way to send a platform-wide announcement to all active organizations (e.g. maintenance window, new feature). The notification infrastructure exists (notification_service.send) but there's no UI for it.
+
+7. Content tab has no delete
+Help articles and changelog entries can be created and edited but not deleted. There's no DELETE /internal/help-articles/:id endpoint either — only a workaround of unpublishing.
+
+8. Overview stats don't refresh on demand
+The overview auto-refreshes every 60s but there's no manual refresh button. Minor but noticeable when you've just done something and want to see the updated count immediately.

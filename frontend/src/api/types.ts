@@ -2841,6 +2841,19 @@ export interface AuditChainVerification {
   broken_at_created_at: string | null
 }
 
+export interface AuditLogEntry {
+  id: string
+  action: string
+  entity_type: string
+  entity_id: string | null
+  summary: string | null
+  actor_id: string | null
+  actor_name: string | null
+  organization_id: string | null
+  ip_address: string | null
+  created_at: string
+}
+
 export interface SavedView {
   id: string
   entity_type: string

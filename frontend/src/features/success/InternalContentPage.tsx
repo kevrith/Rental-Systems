@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plus } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { internalApi } from '@/api'
@@ -46,10 +46,16 @@ export function InternalContentPage() {
 }
 
 function HelpArticlesTab() {
+  const queryClient = useQueryClient()
   const [editing, setEditing] = useState<HelpArticle | 'new' | null>(null)
   const articles = useQuery({
     queryKey: queryKeys.internalHelpArticles,
     queryFn: internalApi.helpArticles,
+  })
+
+  const deleteArticle = useMutation({
+    mutationFn: (id: string) => internalApi.deleteHelpArticle(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.internalHelpArticles }),
   })
 
   if (articles.isPending) return <PageLoader />
@@ -89,14 +95,28 @@ function HelpArticlesTab() {
                       </Badge>
                     </Td>
                     <Td>
-                      <button
-                        type="button"
-                        onClick={() => setEditing(article)}
-                        className="text-slate-400 hover:text-slate-700"
-                        aria-label="Edit"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditing(article)}
+                          className="text-slate-400 hover:text-slate-700"
+                          aria-label="Edit"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm('Delete this article? This cannot be undone.')) {
+                              deleteArticle.mutate(article.id)
+                            }
+                          }}
+                          className="text-slate-400 hover:text-danger-600"
+                          aria-label="Delete"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </Td>
                   </tr>
                 ))}
@@ -244,10 +264,19 @@ function HelpArticleDialog({ article, onClose }: { article: HelpArticle | null; 
 }
 
 function ChangelogTab() {
+  const queryClient = useQueryClient()
   const [editing, setEditing] = useState<ChangelogEntry | 'new' | null>(null)
   const entries = useQuery({
     queryKey: queryKeys.internalChangelogEntries,
     queryFn: internalApi.changelogEntries,
+  })
+
+  const deleteEntry = useMutation({
+    mutationFn: (id: string) => internalApi.deleteChangelogEntry(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.internalChangelogEntries })
+      queryClient.invalidateQueries({ queryKey: queryKeys.changelog })
+    },
   })
 
   if (entries.isPending) return <PageLoader />
@@ -272,14 +301,28 @@ function ChangelogTab() {
                   <p className="text-xs text-slate-400">{shortDate(entry.published_at)}</p>
                   <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{entry.body}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setEditing(entry)}
-                  className="shrink-0 text-slate-400 hover:text-slate-700"
-                  aria-label="Edit"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditing(entry)}
+                    className="text-slate-400 hover:text-slate-700"
+                    aria-label="Edit"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('Delete this entry? This cannot be undone.')) {
+                        deleteEntry.mutate(entry.id)
+                      }
+                    }}
+                    className="text-slate-400 hover:text-danger-600"
+                    aria-label="Delete"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </CardBody>
             </Card>
           ))}

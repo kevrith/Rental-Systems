@@ -179,6 +179,8 @@ export const queryKeys = {
   internalBreachDashboard: ['internal', 'breaches', 'dashboard'] as const,
   internalBreaches: (openOnly?: boolean) => ['internal', 'breaches', openOnly] as const,
   auditVerify: ['security', 'audit-verify'] as const,
+  auditLog: (params?: object) => ['internal', 'audit-log', params] as const,
+  internalBroadcast: ['internal', 'broadcast'] as const,
   internalHelpArticles: ['internal', 'help-articles'] as const,
   internalChangelogEntries: ['internal', 'changelog-entries'] as const,
   internalOrgProperties: (id: string) => ['internal', 'organizations', id, 'properties'] as const,

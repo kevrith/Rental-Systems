@@ -3,6 +3,7 @@ import {
   Building2,
   FileEdit,
   LayoutDashboard,
+  Megaphone,
   ScrollText,
   ShieldAlert,
   Terminal,
@@ -15,13 +16,14 @@ import { useAuthStore } from '@/store/auth-store'
 
 import { AuditLogTab } from './tabs/AuditLogTab'
 import { BreachRegisterTab } from './tabs/BreachRegisterTab'
+import { BroadcastTab } from './tabs/BroadcastTab'
 import { ContentTab } from './tabs/ContentTab'
 import { OrganizationsTab } from './tabs/OrganizationsTab'
 import { OverviewTab } from './tabs/OverviewTab'
 import { TaskRunnerTab } from './tabs/TaskRunnerTab'
 import { UsersTab } from './tabs/UsersTab'
 
-type TabId = 'overview' | 'organizations' | 'users' | 'breaches' | 'audit' | 'content' | 'tasks'
+type TabId = 'overview' | 'organizations' | 'users' | 'breaches' | 'audit' | 'content' | 'tasks' | 'broadcast'
 
 const NAV: {
   id: TabId
@@ -70,6 +72,12 @@ const NAV: {
     label: 'Task runner',
     icon: <Terminal className="h-4 w-4" />,
     description: 'Celery jobs & run history',
+  },
+  {
+    id: 'broadcast',
+    label: 'Broadcast',
+    icon: <Megaphone className="h-4 w-4" />,
+    description: 'Platform-wide announcements',
   },
 ]
 
@@ -152,6 +160,7 @@ export function SuperAdminDashboard() {
           {tab === 'audit' && <AuditLogTab />}
           {tab === 'content' && <ContentTab />}
           {tab === 'tasks' && <TaskRunnerTab />}
+          {tab === 'broadcast' && <BroadcastTab />}
         </main>
       </div>
     </div>

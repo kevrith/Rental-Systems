@@ -3,8 +3,11 @@ import {
   Ban,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   CreditCard,
+  Plus,
   Search,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -59,6 +62,10 @@ export function OrganizationsTab() {
   const [suspendTarget, setSuspendTarget] = useState<OrgDetail | null>(null)
   const [planTarget, setPlanTarget] = useState<OrgDetail | null>(null)
   const [drillTarget, setDrillTarget] = useState<OrgDetail | null>(null)
+  const [drillTab, setDrillTab] = useState<'units' | 'tenants' | 'payments' | 'demo'>('units')
+  const [creating, setCreating] = useState(false)
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 25
 
   const params = {
     search: search || undefined,
@@ -77,7 +84,9 @@ export function OrganizationsTab() {
     enabled: Boolean(expanded),
   })
 
-  const rows = orgs.data ?? []
+  const allRows = orgs.data ?? []
+  const totalPages = Math.ceil(allRows.length / PAGE_SIZE)
+  const rows = allRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
   return (
     <div className="space-y-4">
@@ -89,12 +98,12 @@ export function OrganizationsTab() {
             className="pl-9"
             placeholder="Search by name…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(0) }}
           />
         </div>
         <Select
           value={planFilter}
-          onChange={(e) => setPlanFilter(e.target.value)}
+          onChange={(e) => { setPlanFilter(e.target.value); setPage(0) }}
           className="w-40"
         >
           <option value="">All plans</option>
@@ -106,18 +115,21 @@ export function OrganizationsTab() {
         </Select>
         <Select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(0) }}
           className="w-40"
         >
           <option value="">All statuses</option>
           <option value="active">Active</option>
           <option value="suspended">Suspended</option>
         </Select>
+        <Button size="sm" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setCreating(true)}>
+          New organization
+        </Button>
       </div>
 
       {orgs.isPending ? (
         <PageLoader />
-      ) : rows.length === 0 ? (
+      ) : allRows.length === 0 ? (
         <EmptyState title="No organizations match" description="Try adjusting the filters." />
       ) : (
         <Card>
@@ -157,13 +169,6 @@ export function OrganizationsTab() {
                             <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
                           )}
                         </button>
-                        <button
-                          type="button"
-                          className="mt-0.5 block text-[11px] text-brand-600 hover:underline dark:text-brand-400"
-                          onClick={() => setDrillTarget(row)}
-                        >
-                          View units &amp; tenants
-                        </button>
                       </Td>
                       <Td>
                         <p className="text-sm text-slate-800 dark:text-slate-200">
@@ -186,11 +191,23 @@ export function OrganizationsTab() {
                           {humanize(row.operating_mode)}
                         </span>
                       </Td>
-                      <Td className="tabular-nums text-slate-700 dark:text-slate-300">
-                        {row.unit_count.toLocaleString()}
+                      <Td>
+                        <button
+                          type="button"
+                          className="tabular-nums text-slate-700 hover:text-brand-700 hover:underline dark:text-slate-300 dark:hover:text-brand-400"
+                          onClick={() => { setDrillTarget(row); setDrillTab('units') }}
+                        >
+                          {row.unit_count.toLocaleString()}
+                        </button>
                       </Td>
-                      <Td className="tabular-nums text-slate-700 dark:text-slate-300">
-                        {row.tenant_count.toLocaleString()}
+                      <Td>
+                        <button
+                          type="button"
+                          className="tabular-nums text-slate-700 hover:text-brand-700 hover:underline dark:text-slate-300 dark:hover:text-brand-400"
+                          onClick={() => { setDrillTarget(row); setDrillTab('tenants') }}
+                        >
+                          {row.tenant_count.toLocaleString()}
+                        </button>
                       </Td>
                       <Td className="tabular-nums text-slate-700 dark:text-slate-300">
                         {row.user_count}
@@ -283,6 +300,18 @@ export function OrganizationsTab() {
         </Card>
       )}
 
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-xs text-slate-500">
+          <span>{allRows.length} organizations · page {page + 1} of {totalPages}</span>
+          <div className="flex gap-1">
+            <Button size="sm" variant="ghost" disabled={page === 0} onClick={() => setPage(p => p - 1)}
+              icon={<ChevronLeft className="h-3.5 w-3.5" />} />
+            <Button size="sm" variant="ghost" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}
+              icon={<ChevronRight className="h-3.5 w-3.5" />} />
+          </div>
+        </div>
+      )}
+
       {suspendTarget && (
         <SuspendDialog org={suspendTarget} onClose={() => setSuspendTarget(null)} />
       )}
@@ -290,9 +319,108 @@ export function OrganizationsTab() {
         <PlanDialog org={planTarget} onClose={() => setPlanTarget(null)} />
       )}
       {drillTarget && (
-        <OrgDetailDrawer org={drillTarget} onClose={() => setDrillTarget(null)} />
+        <OrgDetailDrawer org={drillTarget} initialTab={drillTab} onClose={() => setDrillTarget(null)} />
+      )}
+      {creating && (
+        <CreateOrgDialog
+          onClose={() => setCreating(false)}
+          onSaved={() => {
+            setCreating(false)
+            orgs.refetch()
+          }}
+        />
       )}
     </div>
+  )
+}
+
+function CreateOrgDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState('')
+  const [ownerName, setOwnerName] = useState('')
+  const [ownerEmail, setOwnerEmail] = useState('')
+  const [ownerPhone, setOwnerPhone] = useState('')
+  const [mode, setMode] = useState('owner')
+  const [plan, setPlan] = useState('starter')
+  const [result, setResult] = useState<{ owner_email: string; temp_password: string } | null>(null)
+
+  const create = useMutation({
+    mutationFn: () =>
+      internalApi.createOrganization({
+        name,
+        owner_full_name: ownerName,
+        owner_email: ownerEmail,
+        owner_phone: ownerPhone,
+        operating_mode: mode,
+        plan,
+      }),
+    onSuccess: (data) => setResult(data),
+  })
+
+  if (result) {
+    return (
+      <Dialog open onClose={onSaved} title="Organization created" size="sm">
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Share these credentials with the account owner. The password cannot be retrieved again.
+          </p>
+          <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-slate-500">Email</span>
+              <span className="font-mono text-xs text-slate-800 dark:text-slate-200">{result.owner_email}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-slate-500">Temp password</span>
+              <span className="font-mono text-xs text-slate-800 dark:text-slate-200">{result.temp_password}</span>
+            </div>
+          </div>
+          <Button className="w-full" onClick={onSaved}>Done</Button>
+        </div>
+      </Dialog>
+    )
+  }
+
+  return (
+    <Dialog open onClose={onClose} title="New organization" size="md">
+      <form
+        className="space-y-3"
+        onSubmit={(e) => { e.preventDefault(); create.mutate() }}
+      >
+        <Field label="Organization name">
+          <Input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={255} />
+        </Field>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Owner full name">
+            <Input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} required minLength={2} />
+          </Field>
+          <Field label="Owner phone">
+            <Input value={ownerPhone} onChange={(e) => setOwnerPhone(e.target.value)} required minLength={5} />
+          </Field>
+        </div>
+        <Field label="Owner email">
+          <Input type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} required />
+        </Field>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Operating mode">
+            <Select value={mode} onChange={(e) => setMode(e.target.value)}>
+              <option value="owner">Owner self-managed</option>
+              <option value="agency">Agency</option>
+              <option value="dual">Dual</option>
+            </Select>
+          </Field>
+          <Field label="Plan">
+            <Select value={plan} onChange={(e) => setPlan(e.target.value)}>
+              {PLAN_OPTIONS.map((p) => (
+                <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        {create.isError && <Alert tone="danger">{errorMessage(create.error)}</Alert>}
+        <Button type="submit" className="w-full" loading={create.isPending}>
+          Create organization
+        </Button>
+      </form>
+    </Dialog>
   )
 }
 

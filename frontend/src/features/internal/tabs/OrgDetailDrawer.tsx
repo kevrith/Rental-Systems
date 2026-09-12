@@ -36,8 +36,8 @@ const STATUS_TONE: Record<string, 'neutral' | 'success' | 'warn' | 'danger' | 'i
   reversed: 'neutral',
 }
 
-export function OrgDetailDrawer({ org, onClose }: { org: OrgDetail; onClose: () => void }) {
-  const [tab, setTab] = useState<DrawerTab>('units')
+export function OrgDetailDrawer({ org, initialTab = 'units', onClose }: { org: OrgDetail; initialTab?: DrawerTab; onClose: () => void }) {
+  const [tab, setTab] = useState<DrawerTab>(initialTab)
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" aria-modal role="dialog">

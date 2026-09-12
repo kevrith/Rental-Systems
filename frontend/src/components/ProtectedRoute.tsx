@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import axios from 'axios'
+import { useEffect, useState } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 
 import { authApi } from '@/api/auth'
 import { PageLoader } from '@/components/ui'
+import { API_BASE_URL, isTokenExpired } from '@/lib/api-client'
 import { queryKeys } from '@/lib/query-client'
 import { useAuthStore } from '@/store/auth-store'
 
@@ -28,19 +30,46 @@ export function ProtectedRoute({
 }) {
   const location = useLocation()
   const accessToken = useAuthStore((state) => state.accessToken)
+  const refreshToken = useAuthStore((state) => state.refreshToken)
+  const setTokens = useAuthStore((state) => state.setTokens)
+  const logout = useAuthStore((state) => state.logout)
   const user = useAuthStore((state) => state.user)
   const setUser = useAuthStore((state) => state.setUser)
+
+  // Proactively refresh before firing /auth/me when the access token is already
+  // expired. This avoids the 401 → refresh → retry round-trip on return after
+  // a long absence, which is especially slow on a cold Render instance.
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    if (!accessToken) { setReady(true); return }
+    if (!isTokenExpired(accessToken)) { setReady(true); return }
+    if (!refreshToken) { logout(); setReady(true); return }
+
+    axios
+      .post<{ access_token: string; refresh_token: string }>(
+        `${API_BASE_URL}/auth/refresh`,
+        { refresh_token: refreshToken },
+      )
+      .then(({ data }) => {
+        setTokens({ accessToken: data.access_token, refreshToken: data.refresh_token })
+      })
+      .catch(() => logout())
+      .finally(() => setReady(true))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const profile = useQuery({
     queryKey: queryKeys.me,
     queryFn: authApi.me,
-    enabled: Boolean(accessToken),
+    enabled: ready && Boolean(accessToken),
     staleTime: 5 * 60_000,
   })
 
   useEffect(() => {
     if (profile.data) setUser(profile.data)
   }, [profile.data, setUser])
+
+  if (!ready) return <PageLoader />
 
   if (!accessToken) {
     return <Navigate to={redirectTo} replace state={{ from: location.pathname }} />

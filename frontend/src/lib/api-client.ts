@@ -10,6 +10,20 @@ export const apiClient = axios.create({ baseURL: API_BASE_URL })
 /** A bare client for the refresh call itself — using `apiClient` would recurse. */
 const refreshClient = axios.create({ baseURL: API_BASE_URL })
 
+/**
+ * Returns true if the JWT is missing or will expire within the next `bufferSeconds`.
+ * Decodes the payload locally — no network call.
+ */
+export function isTokenExpired(token: string | null, bufferSeconds = 30): boolean {
+  if (!token) return true
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return (payload.exp ?? 0) * 1000 < Date.now() + bufferSeconds * 1000
+  } catch {
+    return true
+  }
+}
+
 apiClient.interceptors.request.use((config) => {
   const { accessToken } = useAuthStore.getState()
   if (accessToken) {

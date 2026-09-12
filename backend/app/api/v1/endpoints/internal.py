@@ -558,6 +558,285 @@ async def org_demo_data(
     }
 
 
+# ------------------------------------------------------------ audit log browse
+
+
+@router.get("/audit-log")
+async def browse_audit_log(
+    search: str | None = Query(default=None),
+    action: str | None = Query(default=None),
+    organization_id: uuid.UUID | None = Query(default=None),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    limit: int = Query(default=50, le=200),
+    offset: int = Query(default=0, ge=0),
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    from sqlalchemy import and_, or_
+
+    from app.models.audit import AuditLog
+
+    q = select(AuditLog).order_by(AuditLog.created_at.desc())
+    filters = []
+    if search:
+        term = f"%{search.strip()}%"
+        filters.append(or_(AuditLog.summary.ilike(term), AuditLog.action.ilike(term)))
+    if action:
+        filters.append(AuditLog.action == action)
+    if organization_id:
+        filters.append(AuditLog.organization_id == organization_id)
+    if date_from:
+        filters.append(AuditLog.created_at >= date_from)
+    if date_to:
+        filters.append(AuditLog.created_at <= date_to)
+    if filters:
+        q = q.where(and_(*filters))
+
+    total = await db.scalar(select(func.count()).select_from(q.subquery())) or 0
+    rows = list(await db.scalars(q.offset(offset).limit(limit)))
+
+    def _row(r: AuditLog) -> dict:
+        return {
+            "id": str(r.id),
+            "action": r.action,
+            "entity_type": r.entity_type,
+            "entity_id": str(r.entity_id) if r.entity_id else None,
+            "summary": r.summary,
+            "actor_id": str(r.user_id) if r.user_id else None,
+            "actor_name": r.actor_name,
+            "organization_id": str(r.organization_id) if r.organization_id else None,
+            "ip_address": r.ip_address,
+            "created_at": r.created_at.isoformat(),
+        }
+
+    return {"total": total, "rows": [_row(r) for r in rows]}
+
+
+# --------------------------------------------------------- platform broadcast
+
+
+class BroadcastPayload(BaseModel):
+    title: str = Field(min_length=3, max_length=200)
+    body: str = Field(min_length=10, max_length=2000)
+    channels: list[str] = Field(default_factory=lambda: ["email"])
+    plan_filter: str | None = None
+
+
+@router.post("/broadcast")
+async def broadcast_to_all(
+    payload: BroadcastPayload,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Send a platform-wide announcement to all active org owners/admins."""
+    q = select(Organization).where(Organization.is_active.is_(True))
+    if payload.plan_filter:
+        q = q.where(Organization.subscription_plan == payload.plan_filter)
+    orgs = list(await db.scalars(q))
+
+    channels = []
+    for ch in payload.channels:
+        try:
+            channels.append(NotificationChannel(ch))
+        except ValueError:
+            pass
+
+    sent = 0
+    for org in orgs:
+        owners = list(
+            await db.scalars(
+                select(User).where(
+                    User.organization_id == org.id,
+                    User.role.in_([UserRole.OWNER, UserRole.AGENCY_ADMIN]),
+                    User.is_active.is_(True),
+                )
+            )
+        )
+        for owner in owners:
+            await notification_service.send(
+                db,
+                recipient=notification_service.Recipient.for_user(owner),
+                notification_type=NotificationType.ACCOUNT,
+                title=payload.title,
+                body=payload.body,
+                channels=channels,
+                organization_id=org.id,
+            )
+            sent += 1
+    await db.commit()
+    return {"sent": sent}
+
+
+# --------------------------------------------------------- org create
+
+
+class InternalOrgCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=255)
+    owner_full_name: str = Field(min_length=2, max_length=255)
+    owner_email: str = Field(min_length=5, max_length=255)
+    owner_phone: str = Field(min_length=5, max_length=32)
+    operating_mode: str = "owner"
+    plan: str = "starter"
+
+
+@router.post("/organizations", status_code=201)
+async def create_organization(
+    payload: InternalOrgCreate,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """White-glove org creation — bypasses the public registration flow."""
+    import secrets
+
+    from app.core.security import hash_password
+    from app.models.organization import OperatingMode, SubscriptionPlan
+
+    existing = await db.scalar(select(User).where(User.email == payload.owner_email))
+    if existing:
+        raise HTTPException(status_code=409, detail="A user with that email already exists")
+
+    slug = payload.name.lower().replace(" ", "-")[:48]
+    slug = "".join(c for c in slug if c.isalnum() or c == "-")
+    existing_org = await db.scalar(select(Organization).where(Organization.slug == slug))
+    if existing_org:
+        slug = f"{slug}-{secrets.token_hex(3)}"
+
+    org = Organization(
+        name=payload.name,
+        slug=slug,
+        operating_mode=OperatingMode(payload.operating_mode),
+        subscription_plan=SubscriptionPlan(payload.plan),
+    )
+    db.add(org)
+    await db.flush()
+
+    temp_password = secrets.token_urlsafe(12)
+    owner = User(
+        organization_id=org.id,
+        full_name=payload.owner_full_name,
+        email=payload.owner_email,
+        phone_number=payload.owner_phone,
+        role=UserRole.OWNER,
+        password_hash=hash_password(temp_password),
+        is_email_verified=True,
+    )
+    db.add(owner)
+    await db.commit()
+    await db.refresh(org)
+    return {
+        "id": str(org.id),
+        "name": org.name,
+        "slug": org.slug,
+        "owner_email": owner.email,
+        "temp_password": temp_password,
+    }
+
+
+# --------------------------------------------------------- user actions
+
+
+@router.post("/users/{user_id}/reset-password")
+async def reset_user_password(
+    user_id: uuid.UUID,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Generate a password-reset link for any user and return it."""
+    from datetime import timedelta
+
+    from app.models.session import TokenPurpose
+    from app.services.auth_service import issue_link_token
+
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    raw = await issue_link_token(db, user, TokenPurpose.PASSWORD_RESET, settings.PASSWORD_RESET_TTL_HOURS)
+    await db.commit()
+    expires = datetime.now(UTC) + timedelta(hours=settings.PASSWORD_RESET_TTL_HOURS)
+    reset_url = f"{settings.FRONTEND_URL}/reset-password?token={raw}"
+    return {"reset_url": reset_url, "expires_at": expires.isoformat()}
+
+
+@router.post("/users/{user_id}/revoke-sessions")
+async def revoke_user_sessions(
+    user_id: uuid.UUID,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Force-sign-out a user by revoking all their active sessions."""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    await session_service.revoke_all(db, user.id)
+    await db.commit()
+    return {"message": "All sessions revoked"}
+
+
+@router.post("/users/{user_id}/impersonate")
+async def impersonate_user(
+    user_id: uuid.UUID,
+    request: Request,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Mint a short-lived access token scoped to another user for debugging.
+
+    The token carries an `impersonated_by` claim so every downstream action
+    is attributable to the staff member, not the account holder. The session
+    is not persisted — there is no refresh token and no session row — so it
+    expires in 30 minutes and cannot be extended.
+    """
+
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not target.is_active:
+        raise HTTPException(status_code=400, detail="Cannot impersonate a disabled user")
+    if target.role.value == "system_admin":
+        raise HTTPException(status_code=403, detail="Cannot impersonate another staff member")
+
+    audit_service.record(
+        db,
+        organization_id=target.organization_id,
+        action="user.impersonated",
+        entity_type="user",
+        entity_id=target.id,
+        actor=staff,
+        summary=f"Staff member {staff.full_name} started an impersonation session for {target.full_name}",
+        request=request,
+    )
+    await db.commit()
+
+    # Short-lived, no session row, no refresh token.
+    from datetime import timedelta
+
+    from app.core.security import _create_token
+
+    access_token = _create_token(
+        subject=str(target.id),
+        expires_delta=timedelta(minutes=30),
+        token_type="access",
+        extra_claims={
+            "org_id": str(target.organization_id),
+            "role": target.role.value,
+            "impersonated_by": str(staff.id),
+        },
+    )
+    return {
+        "access_token": access_token,
+        "expires_in": 1800,
+        "target_user": {
+            "id": str(target.id),
+            "full_name": target.full_name,
+            "email": target.email,
+            "role": target.role.value,
+            "organization_id": str(target.organization_id),
+        },
+    }
+
+
 # ------------------------------------------------------------- help articles
 
 
@@ -590,6 +869,21 @@ async def update_help_article(
     return HelpArticleRead.model_validate(row)
 
 
+@router.delete("/help-articles/{article_id}", status_code=204)
+async def delete_help_article(
+    article_id: uuid.UUID,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    from app.models.customer_success import HelpArticle
+
+    row = await db.get(HelpArticle, article_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    await db.delete(row)
+    await db.commit()
+
+
 # -------------------------------------------------------------- changelog
 
 
@@ -620,6 +914,21 @@ async def update_changelog_entry(
 ) -> ChangelogEntryRead:
     row = await changelog_service.update(db, entry_id, payload)
     return ChangelogEntryRead.model_validate(row)
+
+
+@router.delete("/changelog-entries/{entry_id}", status_code=204)
+async def delete_changelog_entry(
+    entry_id: uuid.UUID,
+    staff: User = Depends(require_platform_staff),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    from app.models.customer_success import ChangelogEntry
+
+    row = await db.get(ChangelogEntry, entry_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    await db.delete(row)
+    await db.commit()
 
 
 # ------------------------------------------------------- account suspension

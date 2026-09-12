@@ -1125,9 +1125,27 @@ export const internalApi = {
   platformStats: () => get<PlatformStats>('/internal/platform-stats'),
   organizationsDetail: (params?: { search?: string; plan?: string; is_active?: boolean }) =>
     get<OrgDetail[]>('/internal/organizations/detail', params),
+  createOrganization: (body: {
+    name: string
+    owner_full_name: string
+    owner_email: string
+    owner_phone: string
+    operating_mode: string
+    plan: string
+  }) => post<{ id: string; name: string; slug: string; owner_email: string; temp_password: string }>('/internal/organizations', body),
   allUsers: (params?: { search?: string; role?: string }) =>
     get<PlatformUser[]>('/internal/users', params),
   toggleUserActive: (id: string) => patch<{ id: string; is_active: boolean }>(`/internal/users/${id}/toggle-active`),
+  resetUserPassword: (id: string) =>
+    post<{ reset_url: string; expires_at: string }>(`/internal/users/${id}/reset-password`),
+  revokeUserSessions: (id: string) =>
+    post<{ message: string }>(`/internal/users/${id}/revoke-sessions`),
+  impersonateUser: (id: string) =>
+    post<{ access_token: string; expires_in: number; target_user: { id: string; full_name: string; email: string; role: string; organization_id: string } }>(`/internal/users/${id}/impersonate`),
+  auditLog: (params?: { search?: string; action?: string; organization_id?: string; date_from?: string; date_to?: string; limit?: number; offset?: number }) =>
+    get<{ total: number; rows: AuditLogEntry[] }>('/internal/audit-log', params),
+  broadcast: (body: { title: string; body: string; channels: string[]; plan_filter?: string | null }) =>
+    post<{ sent: number }>('/internal/broadcast', body),
   organizations: () => get<OrganizationHealthSummary[]>('/internal/organizations'),
   organizationHealthHistory: (organizationId: string) =>
     get<OrganizationHealthScorePoint[]>(`/internal/organizations/${organizationId}/health-history`),
@@ -1200,12 +1218,14 @@ export const internalApi = {
     id: string,
     body: { slug: string; title: string; body: string; category: string; is_published: boolean },
   ) => patch<HelpArticle>(`/internal/help-articles/${id}`, body),
+  deleteHelpArticle: (id: string) => del<void>(`/internal/help-articles/${id}`),
 
   changelogEntries: () => get<ChangelogEntry[]>('/internal/changelog-entries'),
   createChangelogEntry: (body: { title: string; body: string; is_published: boolean }) =>
     post<ChangelogEntry>('/internal/changelog-entries', body),
   updateChangelogEntry: (id: string, body: { title: string; body: string; is_published: boolean }) =>
     patch<ChangelogEntry>(`/internal/changelog-entries/${id}`, body),
+  deleteChangelogEntry: (id: string) => del<void>(`/internal/changelog-entries/${id}`),
 }
 
 // ------------------------------------------------------------------- reports
