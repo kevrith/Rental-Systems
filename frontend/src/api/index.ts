@@ -170,6 +170,7 @@ import type {
   PlatformStats,
   OrgDetail,
   PlatformUser,
+  AuditLogEntry,
 } from './types'
 
 const get = async <T>(url: string, params?: unknown): Promise<T> =>
