@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CreditCard, Download, Eye, LogOut, Receipt, RefreshCw, UserPlus, X } from 'lucide-react'
+import { CreditCard, Download, Eye, LogOut, PenLine, Receipt, RefreshCw, UserPlus, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { coTenantsApi, invoicesApi, noticesApi, paymentsApi, tenanciesApi, tenantsApi } from '@/api'
+import { authApi } from '@/api/auth'
 import { PageHeader, StatCard } from '@/components/PageHeader'
+import { SignaturePad } from '@/components/SignaturePad'
 import {
   Alert,
   Badge,
@@ -71,15 +73,6 @@ export function TenancyDetailPage() {
       await queryClient.invalidateQueries({ queryKey: ['invoices'] })
       await queryClient.invalidateQueries({ queryKey: ['tenancy'] })
       setNotice({ tone: 'success', text: 'Invoice generated and sent to the tenant.' })
-    },
-    onError: (error) => setNotice({ tone: 'danger', text: errorMessage(error) }),
-  })
-
-  const regenerateLease = useMutation({
-    mutationFn: () => tenanciesApi.regenerateLease(tenancyId!),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['tenancy'] })
-      setNotice({ tone: 'success', text: 'A fresh lease PDF was generated and filed.' })
     },
     onError: (error) => setNotice({ tone: 'danger', text: errorMessage(error) }),
   })
@@ -299,53 +292,7 @@ export function TenancyDetailPage() {
             </CardBody>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Lease agreement</CardTitle>
-            </CardHeader>
-            <CardBody className="space-y-2">
-              {record.lease_url ? (
-                <>
-                  <a
-                    href={record.lease_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={`${linkButtonClass('outline')} w-full justify-center`}
-                  >
-                    <Download className="h-4 w-4" />
-                    Download lease
-                  </a>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-center"
-                    icon={<Eye className="h-4 w-4" />}
-                    onClick={async () => {
-                      const blob = await tenanciesApi.leasePreview(tenancyId!)
-                      const url = URL.createObjectURL(blob)
-                      window.open(url, '_blank')
-                    }}
-                  >
-                    Preview in browser
-                  </Button>
-                </>
-              ) : (
-                <p className="text-sm text-slate-500">
-                  No lease has been generated for this tenancy yet.
-                </p>
-              )}
-              {canManage && (
-                <Button
-                  variant="ghost"
-                  className="w-full justify-center"
-                  icon={<RefreshCw className="h-4 w-4" />}
-                  loading={regenerateLease.isPending}
-                  onClick={() => regenerateLease.mutate()}
-                >
-                  {record.lease_url ? 'Regenerate lease' : 'Generate lease'}
-                </Button>
-              )}
-            </CardBody>
-          </Card>
+          <LeaseCard tenancyId={tenancyId!} leaseUrl={record.lease_url} canManage={canManage} />
 
           <Card>
             <CardHeader>
@@ -380,6 +327,167 @@ export function TenancyDetailPage() {
         onDone={() => navigate('/tenancies')}
       />
     </div>
+  )
+}
+
+function LeaseCard({
+  tenancyId,
+  leaseUrl,
+  canManage,
+}: {
+  tenancyId: string
+  leaseUrl?: string | null
+  canManage?: boolean
+}) {
+  const queryClient = useQueryClient()
+  const [sigOpen, setSigOpen] = useState(false)
+  const [regenNotice, setRegenNotice] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null)
+
+  const savedSig = useQuery({
+    queryKey: queryKeys.mySignature,
+    queryFn: authApi.getSignature,
+    select: (data) => data.signature,
+    enabled: Boolean(canManage),
+  })
+
+  const regenerateLease = useMutation({
+    mutationFn: () => tenanciesApi.regenerateLease(tenancyId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['tenancy'] })
+      setRegenNotice({ tone: 'success', text: 'A fresh lease PDF was generated and filed.' })
+    },
+    onError: (error) => setRegenNotice({ tone: 'danger', text: errorMessage(error) }),
+  })
+
+  // Only show the banner once the query has settled and there is definitely no signature.
+  const noSignature = canManage && savedSig.isFetched && savedSig.data === null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Lease agreement</CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-2">
+        {regenNotice && <Alert tone={regenNotice.tone}>{regenNotice.text}</Alert>}
+
+        {noSignature && (
+          <Alert tone="warn" icon={<PenLine className="h-4 w-4" />}>
+            <span className="font-medium">Your signature is missing.</span> Draw and save it so it
+            appears on this lease.{' '}
+            <button
+              type="button"
+              onClick={() => setSigOpen(true)}
+              className="font-medium underline"
+            >
+              Add signature
+            </button>
+          </Alert>
+        )}
+
+        {leaseUrl ? (
+          <>
+            <a
+              href={leaseUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={`${linkButtonClass('outline')} w-full justify-center`}
+            >
+              <Download className="h-4 w-4" />
+              Download lease
+            </a>
+            <Button
+              variant="ghost"
+              className="w-full justify-center"
+              icon={<Eye className="h-4 w-4" />}
+              onClick={async () => {
+                const blob = await tenanciesApi.leasePreview(tenancyId)
+                const url = URL.createObjectURL(blob)
+                window.open(url, '_blank')
+              }}
+            >
+              Preview in browser
+            </Button>
+          </>
+        ) : (
+          <p className="text-sm text-slate-500">
+            No lease has been generated for this tenancy yet.
+          </p>
+        )}
+
+        {canManage && (
+          <Button
+            variant="ghost"
+            className="w-full justify-center"
+            icon={<RefreshCw className="h-4 w-4" />}
+            loading={regenerateLease.isPending}
+            onClick={() => regenerateLease.mutate()}
+          >
+            {leaseUrl ? 'Regenerate lease' : 'Generate lease'}
+          </Button>
+        )}
+      </CardBody>
+
+      <SaveSignatureDialog
+        open={sigOpen}
+        onClose={() => setSigOpen(false)}
+        onSaved={() => {
+          setSigOpen(false)
+          regenerateLease.mutate()
+        }}
+      />
+    </Card>
+  )
+}
+
+function SaveSignatureDialog({
+  open,
+  onClose,
+  onSaved,
+}: {
+  open: boolean
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [draft, setDraft] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const save = useMutation({
+    mutationFn: (sig: string) => authApi.saveSignature(sig),
+    onSuccess: (user) => {
+      queryClient.setQueryData(queryKeys.mySignature, { signature: user.saved_signature })
+      queryClient.setQueryData(queryKeys.me, user)
+      onSaved()
+    },
+    onError: (saveError) => setError(errorMessage(saveError)),
+  })
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Draw your signature"
+      description="Saved once and applied to every lease you generate from now on."
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!draft}
+            loading={save.isPending}
+            onClick={() => draft && save.mutate(draft)}
+          >
+            Save &amp; regenerate lease
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <SignaturePad value={draft} onChange={setDraft} height={180} />
+        {error && <Alert tone="danger">{error}</Alert>}
+      </div>
+    </Dialog>
   )
 }
 
