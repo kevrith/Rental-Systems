@@ -82,8 +82,10 @@ READING_SCHEMA = {
             ),
         },
         "meter_kind": {
-            "type": ["string", "null"],
-            "enum": ["water", "electricity", None],
+            "anyOf": [
+                {"type": "string", "enum": ["water", "electricity"]},
+                {"type": "null"},
+            ],
             "description": "Which utility this meter appears to measure, if it can be told.",
         },
         "notes": {
