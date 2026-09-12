@@ -16,8 +16,10 @@ export function AuthLayout({
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 py-10">
       <div className="mb-6 flex items-center gap-2">
-        <img src="/rent.png" alt="RentFlow" className="h-9 w-9 rounded-lg" />
-        <span className="text-lg font-semibold text-slate-900">RentFlow Kenya</span>
+        <Link to="/" className="flex items-center gap-2 group">
+          <img src="/rent.png" alt="RentFlow" className="h-9 w-9 rounded-lg" />
+          <span className="text-lg font-semibold text-slate-900 group-hover:text-brand-700">RentFlow Kenya</span>
+        </Link>
       </div>
 
       <main className="w-full max-w-md rounded-card border border-slate-200 bg-white p-7 shadow-sm">
