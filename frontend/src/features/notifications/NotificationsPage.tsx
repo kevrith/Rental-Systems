@@ -86,37 +86,54 @@ export function NotificationsPage() {
               <li
                 key={notification.id}
                 className={cn(
-                  'group flex items-start justify-between gap-3 px-5 py-3',
-                  !notification.read_at && 'bg-brand-50/40',
+                  'px-5 py-3 transition-colors',
+                  !notification.read_at
+                    ? 'cursor-pointer bg-brand-50/40 hover:bg-brand-50'
+                    : 'hover:bg-slate-50',
                 )}
+                onClick={() => {
+                  if (!notification.read_at) markRead.mutate(notification.id)
+                }}
               >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-900">{notification.title}</p>
-                  <p className="mt-0.5 whitespace-pre-wrap text-sm text-slate-600">
-                    {notification.body}
-                  </p>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                    <span>{dateTime(notification.created_at)}</span>
-                    {notification.link_path && (
-                      <>
-                        <span>·</span>
-                        <Link to={notification.link_path} className="text-brand-600 hover:underline">
-                          Open
-                        </Link>
-                      </>
+                <div className="flex items-start gap-3">
+                  {/* unread dot */}
+                  <span
+                    className={cn(
+                      'mt-1.5 h-2 w-2 shrink-0 rounded-full',
+                      !notification.read_at ? 'bg-brand-500' : 'bg-transparent',
                     )}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={cn(
+                        'text-sm',
+                        !notification.read_at
+                          ? 'font-semibold text-slate-900'
+                          : 'font-medium text-slate-600',
+                      )}
+                    >
+                      {notification.title}
+                    </p>
+                    <p className="mt-0.5 whitespace-pre-wrap text-sm text-slate-600">
+                      {notification.body}
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                      <span>{dateTime(notification.created_at)}</span>
+                      {notification.link_path && (
+                        <>
+                          <span>·</span>
+                          <Link
+                            to={notification.link_path}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-brand-600 hover:underline"
+                          >
+                            Open
+                          </Link>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
-                {!notification.read_at && (
-                  <button
-                    onClick={() => markRead.mutate(notification.id)}
-                    className="mt-0.5 shrink-0 rounded p-1 text-xs text-slate-400 opacity-0 transition-opacity hover:bg-slate-100 hover:text-brand-600 group-hover:opacity-100"
-                    title="Mark as read"
-                    aria-label="Mark as read"
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                  </button>
-                )}
               </li>
             ))}
           </ul>
