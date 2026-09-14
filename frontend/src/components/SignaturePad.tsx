@@ -1,28 +1,18 @@
 /**
- * SignaturePad — a touch and mouse-friendly canvas for capturing a digital
+ * SignaturePad — touch and mouse-friendly canvas for capturing a digital
  * signature as a base64 PNG data URL.
  *
  * Usage:
  *   <SignaturePad value={sig} onChange={setSig} />
- *
- * `value` is a base64 data URL or null. When the user draws, `onChange` is
- * called with the new data URL after each stroke ends. Passing a non-null
- * `value` renders the existing signature; the user can clear and redraw.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui'
 
 interface SignaturePadProps {
-  /** Current value — base64 PNG data URL or null. */
   value: string | null
-  /** Called with the new data URL after each stroke, or null after clear. */
   onChange: (value: string | null) => void
-  /** Tailwind class appended to the outer wrapper. */
   className?: string
-  /** Width in pixels. Defaults to the element's rendered width (fluid). */
-  width?: number
-  /** Height in pixels. Defaults to 180. */
   height?: number
   disabled?: boolean
 }
@@ -39,55 +29,60 @@ export function SignaturePad({
   const lastPos = useRef<{ x: number; y: number } | null>(null)
   const [isEmpty, setIsEmpty] = useState(!value)
 
-  // When a saved value is passed in, draw it onto the canvas.
+  // Set up the canvas backing store once, sized to the rendered element.
+  // useLayoutEffect runs synchronously after the DOM is painted so
+  // getBoundingClientRect() returns the real dimensions.
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const dpr = window.devicePixelRatio || 1
+    const cssWidth = canvas.offsetWidth
+    const cssHeight = height
+
+    canvas.width = cssWidth * dpr
+    canvas.height = cssHeight * dpr
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.scale(dpr, dpr)
+    ctx.strokeStyle = '#1e293b'
+    ctx.lineWidth = 1.8
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+
+    // Restore saved signature after resize.
+    if (value) {
+      const img = new Image()
+      img.onload = () => ctx.drawImage(img, 0, 0, cssWidth, cssHeight)
+      img.src = value
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [height]) // intentionally excludes `value` — only re-init on height change
+
+  // When a saved value is passed in from outside (initial load / clear),
+  // draw it onto the already-scaled canvas.
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+    const dpr = window.devicePixelRatio || 1
 
     if (value) {
       const img = new Image()
       img.onload = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr)
+        ctx.drawImage(img, 0, 0, canvas.width / dpr, canvas.height / dpr)
         setIsEmpty(false)
       }
       img.src = value
     } else {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr)
       setIsEmpty(true)
     }
   }, [value])
 
-  // Scale the canvas backing store to the device pixel ratio so strokes are
-  // crisp on high-DPI screens (retina, etc.).
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const dpr = window.devicePixelRatio || 1
-    const rect = canvas.getBoundingClientRect()
-    canvas.width = rect.width * dpr
-    canvas.height = height * dpr
-    const ctx = canvas.getContext('2d')
-    if (ctx) {
-      ctx.scale(dpr, dpr)
-      ctx.strokeStyle = '#1e293b' // slate-800
-      ctx.lineWidth = 2
-      ctx.lineCap = 'round'
-      ctx.lineJoin = 'round'
-    }
-    // Re-draw saved value after resize.
-    if (value) {
-      const img = new Image()
-      img.onload = () => ctx?.drawImage(img, 0, 0, rect.width, height)
-      img.src = value
-    }
-  }, [height, value])
-
-  const getPos = (
-    e: React.MouseEvent | React.TouchEvent,
-  ): { x: number; y: number } | null => {
+  const getPos = (e: React.MouseEvent | React.TouchEvent): { x: number; y: number } | null => {
     const canvas = canvasRef.current
     if (!canvas) return null
     const rect = canvas.getBoundingClientRect()
@@ -120,10 +115,18 @@ export function SignaturePad({
       if (!canvas || !ctx) return
       const pos = getPos(e)
       if (!pos || !lastPos.current) return
+
+      // Quadratic curve through the midpoint gives smooth, natural strokes
+      // instead of jagged straight-line segments.
+      const mid = {
+        x: (lastPos.current.x + pos.x) / 2,
+        y: (lastPos.current.y + pos.y) / 2,
+      }
       ctx.beginPath()
       ctx.moveTo(lastPos.current.x, lastPos.current.y)
-      ctx.lineTo(pos.x, pos.y)
+      ctx.quadraticCurveTo(lastPos.current.x, lastPos.current.y, mid.x, mid.y)
       ctx.stroke()
+
       lastPos.current = pos
       setIsEmpty(false)
     },
@@ -137,21 +140,31 @@ export function SignaturePad({
       drawing.current = false
       lastPos.current = null
       const canvas = canvasRef.current
-      if (canvas) {
-        onChange(canvas.toDataURL('image/png'))
-      }
+      if (!canvas) return
+
+      // Export at CSS dimensions so the saved PNG matches what was drawn.
+      const dpr = window.devicePixelRatio || 1
+      const cssWidth = canvas.width / dpr
+      const cssHeight = canvas.height / dpr
+      const out = document.createElement('canvas')
+      out.width = cssWidth
+      out.height = cssHeight
+      const outCtx = out.getContext('2d')
+      outCtx?.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, cssWidth, cssHeight)
+      onChange(out.toDataURL('image/png'))
     },
     [onChange],
   )
 
-  const clear = () => {
+  const clear = useCallback(() => {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx) return
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    const dpr = window.devicePixelRatio || 1
+    ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr)
     setIsEmpty(true)
     onChange(null)
-  }
+  }, [onChange])
 
   return (
     <div className={`flex flex-col gap-2 ${className}`}>
@@ -192,13 +205,7 @@ export function SignaturePad({
           <p className="text-xs text-slate-400">
             {isEmpty ? 'Use your mouse or finger to sign' : 'Clear and redraw if needed'}
           </p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={clear}
-            disabled={isEmpty}
-          >
+          <Button type="button" variant="ghost" size="sm" onClick={clear} disabled={isEmpty}>
             Clear
           </Button>
         </div>
