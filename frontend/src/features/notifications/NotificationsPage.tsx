@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bell, BellOff, BellRing, Check, MessageSquare, Send, Smartphone } from 'lucide-react'
+import { Bell, BellOff, BellRing, Check } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -7,7 +7,6 @@ import { notificationsApi, pushApi } from '@/api'
 import { PageHeader } from '@/components/PageHeader'
 import {
   Alert,
-  Badge,
   Button,
   Card,
   CardBody,
@@ -17,24 +16,8 @@ import {
   Skeleton,
 } from '@/components/ui'
 import { cn } from '@/lib/cn'
-import { dateTime, errorMessage, humanize } from '@/lib/format'
+import { dateTime, errorMessage } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
-
-const CHANNEL_ICONS: Record<string, React.ReactNode> = {
-  whatsapp: <MessageSquare className="h-3.5 w-3.5" />,
-  sms: <Send className="h-3.5 w-3.5" />,
-  push: <Smartphone className="h-3.5 w-3.5" />,
-  in_app: <Bell className="h-3.5 w-3.5" />,
-  email: <Send className="h-3.5 w-3.5" />,
-}
-
-const STATUS_TONE: Record<string, 'success' | 'warn' | 'danger' | 'neutral'> = {
-  sent: 'success',
-  delivered: 'success',
-  queued: 'warn',
-  failed: 'danger',
-  skipped: 'neutral',
-}
 
 export function NotificationsPage() {
   const queryClient = useQueryClient()
@@ -52,11 +35,18 @@ export function NotificationsPage() {
     },
   })
 
+  const markRead = useMutation({
+    mutationFn: (id: string) => notificationsApi.markRead(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+  })
+
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
         title="Notifications"
-        description="Everything the system has sent you, and whether it arrived."
+        description="Everything the system has sent you."
         actions={
           <Button
             variant="outline"
@@ -95,38 +85,38 @@ export function NotificationsPage() {
             {notifications.data.map((notification) => (
               <li
                 key={notification.id}
-                className={cn('px-5 py-3', !notification.read_at && 'bg-brand-50/40')}
+                className={cn(
+                  'group flex items-start justify-between gap-3 px-5 py-3',
+                  !notification.read_at && 'bg-brand-50/40',
+                )}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-900">{notification.title}</p>
-                    <p className="mt-0.5 whitespace-pre-wrap text-sm text-slate-600">
-                      {notification.body}
-                    </p>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                      <span className="inline-flex items-center gap-1">
-                        {CHANNEL_ICONS[notification.channel]}
-                        {humanize(notification.channel)}
-                      </span>
-                      <span>·</span>
-                      <span>{dateTime(notification.created_at)}</span>
-                      {notification.link_path && (
-                        <>
-                          <span>·</span>
-                          <Link to={notification.link_path} className="text-brand-600 hover:underline">
-                            Open
-                          </Link>
-                        </>
-                      )}
-                    </div>
-                    {notification.error && (
-                      <p className="mt-1 text-xs text-danger-600">{notification.error}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-900">{notification.title}</p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-sm text-slate-600">
+                    {notification.body}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                    <span>{dateTime(notification.created_at)}</span>
+                    {notification.link_path && (
+                      <>
+                        <span>·</span>
+                        <Link to={notification.link_path} className="text-brand-600 hover:underline">
+                          Open
+                        </Link>
+                      </>
                     )}
                   </div>
-                  <Badge tone={STATUS_TONE[notification.status] ?? 'neutral'}>
-                    {humanize(notification.status)}
-                  </Badge>
                 </div>
+                {!notification.read_at && (
+                  <button
+                    onClick={() => markRead.mutate(notification.id)}
+                    className="mt-0.5 shrink-0 rounded p-1 text-xs text-slate-400 opacity-0 transition-opacity hover:bg-slate-100 hover:text-brand-600 group-hover:opacity-100"
+                    title="Mark as read"
+                    aria-label="Mark as read"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </li>
             ))}
           </ul>

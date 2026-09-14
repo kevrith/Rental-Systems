@@ -77,8 +77,15 @@ async def list_notifications(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Notification]:
-    """The caller's own notification history with per-channel delivery status."""
-    query = select(Notification).where(Notification.user_id == current_user.id)
+    """The caller's in-app inbox — only IN_APP channel rows, one per event.
+
+    WhatsApp/SMS rows are delivery receipts, not inbox messages. Showing them
+    here duplicates every notification that was sent on multiple channels.
+    """
+    query = select(Notification).where(
+        Notification.user_id == current_user.id,
+        Notification.channel == NotificationChannel.IN_APP,
+    )
     if unread_only:
         query = query.where(Notification.read_at.is_(None))
     rows = await db.scalars(query.order_by(Notification.created_at.desc()).limit(limit))
