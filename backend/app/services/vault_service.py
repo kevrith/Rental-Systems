@@ -159,7 +159,8 @@ async def _query(
             )
         )
     rows = await db.scalars(query.order_by(StoredFile.created_at.desc()))
-    return list(rows)
+    records = list(rows)
+    return await file_service._purge_missing(db, records)
 
 
 # ----------------------------------------------------------------- tenant vault (US-045)

@@ -209,21 +209,45 @@ async def attach(
     return attached
 
 
+async def _purge_missing(db: AsyncSession, records: list[StoredFile]) -> list[StoredFile]:
+    """Auto-archive any records whose storage object no longer exists.
+
+    When a file is deleted directly from R2 (or local disk) the DB row stays
+    UPLOADED and is_archived=False, so it keeps appearing in every listing.
+    This function checks existence in one batched call and marks the orphaned
+    rows archived so they disappear from all views immediately on the next read.
+    Only runs when there are records to check; the local backend is fast enough
+    that the per-call overhead is negligible.
+    """
+    if not records:
+        return records
+    keys = [r.storage_key for r in records]
+    present = storage_service.get_storage().exists_batch(keys)
+    missing = [r for r in records if r.storage_key not in present]
+    if missing:
+        for record in missing:
+            record.is_archived = True
+        await db.commit()
+    return [r for r in records if r.storage_key in present]
+
+
 async def list_for_entity(
     db: AsyncSession, organization_id: uuid.UUID, entity_type: str, entity_id: uuid.UUID
 ) -> list[StoredFile]:
-    rows = await db.scalars(
-        select(StoredFile)
-        .where(
-            StoredFile.organization_id == organization_id,
-            StoredFile.entity_type == entity_type,
-            StoredFile.entity_id == entity_id,
-            StoredFile.is_archived.is_(False),
-            StoredFile.status == UploadStatus.UPLOADED,
+    rows = list(
+        await db.scalars(
+            select(StoredFile)
+            .where(
+                StoredFile.organization_id == organization_id,
+                StoredFile.entity_type == entity_type,
+                StoredFile.entity_id == entity_id,
+                StoredFile.is_archived.is_(False),
+                StoredFile.status == UploadStatus.UPLOADED,
+            )
+            .order_by(StoredFile.created_at)
         )
-        .order_by(StoredFile.created_at)
     )
-    return list(rows)
+    return await _purge_missing(db, rows)
 
 
 async def list_for_entities(
@@ -232,19 +256,22 @@ async def list_for_entities(
     """Batched variant — avoids an N+1 when rendering a list of property cards."""
     if not entity_ids:
         return {}
-    rows = await db.scalars(
-        select(StoredFile)
-        .where(
-            StoredFile.organization_id == organization_id,
-            StoredFile.entity_type == entity_type,
-            StoredFile.entity_id.in_(entity_ids),
-            StoredFile.is_archived.is_(False),
-            StoredFile.status == UploadStatus.UPLOADED,
+    rows = list(
+        await db.scalars(
+            select(StoredFile)
+            .where(
+                StoredFile.organization_id == organization_id,
+                StoredFile.entity_type == entity_type,
+                StoredFile.entity_id.in_(entity_ids),
+                StoredFile.is_archived.is_(False),
+                StoredFile.status == UploadStatus.UPLOADED,
+            )
+            .order_by(StoredFile.created_at)
         )
-        .order_by(StoredFile.created_at)
     )
+    live = await _purge_missing(db, rows)
     grouped: dict[uuid.UUID, list[StoredFile]] = {}
-    for record in rows:
+    for record in live:
         if record.entity_id:
             grouped.setdefault(record.entity_id, []).append(record)
     return grouped

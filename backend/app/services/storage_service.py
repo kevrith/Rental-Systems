@@ -130,6 +130,10 @@ class LocalStorageBackend:
     def exists(self, storage_key: str) -> bool:
         return self._path(storage_key).exists()
 
+    def exists_batch(self, storage_keys: list[str]) -> set[str]:
+        """Return the subset of keys that exist on disk."""
+        return {k for k in storage_keys if self._path(k).exists()}
+
     def delete(self, storage_key: str) -> None:
         path = self._path(storage_key)
         if path.exists():
@@ -219,6 +223,40 @@ class R2StorageBackend:
             return True
         except ClientError:
             return False
+
+    def exists_batch(self, storage_keys: list[str]) -> set[str]:
+        """Return the subset of keys that exist in R2.
+
+        Uses list_objects_v2 grouped by common prefix to avoid N head requests.
+        Falls back to individual head checks when keys share no common prefix.
+        """
+        from botocore.exceptions import ClientError
+
+        if not storage_keys:
+            return set()
+        key_set = set(storage_keys)
+        found: set[str] = set()
+        # Group by the first two path segments (org/<uuid>) so one list call
+        # covers an entire org's files rather than one call per key.
+        prefixes: dict[str, list[str]] = {}
+        for key in storage_keys:
+            parts = key.split("/")
+            prefix = "/".join(parts[:3]) + "/" if len(parts) >= 3 else ""
+            prefixes.setdefault(prefix, []).append(key)
+
+        for prefix, keys in prefixes.items():
+            try:
+                paginator = self.client.get_paginator("list_objects_v2")
+                for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
+                    for obj in page.get("Contents", []):
+                        if obj["Key"] in key_set:
+                            found.add(obj["Key"])
+            except ClientError:
+                # Fall back to individual checks if list is denied
+                for key in keys:
+                    if self.exists(key):
+                        found.add(key)
+        return found
 
     def delete(self, storage_key: str) -> None:
         self.client.delete_object(Bucket=self.bucket, Key=storage_key)
