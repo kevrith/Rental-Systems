@@ -274,6 +274,8 @@ async def generate_lease_pdf(
     tenancy: Tenancy,
     *,
     template_id: uuid.UUID | None = None,
+    landlord_signature: str | None = None,
+    tenant_signature: str | None = None,
 ) -> bytes:
     organization = await db.get(Organization, tenancy.organization_id)
     tenant = await db.get(Tenant, tenancy.tenant_id)
@@ -333,6 +335,8 @@ async def generate_lease_pdf(
                 "name": organization.legal_name or organization.name,
                 "address": organization.address,
             },
+            "landlord_signature": landlord_signature,
+            "tenant_signature": tenant_signature,
             "tenant": tenant,
             "tenancy": tenancy,
             "unit": unit,
@@ -346,10 +350,24 @@ async def generate_lease_pdf(
 
 
 async def generate_and_store_lease(
-    db: AsyncSession, tenancy: Tenancy, template_id: uuid.UUID | None = None
+    db: AsyncSession,
+    tenancy: Tenancy,
+    template_id: uuid.UUID | None = None,
+    landlord_signature: str | None = None,
 ) -> StoredFile:
     """Render the lease and file it in the tenant's document vault."""
-    pdf_bytes = await generate_lease_pdf(db, tenancy, template_id=template_id)
+    # Include the tenant's saved_signature (drawn on the portal) inline on the
+    # signature line, in addition to the appended certificate page from the
+    # digital signing flow.
+    tenant = await db.get(Tenant, tenancy.tenant_id)
+    tenant_signature = tenant.saved_signature if tenant else None
+    pdf_bytes = await generate_lease_pdf(
+        db,
+        tenancy,
+        template_id=template_id,
+        landlord_signature=landlord_signature,
+        tenant_signature=tenant_signature,
+    )
     record = await file_service.register_generated(
         db,
         tenancy.organization_id,

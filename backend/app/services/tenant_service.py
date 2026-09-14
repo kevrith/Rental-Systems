@@ -460,7 +460,9 @@ async def create_tenancy(
     unit.expected_vacancy_date = None
 
     if payload.generate_lease:
-        await lease_service.generate_and_store_lease(db, tenancy, payload.lease_template_id)
+        await lease_service.generate_and_store_lease(
+            db, tenancy, payload.lease_template_id, landlord_signature=context.user.saved_signature
+        )
 
     audit_service.record(
         db,

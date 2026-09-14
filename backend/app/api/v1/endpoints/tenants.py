@@ -431,7 +431,9 @@ async def regenerate_lease(
     from app.models.signature import DigitalSignature, SignatureStatus
 
     tenancy = await tenant_service.get_tenancy(db, context, tenancy_id)
-    record = await lease_service.generate_and_store_lease(db, tenancy, template_id)
+    record = await lease_service.generate_and_store_lease(
+        db, tenancy, template_id, landlord_signature=context.user.saved_signature
+    )
 
     # Re-overlay any existing signature so the regenerated PDF is not unsigned.
     sig = await db.scalar(
@@ -444,8 +446,14 @@ async def regenerate_lease(
     )
     if sig is not None:
         try:
+            # _overlay_signature reads sig.document_id as the source PDF, so
+            # point it at the freshly generated lease before overlaying.
+            sig.document_id = record.id
             signed_doc_id = await signature_service._overlay_signature(db, sig)
             sig.signed_document_id = signed_doc_id
+            # The lease_url the frontend shows comes from lease_document_id;
+            # swap it to the signed copy so the download is the signed version.
+            tenancy.lease_document_id = signed_doc_id
         except Exception:
             pass
 

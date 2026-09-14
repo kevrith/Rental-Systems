@@ -45,6 +45,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 
 import { notificationsApi, organizationApi } from '@/api'
 import { authApi } from '@/api/auth'
+import { isTokenExpired } from '@/lib/api-client'
 import { SyncIndicator } from '@/components/SyncIndicator'
 import { Badge, Button } from '@/components/ui'
 import { CommandPalette } from '@/components/CommandPalette'
@@ -336,12 +337,14 @@ export function AppShell() {
     staleTime: 5 * 60_000,
   })
 
+  const accessToken = useAuthStore((state) => state.accessToken)
+
   const unread = useQuery({
     queryKey: queryKeys.unreadCount,
     queryFn: notificationsApi.unreadCount,
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,
-    enabled: !!user,
+    enabled: !!user && !isTokenExpired(accessToken),
   })
 
   useEffect(() => {

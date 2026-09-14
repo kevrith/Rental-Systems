@@ -72,10 +72,20 @@
 
   <div class="signatures">
     <div>
+      {% if landlord_signature %}
+        <img src="{{ landlord_signature }}" style="max-height:18mm;max-width:60mm;display:block;margin-bottom:1mm" alt="Landlord signature" />
+      {% else %}
+        <div style="height:18mm"></div>
+      {% endif %}
       <div class="sig-line">Landlord — {{ landlord.name }}</div>
       <div style="font-size:8.5pt;color:#64748b">Date: {{ generated_at|longdate }}</div>
     </div>
     <div>
+      {% if tenant_signature %}
+        <img src="{{ tenant_signature }}" style="max-height:18mm;max-width:60mm;display:block;margin-bottom:1mm" alt="Tenant signature" />
+      {% else %}
+        <div style="height:18mm"></div>
+      {% endif %}
       <div class="sig-line">Tenant — {{ tenant.full_name }}</div>
       <div style="font-size:8.5pt;color:#64748b">Date: {{ generated_at|longdate }}</div>
     </div>
