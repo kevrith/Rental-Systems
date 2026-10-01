@@ -68,7 +68,7 @@ export function initials(name: string | null | undefined): string {
 export function errorMessage(error: unknown, fallback = 'Something went wrong. Please try again.'): string {
   // Axios wraps network failures — no response means the server was unreachable.
   const axiosError = error as { response?: { data?: { detail?: unknown } }; request?: unknown; message?: string }
-  if (!axiosError.response && axiosError.request) {
+  if (!axiosError?.response && axiosError?.request) {
     return 'Could not reach the server. Check your connection and try again.'
   }
   const detail = axiosError?.response?.data?.detail

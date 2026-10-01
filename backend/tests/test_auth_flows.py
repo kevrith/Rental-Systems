@@ -226,7 +226,9 @@ async def test_five_failed_logins_trigger_a_lockout(client: AsyncClient) -> None
     # Even the correct password is refused while the lockout stands.
     response = await client.post("/api/v1/auth/login", json={"email": payload["email"], "password": PASSWORD})
     assert response.status_code == 403
-    assert "Too many failed attempts" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert "Too many failed attempts" in detail["message"]
+    assert detail["retry_after"] > 0
 
 
 async def test_trusted_device_skips_the_otp(client: AsyncClient) -> None:

@@ -98,20 +98,40 @@ export async function signInAs(page: Page, session: Registered): Promise<void> {
   // A page has to exist before localStorage can be written for its origin.
   await page.goto('/login')
   await page.evaluate(
-    ([token, email]) => {
+    ([token]) => {
       localStorage.setItem(
         'rentflow-auth',
         JSON.stringify({
           state: {
             accessToken: token,
             refreshToken: token,
-            user: { email },
+            // No cached user: a half-filled one has no permission list, and
+            // `ProtectedRoute` would deny permission-gated pages against it
+            // before the real profile arrives. With none, it waits for /auth/me.
+            user: null,
             organization: null,
           },
           version: 0,
         }),
       )
     },
-    [session.accessToken, session.email],
+    [session.accessToken],
   )
+}
+
+/**
+ * The onboarding wizard opens over every route on a fresh account and its
+ * backdrop swallows clicks, so a spec that is about something else has to
+ * close it first. A no-op when the account has already dismissed it.
+ */
+export async function dismissOnboarding(page: Page): Promise<void> {
+  const dismiss = page.getByRole('button', { name: "Don't show this again" })
+  // The wizard mounts once the profile loads, so wait for it rather than
+  // sampling once (`isVisible` takes no timeout and would miss it).
+  const appeared = await dismiss.waitFor({ state: 'visible', timeout: 8000 }).then(
+    () => true,
+    () => false,
+  )
+  if (appeared) await dismiss.click()
+  await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 5000 }).catch(() => undefined)
 }

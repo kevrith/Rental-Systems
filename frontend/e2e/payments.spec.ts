@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { loadDemoData, registerOwner, signInAs } from './support'
+import { dismissOnboarding, loadDemoData, registerOwner, signInAs } from './support'
 
 /**
  * Recording a payment: the single highest-risk path in the app, and the one
@@ -19,6 +19,7 @@ test.beforeEach(async ({ page, request }) => {
 
 test('recording a cash payment allocates it and lands on a confirmed receipt', async ({ page }) => {
   await page.goto('/payments/new')
+  await dismissOnboarding(page)
 
   await page.getByLabel('Tenancy').selectOption({ index: 1 })
   await page.getByLabel('Amount (KES)').fill('5000')
@@ -27,11 +28,12 @@ test('recording a cash payment allocates it and lands on a confirmed receipt', a
 
   await expect(page).toHaveURL(/\/payments\/[0-9a-f-]+$/)
   await expect(page.getByText('KES 5,000.00').first()).toBeVisible()
-  await expect(page.getByText('Confirmed')).toBeVisible()
+  await expect(page.getByText('Confirmed', { exact: true })).toBeVisible()
 })
 
 test('the new payment appears in the payments list', async ({ page }) => {
   await page.goto('/payments/new')
+  await dismissOnboarding(page)
   await page.getByLabel('Tenancy').selectOption({ index: 1 })
   await page.getByLabel('Amount (KES)').fill('7500')
   await page.getByRole('button', { name: 'Record payment' }).click()
@@ -44,6 +46,7 @@ test('the new payment appears in the payments list', async ({ page }) => {
 
 test('the submit button is disabled until a tenancy and an amount are both set', async ({ page }) => {
   await page.goto('/payments/new')
+  await dismissOnboarding(page)
 
   const submit = page.getByRole('button', { name: 'Record payment' })
   await expect(submit).toBeDisabled()

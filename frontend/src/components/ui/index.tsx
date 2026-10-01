@@ -414,7 +414,11 @@ export function Alert({
   icon?: ReactNode
 }) {
   return (
-    <div className={cn('flex gap-3 rounded-lg border px-4 py-3 text-sm', ALERT_TONES[tone], className)}>
+    // A danger alert interrupts a screen reader; the rest wait their turn.
+    <div
+      role={tone === 'danger' ? 'alert' : 'status'}
+      className={cn('flex gap-3 rounded-lg border px-4 py-3 text-sm', ALERT_TONES[tone], className)}
+    >
       {icon && <span className="mt-0.5 shrink-0">{icon}</span>}
       <div className="min-w-0 flex-1">
         {title && <p className="font-medium">{title}</p>}

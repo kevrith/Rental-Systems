@@ -23,7 +23,8 @@ test('a new owner can register and lands on their dashboard', async ({ page }) =
 
   await page.getByRole('button', { name: 'Start free trial' }).click()
 
-  await expect(page).toHaveURL(/\/dashboard/)
+  // `/dashboard` redirects client-side to `/overview` (HomeRedirect).
+  await expect(page).toHaveURL(/\/(dashboard|overview)/)
   await expect(page.getByText('Welcome back, Jane')).toBeVisible()
 })
 
@@ -42,7 +43,8 @@ test('registering with an email already in use shows a server error, not a crash
   }
 
   await fillAndSubmit()
-  await expect(page).toHaveURL(/\/dashboard/)
+  // `/dashboard` redirects client-side to `/overview` (HomeRedirect).
+  await expect(page).toHaveURL(/\/(dashboard|overview)/)
 
   // Same email and phone again, from a clean, signed-out tab.
   await page.evaluate(() => localStorage.clear())

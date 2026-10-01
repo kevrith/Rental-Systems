@@ -69,6 +69,9 @@ function profileReturns(user: AuthUser) {
   server.use(http.get(`${API_BASE_URL}/auth/me`, () => HttpResponse.json(user)))
 }
 
+/** An unexpired, JWT-shaped token — `ProtectedRoute` refreshes anything it can see has lapsed. */
+const liveToken = `h.${btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 }))}.s`
+
 beforeEach(() => {
   useAuthStore.getState().logout()
 })
@@ -84,7 +87,7 @@ describe('when signed out', () => {
 
 describe('when signed in', () => {
   beforeEach(() => {
-    useAuthStore.getState().setSession({ accessToken: 'a', refreshToken: 'r', user: staff })
+    useAuthStore.getState().setSession({ accessToken: liveToken, refreshToken: 'r', user: staff })
   })
 
   it('renders the route', async () => {
@@ -138,7 +141,9 @@ describe('when signed in', () => {
   })
 
   it('signs the user out to login when the profile call fails and nothing is cached', async () => {
-    useAuthStore.getState().setSession({ accessToken: 'a', refreshToken: 'r' })
+    // The describe-level `beforeEach` cached a user; this case is about having none.
+    useAuthStore.getState().logout()
+    useAuthStore.getState().setSession({ accessToken: liveToken, refreshToken: 'r' })
     server.use(
       http.get(`${API_BASE_URL}/auth/me`, () =>
         HttpResponse.json({ detail: 'User not found' }, { status: 401 }),

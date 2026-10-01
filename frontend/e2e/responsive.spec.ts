@@ -27,7 +27,17 @@ const VIEWPORTS = [
   { name: '1280 (laptop)', width: 1280, height: 800 },
 ]
 
-const PUBLIC_ROUTES = ['/', '/login', '/register', '/help', '/legal/privacy', '/legal/terms']
+const PUBLIC_ROUTES = [
+  '/',
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/portal/login',
+  '/help',
+  '/legal/privacy',
+  '/legal/terms',
+  '/legal/cookies',
+]
 
 const APP_ROUTES = [
   '/overview',
@@ -50,6 +60,34 @@ const APP_ROUTES = [
   '/notifications',
   '/settings/profile',
   '/settings/organization',
+  '/today',
+  '/finances',
+  '/payments/new',
+  '/payments/bank-statements',
+  '/properties/new',
+  '/units/new',
+  '/units/bulk',
+  '/tenants/new',
+  '/tenancies/new',
+  '/maintenance/new',
+  '/maintenance/analytics',
+  '/inspections/new',
+  '/meter-readings',
+  '/meter-readings/new',
+  '/visitor-log',
+  '/visitor-log/new',
+  '/reports/new',
+  '/lease-templates',
+  '/bulk',
+  '/bulk/import',
+  '/automation',
+  '/compliance',
+  '/developer',
+  '/fleet',
+  '/feedback',
+  '/referrals',
+  '/security/fraud-alerts',
+  '/settings/exports',
 ]
 
 /** Content the viewport cannot reach, plus the elements responsible for it. */
@@ -118,7 +156,7 @@ test.describe('every screen fits every screen size', () => {
     })
 
     test(`app pages at ${viewport.name}`, async ({ page, request }) => {
-      test.setTimeout(180_000)
+      test.setTimeout(480_000)
       const session = await registerOwner(request)
       await loadDemoData(request, session.accessToken)
       await signInAs(page, session)
