@@ -1,34 +1,34 @@
-fastapi==0.141.1
+fastapi==0.165.0
 # Pinned explicitly, not just inherited from fastapi's `starlette>=0.46.0`:
 # 1.x is the first line carrying the fixes for CVE-2026-48818 (SSRF and NTLM
 # credential theft through UNC paths in StaticFiles), CVE-2026-54283
 # (request.form() size limits silently ignored) and CVE-2025-62727 (Range
 # header DoS). Dropping below it reopens all three.
-starlette==1.6.0
-uvicorn[standard]==0.34.0
-sqlalchemy[asyncio]==2.0.36
-asyncpg==0.30.0
-psycopg2-binary==2.9.12
-alembic==1.14.0
-pydantic==2.10.4
-pydantic-settings==2.7.0
-email-validator==2.2.0
+starlette==1.10.0
+uvicorn[standard]==0.54.0
+sqlalchemy[asyncio]==2.1.9
+asyncpg==0.32.0
+psycopg2-binary==2.9.13
+alembic==1.20.1
+pydantic==2.14.4
+pydantic-settings==2.16.3
+email-validator==2.4.0
 # 3.5.0 is the first release to allow pyasn1>=0.5.0; 3.4.0 capped it at
 # <0.5.0, which held pyasn1 on a line with four unfixed DoS advisories.
 python-jose[cryptography]==3.5.0
 # Transitive (python-jose -> rsa -> pyasn1), pinned here because the version
 # a resolver picks on its own is the vulnerable one: CVE-2026-30922,
 # CVE-2026-59884, CVE-2026-59885 and CVE-2026-59886 are all fixed by 0.6.4.
-pyasn1==0.6.4
+pyasn1==0.6.5
 bcrypt==5.0.0
-python-multipart==0.0.32
-celery==5.4.0
+python-multipart==0.0.34
+celery==5.7.0
 # Pinned on purpose. Celery 5.4.0 accepts any kombu below 6.0, so an unpinned
 # kombu moves to 5.7.0 on the next clean build, and 5.7.0's Redis transport
 # refuses redis-py older than 6.1.0 ("Redis transport requires redis-py versions
 # 6.1.0 or later") -- which crashed the embedded worker and, with it, the whole
 # Render container. 5.6.2 works with redis 5.2.1. Move kombu and redis together.
-kombu==5.6.2
+kombu==5.7.0
 redis==5.2.1
 httpx==0.28.1
 jinja2==3.1.6
@@ -36,13 +36,13 @@ jinja2==3.1.6
 # renderer; 70.0 is the current release on that line.
 weasyprint==70.0
 # Pure-Python QR codes for the eTIMS receipt stamp (US-053).
-segno==1.6.1
+segno==1.6.6
 # Excel import/export for bulk onboarding and data migration (US-072, US-076, US-077).
 openpyxl==3.1.5
 pyarrow==25.0.1
-boto3==1.43.89
-pywebpush==2.0.0
-resend==2.10.0
+boto3==1.44.11
+pywebpush==2.5.0
+resend==2.55.0
 # AI lease analysis (US-096).
 anthropic==1.4.0
 # Virus scanning on upload (Sprint 25, US-105) — talks to a clamd daemon.
@@ -67,7 +67,7 @@ opentelemetry-instrumentation-sqlalchemy==0.65b0
 opentelemetry-instrumentation-celery==0.65b0
 opentelemetry-instrumentation-httpx==0.65b0
 # Prometheus metrics at /metrics (Sprint 26).
-prometheus-client==0.21.1
+prometheus-client==0.26.0
 # 8.x is the line that accepts starlette 1.x; every 7.x release caps at
 # starlette<1.0.0 and would hold the pin above on the vulnerable line.
 prometheus-fastapi-instrumentator==8.1.0
