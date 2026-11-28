@@ -36,6 +36,7 @@ PUBLIC_PREFIXES: dict[str, str] = {
     "/metrics": "Prometheus scrape target, authenticated by METRICS_TOKEN when one is set.",
     "/api/v1/auth/register": "Creating the first account.",
     "/api/v1/auth/login": "Obtaining a session.",
+    "/api/v1/auth/config": "Whether codes are texted or handed over, so the login page can say so.",
     "/api/v1/auth/refresh": "Rotating a session on the refresh token alone.",
     "/api/v1/auth/login/verify-otp": "Second factor, before a session exists.",
     "/api/v1/auth/google": "Sign in with Google, authenticated by Google's own signed ID token.",

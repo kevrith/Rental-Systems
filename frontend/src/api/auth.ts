@@ -1,7 +1,7 @@
 import { apiClient } from '@/lib/api-client'
 import type { AuthOrganization, AuthUser } from '@/store/auth-store'
 
-import type { SessionRow } from './types'
+import type { AuthConfig, SessionRow } from './types'
 
 export interface TokenResponse {
   access_token: string
@@ -39,6 +39,8 @@ export interface LoginChallengeResponse {
   message: string
   tokens: TokenResponse | null
   webauthn_options: string | null
+  /** 'manual': nothing was texted; a landlord or caretaker hands the code over. */
+  delivery?: 'manual' | 'sms'
 }
 
 export interface GoogleAuthResponse {
@@ -63,6 +65,8 @@ export interface WebauthnCredentialRow {
 }
 
 export const authApi = {
+  config: async () => (await apiClient.get<AuthConfig>('/auth/config')).data,
+
   register: async (payload: RegisterPayload) =>
     (await apiClient.post<RegisterResponse>('/auth/register', payload)).data,
 
@@ -80,6 +84,14 @@ export const authApi = {
     otp_code: string
     remember_device?: boolean
   }) => (await apiClient.post<TokenResponse>('/auth/login/verify-otp', payload)).data,
+
+  /** Caretaker sign-in from their registered phone. */
+  pinLogin: async (payload: { phone_number: string; pin: string }) =>
+    (await apiClient.post<TokenResponse>('/auth/login/pin', payload)).data,
+
+  /** Choose a PIN on this phone with a code the landlord handed over. */
+  pinEnroll: async (payload: { phone_number: string; code: string; pin: string }) =>
+    (await apiClient.post<TokenResponse>('/auth/login/pin/enroll', payload)).data,
 
   resendLoginOtp: async (challenge_token: string) =>
     (await apiClient.post<{ message: string }>('/auth/login/resend-otp', { challenge_token })).data,

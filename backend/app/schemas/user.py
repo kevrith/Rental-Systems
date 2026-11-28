@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
+from app.core.pin import PIN_RULE_MESSAGE, is_acceptable_pin
 from app.models.user import UserRole
 
 
@@ -71,8 +72,19 @@ class InvitationRead(BaseModel):
 
 
 class AcceptInvitationRequest(BaseModel):
+    """Join through an invitation link with a password, or (caretakers only) a PIN."""
+
     token: str
-    password: str = Field(min_length=8, max_length=72)
+    password: str | None = Field(default=None, min_length=8, max_length=72)
+    pin: str | None = None
+
+    @model_validator(mode="after")
+    def _one_credential(self) -> "AcceptInvitationRequest":
+        if (self.password is None) == (self.pin is None):
+            raise ValueError("Choose a password or a PIN, not both and not neither")
+        if self.pin is not None and not is_acceptable_pin(self.pin):
+            raise ValueError(PIN_RULE_MESSAGE)
+        return self
 
 
 class InvitationPreview(BaseModel):

@@ -66,6 +66,11 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     profile_photo_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
+    # Caretaker sign-in PIN (bcrypt hash). Only usable from a phone registered to
+    # this user (a long-lived TrustedDevice), so a leaked or guessed PIN alone is
+    # not enough. Null for everyone who signs in with a password.
+    pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     # Security preferences (US-002 / US-005)
     always_require_2fa: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     inactivity_timeout_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)

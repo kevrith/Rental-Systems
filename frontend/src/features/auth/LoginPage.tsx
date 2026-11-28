@@ -24,7 +24,7 @@ const credentialsSchema = z.object({
 type CredentialsValues = z.infer<typeof credentialsSchema>
 
 const otpSchema = z.object({
-  otp_code: z.string().regex(/^\d{4,8}$/, 'Enter the code from your SMS'),
+  otp_code: z.string().regex(/^\d{4,8}$/, 'Enter the sign-in code'),
 })
 type OtpValues = z.infer<typeof otpSchema>
 
@@ -37,6 +37,8 @@ export function LoginPage() {
     token: string
     message: string
     webauthnOptions: string | null
+    /** 'manual': nothing was texted, the code comes from a landlord or caretaker. */
+    manual: boolean
   } | null>(null)
   const [rememberDevice, setRememberDevice] = useState(false)
   const [passkeyPending, setPasskeyPending] = useState(false)
@@ -76,6 +78,7 @@ export function LoginPage() {
           token: data.challenge_token,
           message: data.message,
           webauthnOptions: data.webauthn_options,
+          manual: data.delivery === 'manual',
         })
       }
     },
@@ -141,7 +144,7 @@ export function LoginPage() {
       })
       await finishLogin(tokens)
     } catch (error) {
-      setServerError(errorMessage(error, 'Passkey sign-in failed. Use your SMS code instead.'))
+      setServerError(errorMessage(error, 'Passkey sign-in failed. Use your sign-in code instead.'))
     } finally {
       setPasskeyPending(false)
     }
@@ -180,7 +183,7 @@ export function LoginPage() {
             <span>
               Remember this device for 30 days
               <span className="block text-xs text-slate-400">
-                Skips the SMS code next time you log in from this browser.
+                Skips the sign-in code next time you log in from this browser.
               </span>
             </span>
           </label>
@@ -207,18 +210,25 @@ export function LoginPage() {
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={() => resendMutation.mutate()}
-            disabled={resendCooldown > 0 || resendMutation.isPending}
-            className="w-full text-center text-sm text-brand-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
-          >
-            {resendCooldown > 0
-              ? `Resend code in ${resendCooldown}s`
-              : resendMutation.isPending
-                ? 'Sending…'
-                : 'Resend code'}
-          </button>
+          {challenge.manual ? (
+            <p className="text-center text-xs text-slate-500">
+              Nothing is texted to you. Your landlord or caretaker makes the code in RentFlow and
+              sends it from their phone, by WhatsApp or SMS. The code lasts 15 minutes.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => resendMutation.mutate()}
+              disabled={resendCooldown > 0 || resendMutation.isPending}
+              className="w-full text-center text-sm text-brand-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
+            >
+              {resendCooldown > 0
+                ? `Resend code in ${resendCooldown}s`
+                : resendMutation.isPending
+                  ? 'Sending…'
+                  : 'Resend code'}
+            </button>
+          )}
 
           <button
             type="button"
@@ -333,6 +343,12 @@ export function LoginPage() {
         route back in for them. The link sign-in is (Sprint 26).
       */}
       <p className="mt-4 text-center text-sm text-slate-500">
+        Are you a caretaker?{' '}
+        <Link to="/pin-login" className="font-medium text-brand-600 hover:underline">
+          Sign in with your PIN
+        </Link>
+      </p>
+      <p className="mt-2 text-center text-sm text-slate-500">
         Are you a tenant?{' '}
         <Link to="/portal/login" className="font-medium text-brand-600 hover:underline">
           Get a sign-in link

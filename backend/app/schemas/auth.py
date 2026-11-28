@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.core.pin import PIN_RULE_MESSAGE, is_acceptable_pin
 from app.schemas.organization import OrganizationRead
 from app.schemas.user import UserRead
 
@@ -49,6 +50,9 @@ class LoginChallengeResponse(BaseModel):
     expires_in: int | None = None
     message: str
     tokens: TokenResponse | None = None
+    # "manual" means no SMS was sent: the code comes from a landlord or
+    # caretaker, so the screen has to say that instead of "check your SMS".
+    delivery: str = "sms"
     # Set only when this user has a passkey registered (US-108) — the frontend
     # offers it as an alternative to the SMS code, never a replacement for it.
     webauthn_options: str | None = None
@@ -62,6 +66,32 @@ class VerifyLoginOtpRequest(BaseModel):
 
 class ResendLoginOtpRequest(BaseModel):
     challenge_token: str
+
+
+class PinLoginRequest(BaseModel):
+    """Caretaker sign-in from the phone they registered: number and PIN."""
+
+    phone_number: str = Field(min_length=9, max_length=32)
+    pin: str = Field(pattern=r"^\d{6}$")
+
+
+class PinEnrollRequest(BaseModel):
+    """Choose a PIN on this phone with a code the landlord handed over.
+
+    Used on a new phone, after a forgotten PIN, or the first time for a
+    caretaker who already had a password.
+    """
+
+    phone_number: str = Field(min_length=9, max_length=32)
+    code: str = Field(min_length=4, max_length=8)
+    pin: str
+
+    @field_validator("pin")
+    @classmethod
+    def _pin_is_acceptable(cls, value: str) -> str:
+        if not is_acceptable_pin(value):
+            raise ValueError(PIN_RULE_MESSAGE)
+        return value
 
 
 class GoogleAuthRequest(BaseModel):

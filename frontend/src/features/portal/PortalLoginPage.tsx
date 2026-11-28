@@ -1,11 +1,13 @@
 import { useMutation } from '@tanstack/react-query'
-import { AlertCircle, MailCheck } from 'lucide-react'
+import { AlertCircle, MailCheck, MessageCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { portalApi } from '@/api'
 import { authApi } from '@/api/auth'
-import { Alert, Button, Field, Input, PageLoader } from '@/components/ui'
+import { Alert, Button, Field, Input, LinkButton, PageLoader } from '@/components/ui'
+import { useAuthConfig } from '@/features/auth/useAuthConfig'
+import { whatsappShareUrl } from '@/lib/handover'
 import { errorMessage } from '@/lib/format'
 import { useAuthStore } from '@/store/auth-store'
 
@@ -28,6 +30,7 @@ export function PortalLoginPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const setSession = useAuthStore((state) => state.setSession)
+  const { otpDelivery } = useAuthConfig()
 
   const token = params.get('token') ?? ''
   const tenantId = params.get('t') ?? ''
@@ -73,6 +76,55 @@ export function PortalLoginPage() {
     return (
       <AuthLayout title="Signing you in">
         <PageLoader />
+      </AuthLayout>
+    )
+  }
+
+  if (otpDelivery === 'manual') {
+    return (
+      <AuthLayout
+        title="Tenant sign-in"
+        subtitle="Your landlord or caretaker sends you a link that signs you straight in. Nothing to remember."
+      >
+        {error && (
+          <Alert tone="danger" icon={<AlertCircle className="h-4 w-4" />} className="mb-4">
+            {error}
+          </Alert>
+        )}
+        <div className="space-y-4">
+          <Field
+            label="Your phone number"
+            hint="Optional. It goes in the message so they know which tenant you are."
+          >
+            <Input
+              type="tel"
+              autoComplete="tel"
+              inputMode="tel"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="0712345678"
+            />
+          </Field>
+          <LinkButton
+            className="w-full justify-center"
+            href={whatsappShareUrl(askForLinkMessage(phone))}
+            target="_blank"
+            rel="noreferrer"
+            icon={<MessageCircle className="h-4 w-4" />}
+          >
+            Ask your caretaker for a link
+          </LinkButton>
+          <p className="text-xs text-slate-500">
+            This opens WhatsApp with the message ready. Choose your caretaker or landlord, send it,
+            and tap the link they send back. The link works once and only for a few minutes; after that you stay signed in on this phone for 30 days.
+          </p>
+        </div>
+        <p className="mt-5 text-center text-sm text-slate-500">
+          Know your password?{' '}
+          <Link to="/login" className="font-medium text-brand-600 hover:underline">
+            Sign in with it instead
+          </Link>
+        </p>
       </AuthLayout>
     )
   }
@@ -128,5 +180,13 @@ export function PortalLoginPage() {
         </Link>
       </p>
     </AuthLayout>
+  )
+}
+
+function askForLinkMessage(phone: string): string {
+  const number = phone.trim()
+  return (
+    'Hello, please send me a sign-in link for my RentFlow tenant portal.' +
+    (number ? ` My number is ${number}.` : '')
   )
 }

@@ -117,6 +117,13 @@ envVarGroups:
       # credentials are live). Flip back to true for production.
       - key: REQUIRE_OTP
         value: "true"
+      # How one-time codes reach people. "manual": nothing is texted — a
+      # landlord or caretaker makes the code in the app and sends it from their
+      # own phone by WhatsApp or SMS, so no SMS provider is needed. Change to
+      # "sms" once the Africa's Talking sender ID is approved; owners and the
+      # super admin then get the code by SMS again.
+      - key: OTP_DELIVERY
+        value: manual
       - key: DARAJA_CONSUMER_KEY
         sync: false
       - key: DARAJA_CONSUMER_SECRET

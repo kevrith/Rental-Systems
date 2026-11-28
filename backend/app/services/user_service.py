@@ -370,12 +370,28 @@ async def accept_invitation(
     invitation, _ = await preview_invitation(db, payload.token)
 
     role = UserRole(invitation.role)
+    if payload.pin is not None:
+        if role != UserRole.CARETAKER:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A PIN is for caretakers. Choose a password instead.",
+            )
+        if session_service.request_fingerprint(request) is None:
+            # The PIN only works from the phone it was chosen on; without a way
+            # to recognise that phone later, there would be nothing to sign in from.
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This phone could not be identified. Open the link in your phone's browser.",
+            )
+
     user = User(
         organization_id=invitation.organization_id,
         full_name=invitation.full_name,
         email=invitation.email or f"{invitation.phone_number.lstrip('+')}@no-email.rentflow.local",
         phone_number=invitation.phone_number,
-        password_hash=hash_password(payload.password),
+        # "!" is the unusable-password sentinel: a PIN-only caretaker has no password.
+        password_hash=hash_password(payload.password) if payload.password else "!",
+        pin_hash=hash_password(payload.pin) if payload.pin else None,
         role=role,
         is_phone_verified=True,  # They received the invite link on this number.
         inactivity_timeout_minutes=DEFAULT_INACTIVITY_TIMEOUT_MINUTES[role],
@@ -397,7 +413,17 @@ async def accept_invitation(
     invitation.accepted_at = datetime.now(UTC)
     invitation.accepted_user_id = user.id
 
-    _, tokens = await session_service.create_session(db, user, request)
+    session, tokens = await session_service.create_session(db, user, request)
+    # They just proved they hold the number the link was sent to, exactly as a
+    # new owner proves control by registering, so this phone is trusted from the
+    # start. A PIN phone stays registered far longer than a remembered browser.
+    await session_service.trust_device(
+        db,
+        user,
+        session.device_fingerprint,
+        request.headers.get("user-agent") if request else None,
+        days=settings.PIN_DEVICE_TRUST_DAYS if payload.pin else None,
+    )
 
     audit_service.record(
         db,

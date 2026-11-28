@@ -57,13 +57,13 @@ def create_access_token(user_id: str, org_id: str, role: str, session_id: str | 
     )
 
 
-def create_refresh_token(user_id: str, session_id: str | None = None) -> str:
+def create_refresh_token(user_id: str, session_id: str | None = None, *, days: int | None = None) -> str:
     claims: dict[str, Any] = {"jti": secrets.token_urlsafe(16)}
     if session_id:
         claims["sid"] = session_id
     return _create_token(
         subject=user_id,
-        expires_delta=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_delta=timedelta(days=days if days is not None else settings.REFRESH_TOKEN_EXPIRE_DAYS),
         token_type="refresh",
         extra_claims=claims,
     )

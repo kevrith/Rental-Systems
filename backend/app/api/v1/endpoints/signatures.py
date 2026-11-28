@@ -2,13 +2,14 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OrgContext, require_write
 from app.core.database import get_db
 from app.core.permissions import Permission
+from app.schemas.handover import HandoverCode, HandoverLink
 from app.services import signature_service
 
 router = APIRouter()
@@ -44,6 +45,30 @@ async def create_signing_request(
         signer_role=body.signer_role,
     )
     return sig
+
+
+@router.post("/{signature_id}/handover/link", response_model=HandoverLink)
+async def handover_signing_link(
+    signature_id: uuid.UUID,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.TENANCY_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> HandoverLink:
+    """A fresh signing link, to pass on by WhatsApp or SMS. Replaces any earlier link."""
+    sig = await signature_service.get_for_organization(db, signature_id, context.organization_id)
+    return await signature_service.reissue_signing_link(db, sig, actor=context.user, request=request)
+
+
+@router.post("/{signature_id}/handover/code", response_model=HandoverCode)
+async def handover_signing_code(
+    signature_id: uuid.UUID,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.TENANCY_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> HandoverCode:
+    """The signing code, to pass on by WhatsApp or SMS. A new code cancels the old one."""
+    sig = await signature_service.get_for_organization(db, signature_id, context.organization_id)
+    return await signature_service.issue_signing_code(db, sig, actor=context.user, request=request)
 
 
 # Public endpoints — no auth, accessed via signing link
@@ -103,8 +128,38 @@ async def send_signing_otp(
     db: AsyncSession = Depends(get_db),
 ):
     sig = await signature_service.get_by_token(db, token)
-    await signature_service.send_otp_for_signing(db, sig)
-    return {"message": "OTP sent"}
+    sent = await signature_service.send_otp_for_signing(db, sig)
+    if not sent:
+        return {
+            "message": "Ask your landlord or caretaker for your signing code.",
+            "delivery": "manual",
+        }
+    return {"message": "OTP sent", "delivery": "sms"}
+
+
+@public_router.get("/{token}/document")
+async def get_signing_document(
+    token: str,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """The document the signer is being asked to sign, so they can read it first.
+
+    Authorised by the signing link alone, exactly like the rest of this page, and
+    only while the request is still pending.
+    """
+    from app.models.file import StoredFile
+    from app.services.storage_service import get_file_bytes
+
+    sig = await signature_service.get_by_token(db, token)
+    stored = await db.get(StoredFile, sig.document_id)
+    if stored is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    safe_name = "".join(ch for ch in stored.filename if ch.isalnum() or ch in " ._-") or "document.pdf"
+    return Response(
+        content=await get_file_bytes(stored.storage_key),
+        media_type=stored.content_type,
+        headers={"Content-Disposition": f'inline; filename="{safe_name}"', "Cache-Control": "no-store"},
+    )
 
 
 @public_router.post("/{token}/sign")

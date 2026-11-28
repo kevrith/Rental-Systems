@@ -15,9 +15,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import OrgContext, get_current_user, get_org_context
+from app.api.deps import OrgContext, get_current_user, get_org_context, require_write
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.permissions import Permission
 from app.core.redis import redis_client
 from app.core.security import generate_url_token, hash_password, hash_token
 from app.models.billing import Invoice, InvoiceStatus, Payment, PaymentStatus
@@ -30,6 +31,7 @@ from app.models.tenant import Tenancy, TenancyCoTenant, TenancyStatus, Tenant
 from app.models.user import DEFAULT_INACTIVITY_TIMEOUT_MINUTES, User, UserRole
 from app.schemas.auth import MessageResponse, TokenResponse
 from app.schemas.billing import BankInstructions, InvoiceRead, PaymentRead, PortalPaymentMethods
+from app.schemas.handover import HandoverCode, HandoverLink
 from app.schemas.maintenance import MaintenanceRate
 from app.schemas.operations import (
     MaintenanceCreate,
@@ -38,6 +40,7 @@ from app.schemas.operations import (
     VacateNoticeRead,
 )
 from app.services import (
+    audit_service,
     auth_service,
     bank_transfer_service,
     file_service,
@@ -46,6 +49,7 @@ from app.services import (
     mpesa_service,
     notification_service,
     operations_service,
+    otp_service,
     payment_service,
     session_service,
     tenant_service,
@@ -59,6 +63,9 @@ LIVE = [TenancyStatus.ACTIVE, TenancyStatus.EXPIRING_SOON, TenancyStatus.NOTICE_
 
 # One sentence, returned whatever actually happened — see `request_magic_link`.
 MAGIC_LINK_RESPONSE = "If that number has a tenant portal, a sign-in link is on its way by WhatsApp and SMS."
+# Same sentence for every number, like the one above: RentFlow sends nothing in
+# manual mode, so the honest answer is to ask the person who can.
+MAGIC_LINK_MANUAL_RESPONSE = "Ask your landlord or caretaker to send you a sign-in link on WhatsApp or SMS."
 
 
 async def _within_magic_link_budget(phone: str) -> bool:
@@ -154,6 +161,34 @@ class PortalSession(BaseModel):
     tokens: TokenResponse
 
 
+def _mint_invite_link(db: AsyncSession, tenant: Tenant) -> str:
+    """Create a single-use portal set-up link for a tenant with no portal login yet."""
+    raw = generate_url_token()
+    db.add(
+        VerificationToken(
+            user_id=None,
+            purpose=TokenPurpose.TENANT_PORTAL_INVITE,
+            token_hash=hash_token(f"{tenant.id}:{raw}"),
+            expires_at=datetime.now(UTC) + timedelta(hours=settings.INVITATION_TTL_HOURS),
+        )
+    )
+    return f"{settings.FRONTEND_URL}/portal/setup?token={raw}&t={tenant.id}"
+
+
+def _mint_magic_link(db: AsyncSession, tenant: Tenant) -> str:
+    """Create a single-use, short-lived sign-in link for a tenant who already has a portal login."""
+    raw = generate_url_token()
+    db.add(
+        VerificationToken(
+            user_id=tenant.portal_user_id,
+            purpose=TokenPurpose.TENANT_PORTAL_MAGIC_LINK,
+            token_hash=hash_token(f"{tenant.id}:{raw}"),
+            expires_at=datetime.now(UTC) + timedelta(minutes=settings.PORTAL_MAGIC_LINK_TTL_MINUTES),
+        )
+    )
+    return f"{settings.FRONTEND_URL}/portal/login?token={raw}&t={tenant.id}"
+
+
 @invite_router.post("/invite", response_model=MessageResponse)
 async def invite_tenant_to_portal(
     payload: InviteTenantRequest,
@@ -172,17 +207,7 @@ async def invite_tenant_to_portal(
             status_code=status.HTTP_409_CONFLICT, detail="This tenant already has portal access"
         )
 
-    raw = generate_url_token()
-    db.add(
-        VerificationToken(
-            user_id=None,
-            purpose=TokenPurpose.TENANT_PORTAL_INVITE,
-            token_hash=hash_token(f"{tenant.id}:{raw}"),
-            expires_at=datetime.now(UTC) + timedelta(hours=settings.INVITATION_TTL_HOURS),
-        )
-    )
-
-    link = f"{settings.FRONTEND_URL}/portal/setup?token={raw}&t={tenant.id}"
+    link = _mint_invite_link(db, tenant)
     await notification_service.send(
         db,
         recipient=notification_service.Recipient.for_tenant(tenant),
@@ -197,6 +222,87 @@ async def invite_tenant_to_portal(
     )
     await db.commit()
     return MessageResponse(message=f"Portal invitation sent to {tenant.phone_number}")
+
+
+class HandoverTenantRequest(BaseModel):
+    tenant_id: uuid.UUID
+
+
+@invite_router.post("/handover/link", response_model=HandoverLink)
+async def handover_portal_link(
+    payload: HandoverTenantRequest,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.TENANT_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> HandoverLink:
+    """Make a portal link for the landlord or caretaker to pass on by WhatsApp or SMS.
+
+    A tenant with no portal login gets the set-up link; one who already has a
+    login gets a one-tap sign-in link. Nothing is sent from here — the staff
+    member sends it from their own phone, so it works before any SMS provider is
+    connected and the tenant sees a message from someone they know.
+    """
+    tenant = await tenant_service.get_tenant(db, context, payload.tenant_id)
+    first_name = tenant.full_name.split()[0]
+    if tenant.portal_user_id is None:
+        link = _mint_invite_link(db, tenant)
+        message = (
+            f"Hi {first_name}, set up your tenant portal to pay rent, download receipts "
+            f"and raise maintenance requests: {link}"
+        )
+        expires_in = settings.INVITATION_TTL_HOURS * 3600
+        kind = "set-up"
+    else:
+        link = _mint_magic_link(db, tenant)
+        minutes = settings.PORTAL_MAGIC_LINK_TTL_MINUTES
+        message = (
+            f"Hi {first_name}, tap to sign in to your tenant portal. "
+            f"This link works once and expires in {minutes} minutes: {link}"
+        )
+        expires_in = minutes * 60
+        kind = "sign-in"
+    audit_service.record(
+        db,
+        organization_id=context.organization_id,
+        action="tenant.portal_link_issued",
+        entity_type="tenant",
+        entity_id=tenant.id,
+        actor=context.user,
+        summary=f"Issued a portal {kind} link for {tenant.full_name}",
+        request=request,
+    )
+    await db.commit()
+    return HandoverLink(
+        link=link,
+        message=message,
+        phone_number=normalize_phone(tenant.phone_number),
+        recipient_name=tenant.full_name,
+        expires_in_seconds=expires_in,
+    )
+
+
+@invite_router.post("/handover/code", response_model=HandoverCode)
+async def handover_portal_code(
+    payload: HandoverTenantRequest,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.TENANT_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> HandoverCode:
+    """Make a one-time sign-in code for a tenant who signs in with a password."""
+    tenant = await tenant_service.get_tenant(db, context, payload.tenant_id)
+    portal_user = await db.get(User, tenant.portal_user_id) if tenant.portal_user_id else None
+    if portal_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This tenant has no portal login yet. Send them the set-up link instead.",
+        )
+    return await auth_service.issue_login_code(
+        db,
+        organization_id=context.organization_id,
+        issuer=context.user,
+        target=portal_user,
+        request=request,
+    )
 
 
 @invite_router.get("/setup/preview", response_model=PortalInvitePreview)
@@ -262,7 +368,12 @@ async def accept_portal_invite(
     await db.flush()
 
     tenant.portal_user_id = user.id
-    _, tokens = await session_service.create_session(db, user, request)
+    session, tokens = await session_service.create_session(db, user, request)
+    # They opened a link sent to their own number, so this phone is trusted from
+    # the start and their first password sign-in here will not ask for a code.
+    await session_service.trust_device(
+        db, user, session.device_fingerprint, request.headers.get("user-agent")
+    )
     await db.commit()
 
     return PortalSession(tenant_id=tenant.id, full_name=tenant.full_name, tokens=tokens)
@@ -777,6 +888,9 @@ async def request_magic_link(
     which landlord — so an unknown number, a tenant without portal access and
     a successful send all return the same sentence.
     """
+    if otp_service.is_manual_delivery():
+        return MessageResponse(message=MAGIC_LINK_MANUAL_RESPONSE)
+
     phone = normalize_phone(payload.phone_number)
     if not await _within_magic_link_budget(phone):
         # Same message again: a rate limit that announces itself is a rate
@@ -793,17 +907,7 @@ async def request_magic_link(
     if tenant is None:
         return MessageResponse(message=MAGIC_LINK_RESPONSE)
 
-    raw = generate_url_token()
-    db.add(
-        VerificationToken(
-            user_id=tenant.portal_user_id,
-            purpose=TokenPurpose.TENANT_PORTAL_MAGIC_LINK,
-            token_hash=hash_token(f"{tenant.id}:{raw}"),
-            expires_at=datetime.now(UTC) + timedelta(minutes=settings.PORTAL_MAGIC_LINK_TTL_MINUTES),
-        )
-    )
-
-    link = f"{settings.FRONTEND_URL}/portal/login?token={raw}&t={tenant.id}"
+    link = _mint_magic_link(db, tenant)
     minutes = settings.PORTAL_MAGIC_LINK_TTL_MINUTES
     await notification_service.send(
         db,

@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Clock, Copy, MessageCircle, Pencil, RefreshCw, Send, Trash2, UserCog, UserPlus, X } from 'lucide-react'
+import { Clock, Copy, KeyRound, MessageCircle, Pencil, RefreshCw, Send, Trash2, UserCog, UserPlus, X } from 'lucide-react'
 import { useState } from 'react'
 
 import { propertiesApi, teamApi } from '@/api'
 import type { TeamMember } from '@/api/types'
+import { HandoverDialog } from '@/components/HandoverDialog'
 import { PageHeader } from '@/components/PageHeader'
 import {
   Alert,
@@ -26,6 +27,9 @@ import { dateTime, errorMessage, humanize, initials, kes, relative } from '@/lib
 import { queryKeys } from '@/lib/query-client'
 import { useAuthStore } from '@/store/auth-store'
 
+/** Roles with nobody above them in the account: they do not get handed-over codes. */
+const TOP_OF_ACCOUNT_ROLES = ['owner', 'agency_admin', 'system_admin']
+
 const INVITABLE_ROLES = [
   { value: 'caretaker', label: 'Caretaker', hint: 'Records payments, readings and maintenance on assigned properties.' },
   { value: 'property_manager', label: 'Property manager', hint: 'Full day-to-day operations across the portfolio.' },
@@ -36,10 +40,12 @@ export function TeamPage() {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [accessFor, setAccessFor] = useState<TeamMember | null>(null)
   const [editFor, setEditFor] = useState<TeamMember | null>(null)
+  const [codeFor, setCodeFor] = useState<TeamMember | null>(null)
   const queryClient = useQueryClient()
 
   const canInvite = useAuthStore((state) => state.user?.permissions?.includes('user:invite'))
   const canManage = useAuthStore((state) => state.user?.permissions?.includes('user:manage'))
+  const currentUserId = useAuthStore((state) => state.user?.id)
 
   const team = useQuery({ queryKey: queryKeys.team, queryFn: teamApi.list })
   const invitations = useQuery({ queryKey: queryKeys.invitations, queryFn: teamApi.invitations })
@@ -173,6 +179,18 @@ export function TeamPage() {
                           >
                             Access
                           </Button>
+                          {member.is_active &&
+                            member.id !== currentUserId &&
+                            !TOP_OF_ACCOUNT_ROLES.includes(member.role) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                icon={<KeyRound className="h-3.5 w-3.5" />}
+                                onClick={() => setCodeFor(member)}
+                              >
+                                Sign-in code
+                              </Button>
+                            )}
                         </>
                       )}
                     </div>
@@ -192,6 +210,28 @@ export function TeamPage() {
       )}
       {editFor && (
         <EditMemberDialog member={editFor} onClose={() => setEditFor(null)} />
+      )}
+      {codeFor && (
+        <HandoverDialog
+          title={`Sign-in code for ${codeFor.full_name}`}
+          description={
+            codeFor.role === 'caretaker'
+              ? 'For a new phone or a forgotten PIN. They open RentFlow, choose "New phone or forgot your PIN?", and enter this code with their phone number to pick a new PIN. Their old phone is signed out.'
+              : 'Make a one-time code and send it from your own phone. They enter it after their password.'
+          }
+          onClose={() => setCodeFor(null)}
+          actions={[
+            {
+              key: 'code',
+              title: 'One-time sign-in code',
+              description:
+                'A new code cancels any earlier one. Make it when they are ready to sign in, then send it straight away.',
+              buttonLabel: 'Make a code',
+              icon: <KeyRound className="h-4 w-4" />,
+              run: () => teamApi.issueSigninCode(codeFor.id),
+            },
+          ]}
+        />
       )}
     </div>
   )

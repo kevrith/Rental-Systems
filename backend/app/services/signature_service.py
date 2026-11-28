@@ -20,8 +20,10 @@ from app.models.file import FileCategory, StoredFile
 from app.models.notification import NotificationChannel, NotificationType
 from app.models.signature import DigitalSignature, SignatureStatus
 from app.models.tenant import Tenancy
+from app.models.user import User
+from app.schemas.handover import HandoverCode, HandoverLink
 from app.services import audit_service, notification_service, otp_service
-from app.services.notifications import get_sms_notifier
+from app.services.notifications import get_sms_notifier, normalize_phone
 from app.services.storage_service import store_bytes
 
 SIGNING_LINK_EXPIRY_HOURS = 72
@@ -131,12 +133,18 @@ async def get_by_token(db: AsyncSession, raw_token: str) -> DigitalSignature:
     return sig
 
 
-async def send_otp_for_signing(db: AsyncSession, sig: DigitalSignature) -> None:
+async def send_otp_for_signing(db: AsyncSession, sig: DigitalSignature) -> bool:
     """Send an OTP to the signer's phone to verify identity before signing.
 
     Delivered straight over SMS rather than through the notification workflow —
     a signer must not be able to opt out of the code that authenticates them.
+
+    Returns False without sending anything while delivery is manual: the code
+    then comes from the landlord or caretaker (`issue_signing_code`), and making
+    one here would overwrite the one they already passed on.
     """
+    if otp_service.is_manual_delivery():
+        return False
     code = await otp_service.generate_otp(SIGNING_OTP_PURPOSE, str(sig.id))
     await get_sms_notifier().send(
         sig.signer_phone,
@@ -144,6 +152,123 @@ async def send_otp_for_signing(db: AsyncSession, sig: DigitalSignature) -> None:
     )
     sig.otp_sent = True
     await db.commit()
+    return True
+
+
+# What the signer is told they are signing, by who is signing. The label is not
+# stored on the request, and the same wording must reach the signer whether the
+# link went out automatically or was re-issued by hand.
+_DOCUMENT_LABELS = {
+    "owner": "property management agreement",
+    "agency": "property management agreement",
+    "guarantor": "deed of guarantee",
+}
+
+
+async def get_for_organization(
+    db: AsyncSession, signature_id: uuid.UUID, organization_id: uuid.UUID
+) -> DigitalSignature:
+    sig = await db.get(DigitalSignature, signature_id)
+    if sig is None or sig.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Signing request not found")
+    return sig
+
+
+async def reissue_signing_link(
+    db: AsyncSession,
+    sig: DigitalSignature,
+    *,
+    actor: User,
+    request: Request | None = None,
+) -> HandoverLink:
+    """Mint a fresh signing link for the landlord or caretaker to pass on.
+
+    Only the hash of a link is stored, so an earlier link cannot be shown again;
+    issuing a new one replaces it (the old link stops working) and restarts the
+    72 hours. The document and the signer stay the same.
+    """
+    if sig.status not in (SignatureStatus.PENDING, SignatureStatus.EXPIRED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f"This document is already {sig.status.value}"
+        )
+    from app.core.config import settings
+
+    raw_token = secrets.token_urlsafe(32)
+    sig.token_hash = _hash_token(raw_token)
+    sig.expires_at = datetime.now(UTC) + timedelta(hours=SIGNING_LINK_EXPIRY_HOURS)
+    sig.status = SignatureStatus.PENDING
+
+    link = f"{settings.FRONTEND_URL}/sign/{raw_token}"
+    label = _DOCUMENT_LABELS.get(sig.signer_role, "lease agreement")
+    audit_service.record(
+        db,
+        organization_id=sig.organization_id,
+        action="document.signing_link_issued",
+        entity_type="digital_signature",
+        entity_id=sig.id,
+        actor=actor,
+        summary=f"Issued a signing link for {sig.signer_name} ({sig.signer_role})",
+        request=request,
+    )
+    await db.commit()
+    return HandoverLink(
+        link=link,
+        message=(
+            f"Dear {sig.signer_name}, your {label} is ready for signing. "
+            f"Please review and sign within {SIGNING_LINK_EXPIRY_HOURS} hours: {link}"
+        ),
+        phone_number=normalize_phone(sig.signer_phone),
+        recipient_name=sig.signer_name,
+        expires_in_seconds=SIGNING_LINK_EXPIRY_HOURS * 3600,
+    )
+
+
+async def issue_signing_code(
+    db: AsyncSession,
+    sig: DigitalSignature,
+    *,
+    actor: User,
+    request: Request | None = None,
+) -> HandoverCode:
+    """Make the signing code for the landlord or caretaker to pass on.
+
+    A new code cancels the previous one. Refused once the link has expired —
+    the signer could not use a code without a link, so send a fresh link first.
+    """
+    if sig.status != SignatureStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f"This document is already {sig.status.value}"
+        )
+    if datetime.now(UTC) > sig.expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The signing link has expired. Send a new link first.",
+        )
+
+    code = await otp_service.generate_otp(SIGNING_OTP_PURPOSE, str(sig.id))
+    sig.otp_sent = True
+    minutes = otp_service.code_ttl_seconds() // 60
+    audit_service.record(
+        db,
+        organization_id=sig.organization_id,
+        action="document.signing_code_issued",
+        entity_type="digital_signature",
+        entity_id=sig.id,
+        actor=actor,
+        summary=f"Issued a signing code for {sig.signer_name} ({sig.signer_role})",
+        request=request,
+    )
+    await db.commit()
+    return HandoverCode(
+        code=code,
+        message=(
+            f"Hi {sig.signer_name.split()[0]}, your RentFlow signing code is {code}. "
+            f"It works once and expires in {minutes} minutes. Do not share it."
+        ),
+        phone_number=normalize_phone(sig.signer_phone),
+        recipient_name=sig.signer_name,
+        expires_in_seconds=otp_service.code_ttl_seconds(),
+    )
 
 
 async def verify_otp_and_sign(

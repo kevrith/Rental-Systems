@@ -2904,3 +2904,53 @@ export interface ApprovalRequest {
 export interface ApprovalRequestDetail extends ApprovalRequest {
   actions: ApprovalAction[]
 }
+
+
+// ------------------------------------------------------------- code handover
+
+/** A one-time code issued to a landlord or caretaker to pass on in person, by
+ *  WhatsApp or by the phone's own SMS app. Shown once. */
+export interface HandoverCode {
+  code: string
+  message: string
+  phone_number: string
+  recipient_name: string
+  expires_in_seconds: number
+}
+
+/** A link issued the same way: signing link, portal set-up link, sign-in link. */
+export interface HandoverLink {
+  link: string
+  message: string
+  phone_number: string
+  recipient_name: string
+  expires_in_seconds: number | null
+}
+
+export type HandoverResult = HandoverCode | HandoverLink
+
+export interface AuthConfig {
+  otp_delivery: 'manual' | 'sms'
+}
+
+export interface PublicSigningRequest {
+  id: string
+  signer_name: string
+  signer_role: string
+  document_id: string
+  expires_at: string
+  status: string
+  saved_signature: string | null
+}
+
+export interface SigningCodeRequestResult {
+  message: string
+  delivery: 'manual' | 'sms'
+}
+
+export interface SignedResult {
+  id: string
+  status: string
+  signed_at: string | null
+  signed_document_id: string | null
+}

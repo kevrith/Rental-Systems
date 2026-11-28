@@ -148,6 +148,22 @@ def offline_providers(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def sms_otp_delivery(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default the suite to texted codes.
+
+    Production defaults to `OTP_DELIVERY=manual` (a landlord or caretaker hands
+    the code over), but most of the suite predates that and describes the texted
+    flow. Tests for the handover flow ask for it with `manual_otp_delivery`.
+    """
+    monkeypatch.setattr(settings, "OTP_DELIVERY", "sms")
+
+
+@pytest.fixture
+def manual_otp_delivery(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "OTP_DELIVERY", "manual")
+
+
+@pytest.fixture(autouse=True)
 def no_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     """Turn off the application rate limiter for the suite.
 

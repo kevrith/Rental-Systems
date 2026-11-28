@@ -5,7 +5,9 @@ import {
   Download,
   FileText,
   FolderOpen,
+  KeyRound,
   Mail,
+  MessageCircle,
   Pencil,
   Phone,
   Send,
@@ -17,7 +19,9 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { paymentsApi, portalApi, privacyApi, tenanciesApi, tenantsApi } from '@/api'
+import { HandoverDialog } from '@/components/HandoverDialog'
 import { PageHeader } from '@/components/PageHeader'
+import { useAuthConfig } from '@/features/auth/useAuthConfig'
 import {
   Alert,
   Badge,
@@ -86,6 +90,9 @@ export function TenantDetailPage() {
     onError: (error) => setArchiveError(errorMessage(error)),
   })
 
+  const { otpDelivery } = useAuthConfig()
+  const [shareOpen, setShareOpen] = useState(false)
+
   const invitePortal = useMutation({
     mutationFn: () => portalApi.invite(tenantId!),
     onSuccess: (result) => {
@@ -119,7 +126,16 @@ export function TenantDetailPage() {
               <FolderOpen className="h-4 w-4" />
               Documents
             </Link>
-            {canManage && !record.portal_user_id && (
+            {canManage && (otpDelivery === 'manual' || record.portal_user_id) && (
+              <Button
+                variant="outline"
+                icon={<MessageCircle className="h-4 w-4" />}
+                onClick={() => setShareOpen(true)}
+              >
+                Share portal access
+              </Button>
+            )}
+            {canManage && !record.portal_user_id && otpDelivery !== 'manual' && (
               <Button
                 variant="outline"
                 icon={<Send className="h-4 w-4" />}
@@ -155,6 +171,39 @@ export function TenantDetailPage() {
           </>
         }
       />
+
+      {shareOpen && (
+        <HandoverDialog
+          title={`Portal access for ${record.full_name}`}
+          description="Nothing is sent from RentFlow. Make a link or code, then send it from your own phone."
+          onClose={() => setShareOpen(false)}
+          actions={[
+            {
+              key: 'link',
+              title: record.portal_user_id ? 'One-tap sign-in link' : 'Portal set-up link',
+              description: record.portal_user_id
+                ? 'Works once and expires quickly. Use it when they have forgotten their password.'
+                : 'Lets them choose a password and open their portal. Works once.',
+              buttonLabel: record.portal_user_id ? 'Make a sign-in link' : 'Make a set-up link',
+              icon: <Send className="h-4 w-4" />,
+              run: () => tenantsApi.portalLink(tenantId!),
+            },
+            ...(record.portal_user_id
+              ? [
+                  {
+                    key: 'code',
+                    title: 'One-time sign-in code',
+                    description:
+                      'For a tenant who signs in with their password: they enter this code after it.',
+                    buttonLabel: 'Make a code',
+                    icon: <KeyRound className="h-4 w-4" />,
+                    run: () => tenantsApi.portalCode(tenantId!),
+                  },
+                ]
+              : []),
+          ]}
+        />
+      )}
 
       {notice && (
         <Alert tone={notice.tone} className="mb-5">

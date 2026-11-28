@@ -54,18 +54,16 @@ test('registering with an email already in use shows a server error, not a crash
   await expect(page.getByRole('alert')).toBeVisible()
 })
 
-test('a tenant can request a portal sign-in link without revealing whether the number is real', async ({
-  page,
-}) => {
+test('a tenant is shown how to ask their caretaker for a sign-in link', async ({ page }) => {
   await page.goto('/login')
   await page.getByRole('link', { name: 'Get a sign-in link' }).click()
 
   await expect(page).toHaveURL(/\/portal\/login/)
 
-  await page.getByLabel('Phone number').fill(uniquePhone())
-  await page.getByRole('button', { name: 'Send me a sign-in link' }).click()
-
-  // The same sentence whether or not that number belongs to a tenant — see
-  // app.api.v1.endpoints.portal's docstring for why that is deliberate.
-  await expect(page.getByText(/sign-in link is on its way/i)).toBeVisible()
+  // With SMS delivery off (the default) nothing is texted, so the page hands the
+  // tenant a ready-made WhatsApp message instead of asking for a number to text.
+  // The same page for every visitor: it cannot reveal whose tenant a number is.
+  const ask = page.getByRole('link', { name: 'Ask your caretaker for a link' })
+  await expect(ask).toBeVisible()
+  await expect(ask).toHaveAttribute('href', /^https:\/\/wa\.me\/\?text=/)
 })

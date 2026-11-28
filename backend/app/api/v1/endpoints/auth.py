@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.permissions import permissions_for
 from app.core.security import decode_token
@@ -19,6 +20,8 @@ from app.schemas.auth import (
     LoginRequest,
     LogoutRequest,
     MessageResponse,
+    PinEnrollRequest,
+    PinLoginRequest,
     RefreshRequest,
     RegisterRequest,
     RegisterResponse,
@@ -34,10 +37,21 @@ from app.schemas.auth import (
     WebauthnCredentialRead,
     WebauthnRegistrationVerify,
 )
+from app.schemas.handover import AuthConfig
 from app.schemas.user import UpdateProfileRequest, UserProfile, UserRead
 from app.services import auth_service, session_service, user_service, webauthn_service
 
 router = APIRouter()
+
+
+@router.get("/config", response_model=AuthConfig)
+async def auth_config() -> AuthConfig:
+    """How sign-in codes reach people, so the screens say the right thing.
+
+    Public and carries no secret: it only tells the login page whether to say
+    "check your SMS" or "ask your landlord or caretaker".
+    """
+    return AuthConfig(otp_delivery=settings.OTP_DELIVERY)
 
 
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
@@ -94,6 +108,24 @@ async def verify_login_otp(
     return await auth_service.complete_login(
         db, payload.challenge_token, payload.otp_code, payload.remember_device, request
     )
+
+
+# Both PIN routes sit under /auth/login on purpose: that prefix is already
+# public (there is no session yet) and already on the strict rate-limit list.
+@router.post("/login/pin", response_model=TokenResponse)
+async def login_with_pin(
+    payload: PinLoginRequest, request: Request, db: AsyncSession = Depends(get_db)
+) -> TokenResponse:
+    """Caretaker sign-in with phone number and PIN, from their registered phone."""
+    return await auth_service.pin_login(db, payload, request)
+
+
+@router.post("/login/pin/enroll", response_model=TokenResponse)
+async def enroll_pin(
+    payload: PinEnrollRequest, request: Request, db: AsyncSession = Depends(get_db)
+) -> TokenResponse:
+    """Choose a PIN on this phone using a code the landlord handed over."""
+    return await auth_service.pin_enroll(db, payload, request)
 
 
 @router.post("/login/verify-webauthn", response_model=TokenResponse)

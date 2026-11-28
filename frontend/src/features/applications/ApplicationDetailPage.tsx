@@ -16,6 +16,7 @@ import { Link, useParams } from 'react-router-dom'
 
 import { applicationsApi } from '@/api'
 import type { TenantApplication } from '@/api/types'
+import { HandoverDialog } from '@/components/HandoverDialog'
 import { PageHeader } from '@/components/PageHeader'
 import {
   Alert,
@@ -35,6 +36,8 @@ import {
 import { dateTime, errorMessage, humanize, kes, shortDate } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
 import { useAuthStore } from '@/store/auth-store'
+
+import { signingActions } from '@/features/signing/signingActions'
 
 import { APPLICATION_STATUS_TONE } from './ApplicationsPage'
 import { ScoreBreakdownCard } from './score'
@@ -251,10 +254,18 @@ export function ApplicationDetailPage() {
                         {humanize(guarantor.status)}
                       </Badge>
                       {guarantor.signature_id ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-money-700">
-                          <Check className="h-3.5 w-3.5" />
-                          Guarantee signed
-                        </span>
+                        <>
+                          <span className="inline-flex items-center gap-1 text-xs text-slate-600">
+                            <Check className="h-3.5 w-3.5" />
+                            Guarantee sent for signing
+                          </span>
+                          {canManage && (
+                            <GuaranteeHandoverButton
+                              signatureId={guarantor.signature_id}
+                              name={guarantor.full_name}
+                            />
+                          )}
+                        </>
                       ) : (
                         guarantor.status === 'acknowledged' &&
                         canManage && (
@@ -926,5 +937,26 @@ function SignGuaranteeButton({
       </Button>
       {error && <p className="mt-1 max-w-48 text-xs text-danger-700">{error}</p>}
     </div>
+  )
+}
+
+/** Passes the guarantor their signing link and code from the landlord's own
+ *  phone, so signing works before any SMS provider is connected. */
+function GuaranteeHandoverButton({ signatureId, name }: { signatureId: string; name: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        Send link and code
+      </Button>
+      {open && (
+        <HandoverDialog
+          title={`Signing for ${name}`}
+          description="Send the link first, then the code. Nothing is sent from RentFlow; you send both from your own phone."
+          actions={signingActions(signatureId, name)}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   )
 }

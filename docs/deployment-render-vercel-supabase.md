@@ -150,7 +150,8 @@ blueprint deploy rather than clicking through forms.
    | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | the R2 token pair |
    | `R2_BUCKET` | `rentflow-prod` |
    | `R2_ENDPOINT_URL` / `R2_REGION` | leave blank for R2 |
-   | `AFRICAS_TALKING_*` | **required — login is OTP over SMS, so nobody can sign in without it** |
+   | `OTP_DELIVERY` | `manual` until SMS is ready: nothing is texted, a landlord or caretaker sends each code from their own phone (WhatsApp or SMS). Set `sms` later |
+   | `AFRICAS_TALKING_*` | required only when `OTP_DELIVERY=sms`; leave blank while it is `manual` |
    | `RESEND_API_KEY` | transactional email |
    | `DARAJA_*` | M-Pesa; leave `DARAJA_ENVIRONMENT=sandbox` until Safaricom approves you for production |
 
@@ -181,8 +182,9 @@ here that works — `render.yaml` already specifies it.
 there is nothing to configure — but be clear about what it holds, because
 "cache" understates it:
 
-- **OTP codes.** Sign-in is OTP-over-SMS and the code lives only in Redis. No
-  Redis, no logins — for anyone.
+- **OTP codes.** One-time codes (texted, or handed over by a landlord or
+  caretaker) live only in Redis. No Redis, no codes — nobody who needs one can
+  sign in.
 - **Login lockout counters and WebAuthn challenges.**
 - **The Celery broker.** Queued tasks live here, so a restart loses whatever was
   queued at that moment. The scheduled jobs are all written to be safe to
@@ -328,8 +330,9 @@ unset SUPERADMIN_PASSWORD
 ```
 
 `read -rsp` keeps the password out of your shell history. The phone number must
-be reachable by SMS — sign-in sends an OTP to it, so a wrong number locks the
-account out permanently.
+be reachable by SMS if you will run with `OTP_DELIVERY=sms`: sign-in then texts an OTP to
+it, so a wrong number locks the account out permanently. With `OTP_DELIVERY=manual` the
+super admin signs in on password alone (nobody sits above them to hand over a code).
 
 The script is safe to re-run: an existing account is promoted in place rather
 than duplicated, and the password is only touched if you also set
@@ -369,8 +372,9 @@ Then, in a browser:
 - [ ] `https://rentflow.vercel.app` also loads and calls the API correctly
       (backup URL check).
 - [ ] Sign in end to end as the super admin. This exercises CORS,
-      `FRONTEND_URL`, the database and Africa's Talking in one action — if the
-      OTP SMS arrives and the session starts, most of the configuration is right.
+      `FRONTEND_URL` and the database in one action — if the session starts, most
+      of the configuration is right. (With `OTP_DELIVERY=sms` this also exercises
+      Africa's Talking: the OTP SMS must arrive.)
 - [ ] Upload a document, then reload and download it. Confirms R2 is wired up
       and not silently falling back to container disk.
 - [ ] Render logs show `celery@... ready` and beat's `Scheduler: Sending due

@@ -7,11 +7,14 @@ export function AuthLayout({
   subtitle,
   children,
   footer,
+  wide = false,
 }: {
   title: string
   subtitle?: string
   children: ReactNode
   footer?: ReactNode
+  /** Room for a document or a table instead of a narrow form. */
+  wide?: boolean
 }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 py-10">
@@ -22,7 +25,7 @@ export function AuthLayout({
         </Link>
       </div>
 
-      <main className="w-full max-w-md rounded-card border border-slate-200 bg-white p-7 shadow-sm">
+      <main className={`w-full ${wide ? 'max-w-2xl' : 'max-w-md'} rounded-card border border-slate-200 bg-white p-7 shadow-sm`}>
         <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
         <div className="mt-6">{children}</div>

@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileSignature, Send, Undo2, XCircle } from 'lucide-react'
+import { FileSignature, MessageCircle, Send, Undo2, XCircle } from 'lucide-react'
 import { useState } from 'react'
 
 import { filesApi, managementAgreementsApi } from '@/api'
+import { HandoverDialog } from '@/components/HandoverDialog'
+import { signingActions } from '@/features/signing/signingActions'
 import type { ManagementAgreement, ManagementAgreementStatus } from '@/api/types'
 import {
   Alert,
@@ -20,6 +22,7 @@ import {
   Textarea,
   type BadgeTone,
 } from '@/components/ui'
+import { useAuthConfig } from '@/features/auth/useAuthConfig'
 import { errorMessage, kes, shortDate, today } from '@/lib/format'
 import { queryKeys } from '@/lib/query-client'
 
@@ -57,10 +60,12 @@ const STATUS_LABEL: Record<ManagementAgreementStatus, string> = {
 
 export function ManagementAgreementPanel({ ownerProfileId }: { ownerProfileId: string }) {
   const queryClient = useQueryClient()
+  const { otpDelivery } = useAuthConfig()
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [sending, setSending] = useState<ManagementAgreement | null>(null)
   const [terminating, setTerminating] = useState<ManagementAgreement | null>(null)
+  const [handingOver, setHandingOver] = useState<ManagementAgreement | null>(null)
 
   const [startDate, setStartDate] = useState(today())
   const [termMonths, setTermMonths] = useState('12')
@@ -102,7 +107,12 @@ export function ManagementAgreementPanel({ ownerProfileId }: { ownerProfileId: s
         agency_signatory_name: signatoryName.trim(),
         agency_signatory_phone: signatoryPhone.trim(),
       }),
-    onSuccess: settled,
+    onSuccess: async (sent) => {
+      await settled()
+      // Nothing is texted in manual mode, so go straight to handing the
+      // links over rather than leaving the agency to hunt for the button.
+      if (otpDelivery === 'manual') setHandingOver(sent)
+    },
     onError: failed,
   })
 
@@ -212,6 +222,18 @@ export function ManagementAgreementPanel({ ownerProfileId }: { ownerProfileId: s
                           Send for signature
                         </Button>
                       )}
+                      {row.status === 'pending_signatures' &&
+                        row.owner_signature_id &&
+                        row.agency_signature_id && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            icon={<MessageCircle className="h-4 w-4" />}
+                            onClick={() => setHandingOver(row)}
+                          >
+                            Send signing links
+                          </Button>
+                        )}
                       {row.status === 'active' && (
                         <Button
                           size="sm"
@@ -326,7 +348,15 @@ export function ManagementAgreementPanel({ ownerProfileId }: { ownerProfileId: s
               placeholder="Agnes Kariuki"
             />
           </Field>
-          <Field label="Their phone number" required hint="The signing code is sent here by SMS.">
+          <Field
+            label="Their phone number"
+            required
+            hint={
+              otpDelivery === 'manual'
+                ? 'Their signing link and code are sent to this number, from your own phone.'
+                : 'The signing code is sent here by SMS.'
+            }
+          >
             <Input
               type="tel"
               value={signatoryPhone}
@@ -336,6 +366,18 @@ export function ManagementAgreementPanel({ ownerProfileId }: { ownerProfileId: s
           </Field>
         </div>
       </Dialog>
+
+      {handingOver && handingOver.owner_signature_id && handingOver.agency_signature_id && (
+        <HandoverDialog
+          title={`Signing for ${handingOver.reference_code}`}
+          description="Each party signs for themselves. Send each their link first, then their code, from your own phone."
+          actions={[
+            ...signingActions(handingOver.owner_signature_id, 'the owner'),
+            ...signingActions(handingOver.agency_signature_id, 'the agency signatory'),
+          ]}
+          onClose={() => setHandingOver(null)}
+        />
+      )}
 
       <Dialog
         open={terminating !== null}

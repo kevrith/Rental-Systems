@@ -3,6 +3,11 @@ import { apiClient } from '@/lib/api-client'
 
 import type {
   ActivityEntry,
+  HandoverCode,
+  HandoverLink,
+  PublicSigningRequest,
+  SignedResult,
+  SigningCodeRequestResult,
   AgencyDashboard,
   ApiKey,
   ApiKeyCreated,
@@ -237,6 +242,10 @@ export const tenantsApi = {
   archive: (id: string) => del<Tenant>(`/tenants/${id}`),
   documents: (id: string) => get<StoredDocument[]>(`/tenants/${id}/documents`),
   exportCsvUrl: '/tenants/export.csv',
+  /** A portal link to pass on by WhatsApp or SMS: set-up if they have no login yet, else sign-in. */
+  portalLink: (id: string) => post<HandoverLink>('/portal/handover/link', { tenant_id: id }),
+  /** A one-time sign-in code for a tenant who signs in with a password. */
+  portalCode: (id: string) => post<HandoverCode>('/portal/handover/code', { tenant_id: id }),
 }
 
 export const tenanciesApi = {
@@ -612,6 +621,21 @@ export const applicationsApi = {
     post<TenantApplication>(`/applications/${id}/guarantors/${guarantorId}/sign`),
 }
 
+/** Staff side of signing: a link and a code to pass on to the signer. */
+export const signaturesApi = {
+  handoverLink: (id: string) => post<HandoverLink>(`/signatures/${id}/handover/link`),
+  handoverCode: (id: string) => post<HandoverCode>(`/signatures/${id}/handover/code`),
+}
+
+/** The signer's side. No account: the link is the whole authentication. */
+export const publicSigningApi = {
+  get: (token: string) => get<PublicSigningRequest>(`/sign/${token}`),
+  document: (token: string) => getBlob(`/sign/${token}/document`),
+  requestCode: (token: string) => post<SigningCodeRequestResult>(`/sign/${token}/send-otp`),
+  sign: (token: string, body: { otp_code: string; signature_image: string }) =>
+    post<SignedResult>(`/sign/${token}/sign`, body),
+}
+
 /** The three unauthenticated screening flows: applicant, guarantor, referee. */
 export const publicScreeningApi = {
   listing: (unitId: string) => get<PublicUnitListing>(`/apply/${unitId}`),
@@ -723,12 +747,13 @@ export const teamApi = {
   updateAccess: (id: string, body: unknown) => patch<TeamMember>(`/team/${id}/access`, body),
   updateProfile: (id: string, body: unknown) => patch<TeamMember>(`/team/${id}/profile`, body),
   removeMember: (id: string) => del<{ message: string }>(`/team/${id}`),
+  issueSigninCode: (id: string) => post<HandoverCode>(`/team/${id}/signin-code`),
   previewInvitation: (token: string) =>
     get<{ full_name: string; organization_name: string; role: string; phone_number: string }>(
       '/invitations/preview',
       { token },
     ),
-  acceptInvitation: (body: { token: string; password: string }) =>
+  acceptInvitation: (body: { token: string; password?: string; pin?: string }) =>
     post<{ user: unknown; tokens: { access_token: string; refresh_token: string } }>(
       '/invitations/accept',
       body,

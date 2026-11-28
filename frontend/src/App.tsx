@@ -37,6 +37,12 @@ const ApplicationDetailPage = lazy(() =>
 const PublicApplyPage = lazy(() =>
   import('@/features/applications/PublicApplyPage').then((m) => ({ default: m.PublicApplyPage })),
 )
+const PinLoginPage = lazy(() =>
+  import('@/features/auth/PinLoginPage').then((m) => ({ default: m.PinLoginPage })),
+)
+const SignPage = lazy(() =>
+  import('@/features/signing/SignPage').then((m) => ({ default: m.SignPage })),
+)
 const GuaranteeResponsePage = lazy(() =>
   import('@/features/applications/PublicResponsePages').then((m) => ({
     default: m.GuaranteeResponsePage,
@@ -362,6 +368,7 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/pin-login" element={<PinLoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
@@ -371,6 +378,8 @@ function App() {
         <Route path="/portal/login" element={<PortalLoginPage />} />
         {/* The renewal link is the tenant's whole authentication — no account. */}
         <Route path="/renew/:token" element={<RenewalPage />} />
+        {/* The signing link is the signer's whole authentication — no account. */}
+        <Route path="/sign/:token" element={<SignPage />} />
         {/* Screening reaches three people who have no login: the applicant, their
             guarantor, and their previous landlord. */}
         <Route path="/apply/:unitId" element={<PublicApplyPage />} />

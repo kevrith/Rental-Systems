@@ -10,6 +10,8 @@ import { Button, Input } from '@/components/ui'
 import { errorMessage } from '@/lib/format'
 import { useAuthStore } from '@/store/auth-store'
 
+import { useAuthConfig } from './useAuthConfig'
+
 const schema = z.object({
   otp_code: z.string().regex(/^\d{4,8}$/, 'Enter the code from your SMS'),
 })
@@ -18,6 +20,7 @@ type FormValues = z.infer<typeof schema>
 /** Prompt shown until the owner confirms the number their codes and receipts go to. */
 export function PhoneVerificationBanner() {
   const user = useAuthStore((state) => state.user)
+  const { otpDelivery } = useAuthConfig()
   const setUser = useAuthStore((state) => state.setUser)
   const [resent, setResent] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
@@ -38,7 +41,8 @@ export function PhoneVerificationBanner() {
     onSuccess: () => setResent(true),
   })
 
-  if (!user || user.is_phone_verified) return null
+  // With manual delivery no code is texted, so there is nothing to type in here.
+  if (!user || user.is_phone_verified || otpDelivery === 'manual') return null
 
   return (
     <div className="mb-6 rounded-card border border-warn-100 bg-warn-50 p-4">

@@ -1,5 +1,6 @@
 import re
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,6 +27,10 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    # Tenants sign in a few times a year, on one phone, and reach only their own
+    # rent and receipts, so they stay signed in far longer than staff. Fixed from
+    # the moment they sign in; after that they need a new link.
+    TENANT_SESSION_DAYS: int = 30
 
     # Google Sign-In (Identity Services). This is the OAuth *client ID*, not a
     # secret — it's compiled into the frontend bundle same as a Stripe
@@ -74,6 +79,22 @@ class Settings(BaseSettings):
     # or when Africa's Talking credentials are not yet configured. Trusted-
     # device tokens are still issued; the OTP challenge is just never sent.
     REQUIRE_OTP: bool = True
+    # How one-time codes reach people.
+    #   "manual" — nothing is texted. A landlord or caretaker issues the code in
+    #              the app and passes it on through WhatsApp or the phone's own
+    #              SMS app (wa.me / sms: links). No SMS provider is needed.
+    #   "sms"    — codes are texted automatically through Africa's Talking.
+    # Flip to "sms" once the provider's sender ID is approved; nothing else changes.
+    OTP_DELIVERY: Literal["manual", "sms"] = "manual"
+    # A handed-over code travels through a person and a chat app, so it gets
+    # longer than a code texted straight to the phone.
+    OTP_HANDOVER_TTL_SECONDS: int = 900
+    # Caretaker PIN. The PIN only works from a phone registered through a
+    # handed-over code; that registration lasts this long, then a new code is
+    # needed. Wrong PINs per day before PIN sign-in is locked until a new code
+    # is handed over (the per-attempt lockout is LOGIN_MAX_ATTEMPTS).
+    PIN_DEVICE_TRUST_DAYS: int = 180
+    PIN_MAX_FAILURES_PER_DAY: int = 15
 
     # Verification / invitation link lifetimes
     EMAIL_VERIFICATION_TTL_HOURS: int = 24

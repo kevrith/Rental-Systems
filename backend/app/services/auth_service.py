@@ -26,10 +26,14 @@ from app.schemas.auth import (
     LoginChallengeResponse,
     LoginRequest,
     MessageResponse,
+    PinEnrollRequest,
+    PinLoginRequest,
     RegisterRequest,
     TokenResponse,
 )
+from app.schemas.handover import HandoverCode
 from app.services import (
+    audit_service,
     notification_service,
     otp_service,
     referral_service,
@@ -42,6 +46,15 @@ from app.services.notifications import get_email_notifier, get_sms_notifier, nor
 
 LOGIN_OTP_PURPOSE = "login"
 PHONE_VERIFICATION_PURPOSE = "phone_verification"
+
+# Roles with nobody above them in the organisation. In manual delivery a code is
+# handed over by someone more senior, so for these accounts there is no one who
+# could hand it over — and a code the owner issues to themselves proves nothing.
+# They sign in on password, trusted device and the new-device alert until SMS
+# delivery is switched on, which brings their OTP back.
+_TOP_OF_ORGANISATION_ROLES = {UserRole.OWNER, UserRole.AGENCY_ADMIN, UserRole.SYSTEM_ADMIN}
+
+MANUAL_CODE_PROMPT = "Ask your landlord or caretaker for your sign-in code, then enter it here."
 
 # Resending a login code costs a real SMS, so both a per-attempt cooldown and a
 # hard cap per challenge exist — a lost or slow message is one tap away, but a
@@ -69,6 +82,14 @@ def _mask_phone(phone_number: str) -> str:
         return "*" * len(phone_number)
     prefix, suffix = phone_number[:4], phone_number[-2:]
     return f"{prefix}{'*' * (len(phone_number) - len(prefix) - len(suffix))}{suffix}"
+
+
+def is_manual_otp() -> bool:
+    return otp_service.is_manual_delivery()
+
+
+def _has_no_one_above(user: User) -> bool:
+    return user.role in _TOP_OF_ORGANISATION_ROLES or user.is_platform_staff
 
 
 def _login_fails_key(email: str) -> str:
@@ -124,6 +145,10 @@ async def _enforce_ip_policy(db: AsyncSession, user: User, request: Request | No
 
 
 async def _send_phone_verification_otp(user: User) -> None:
+    if is_manual_otp():
+        # Nobody is there to hand a brand-new owner a code, and nothing gates on
+        # a verified number. It stays unverified until SMS delivery is on.
+        return
     code = await otp_service.generate_otp(PHONE_VERIFICATION_PURPOSE, str(user.id))
     message = f"Your RentFlow phone verification code is {code}. It expires in 5 minutes."
     await get_sms_notifier().send(user.phone_number, message)
@@ -428,14 +453,22 @@ async def initiate_login(
     # OTP is bypassed when REQUIRE_OTP=false (dev/no-SMS-credentials mode)
     # or when the device is already trusted ("remember this device" was ticked
     # on a previous login from this browser).
-    if not settings.REQUIRE_OTP or await session_service.is_trusted_device(db, user, fingerprint):
+    if (
+        not settings.REQUIRE_OTP
+        or await session_service.is_trusted_device(db, user, fingerprint)
+        or (is_manual_otp() and _has_no_one_above(user))
+    ):
         tokens = await _finalize_login(db, user, request, remember_device=False, device_was_known=was_known)
         return LoginChallengeResponse(otp_required=False, message="Signed in successfully", tokens=tokens)
 
-    code = await otp_service.generate_otp(LOGIN_OTP_PURPOSE, str(user.id))
-    await get_sms_notifier().send(
-        user.phone_number, f"Your RentFlow login code is {code}. It expires in 5 minutes."
-    )
+    manual = is_manual_otp()
+    if not manual:
+        code = await otp_service.generate_otp(LOGIN_OTP_PURPOSE, str(user.id))
+        await get_sms_notifier().send(
+            user.phone_number, f"Your RentFlow login code is {code}. It expires in 5 minutes."
+        )
+    # In manual delivery no code is made here: it would overwrite the one the
+    # landlord already issued for this person.
     challenge_token = await otp_service.create_login_challenge(
         str(user.id), remember_device=payload.remember_device, device_was_known=was_known
     )
@@ -450,8 +483,9 @@ async def initiate_login(
     return LoginChallengeResponse(
         otp_required=True,
         challenge_token=challenge_token,
-        expires_in=settings.OTP_TTL_SECONDS,
-        message=f"Enter the code sent to {_mask_phone(user.phone_number)}",
+        expires_in=otp_service.code_ttl_seconds(),
+        message=MANUAL_CODE_PROMPT if manual else f"Enter the code sent to {_mask_phone(user.phone_number)}",
+        delivery="manual" if manual else "sms",
         webauthn_options=webauthn_options,
     )
 
@@ -471,6 +505,10 @@ async def resend_login_otp(db: AsyncSession, challenge_token: str) -> MessageRes
         )
     user_id = challenge["user_id"]
 
+    if is_manual_otp():
+        # There is nothing to resend: the code comes from a person, not from us.
+        return MessageResponse(message=MANUAL_CODE_PROMPT)
+
     cooldown_key = f"otp:resend_cooldown:login:{challenge_token}"
     if not await redis_client.set(cooldown_key, "1", ex=LOGIN_OTP_RESEND_COOLDOWN_SECONDS, nx=True):
         raise HTTPException(
@@ -481,7 +519,7 @@ async def resend_login_otp(db: AsyncSession, challenge_token: str) -> MessageRes
     count_key = f"otp:resend_count:login:{challenge_token}"
     count = await redis_client.incr(count_key)
     if count == 1:
-        await redis_client.expire(count_key, settings.OTP_TTL_SECONDS)
+        await redis_client.expire(count_key, otp_service.code_ttl_seconds())
     if count > LOGIN_OTP_RESEND_MAX_PER_CHALLENGE:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -713,3 +751,183 @@ async def create_portal_user(
     db.add(user)
     await db.flush()
     return user
+
+
+async def issue_login_code(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    issuer: User,
+    target: User,
+    request: Request | None = None,
+) -> HandoverCode:
+    """Make a one-time sign-in code for `target` and hand it to `issuer` to pass on.
+
+    The code is shown once and never stored in the clear (it lives in Redis like
+    any other OTP). A new code cancels the previous one. The audit entry records
+    who issued a code to whom, never the code itself.
+    """
+    if target.organization_id != organization_id:
+        # 404, not 403: a caller must not learn another organisation's users exist.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if target.id == issuer.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A code you issue to yourself proves nothing. Ask someone above you instead.",
+        )
+    if not target.is_active or target.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="That account is disabled")
+    if _has_no_one_above(target):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Owners and administrators do not use handed-over codes.",
+        )
+
+    code = await otp_service.generate_otp(LOGIN_OTP_PURPOSE, str(target.id))
+    minutes = otp_service.code_ttl_seconds() // 60
+    audit_service.record(
+        db,
+        organization_id=target.organization_id,
+        action="user.sign_in_code_issued",
+        entity_type="user",
+        entity_id=target.id,
+        actor=issuer,
+        summary=f"Issued a one-time sign-in code to {target.full_name}",
+        request=request,
+    )
+    await db.commit()
+    return HandoverCode(
+        code=code,
+        message=(
+            f"Hi {target.full_name.split()[0]}, your RentFlow sign-in code is {code}. "
+            f"It works once and expires in {minutes} minutes. Do not share it."
+        ),
+        phone_number=normalize_phone(target.phone_number),
+        recipient_name=target.full_name,
+        expires_in_seconds=otp_service.code_ttl_seconds(),
+    )
+
+
+# ------------------------------------------------------------ caretaker PIN
+
+PIN_REJECTED = (
+    "That phone number and PIN do not match on this phone. If you have a new phone or "
+    "forgot your PIN, ask your landlord or caretaker for a sign-in code."
+)
+PIN_LOCKED = "Too many wrong PINs. Ask your landlord or caretaker for a new sign-in code."
+
+
+def _pin_lock_key(phone: str) -> str:
+    # Shares the password lockout's machinery under a name of its own, so wrong
+    # PINs never lock someone out of a password sign-in or the reverse.
+    return f"pin:{phone}"
+
+
+def _pin_day_key(user_id: uuid.UUID) -> str:
+    return f"pin_fails_day:{user_id}"
+
+
+async def _caretaker_by_phone(db: AsyncSession, phone: str) -> User | None:
+    user = await db.scalar(select(User).where(User.phone_number == phone))
+    if user is None or user.role != UserRole.CARETAKER:
+        return None
+    if not user.is_active or user.deleted_at is not None:
+        return None
+    return user
+
+
+async def pin_login(
+    db: AsyncSession, payload: PinLoginRequest, request: Request | None = None
+) -> TokenResponse:
+    """Sign a caretaker in with their phone number and PIN.
+
+    Only from a phone registered to them. A browser that is not registered gets
+    the same answer as a wrong PIN and is not counted against the account, so
+    someone who only knows a number can neither guess PINs nor lock the real
+    caretaker out. A registered phone gets 5 tries per 5 minutes and a hard cap
+    per day, after which only a freshly handed-over code unlocks it.
+    """
+    phone = normalize_phone(payload.phone_number)
+    lock_key = _pin_lock_key(phone)
+    await _assert_not_locked_out(lock_key)
+
+    user = await _caretaker_by_phone(db, phone)
+    fingerprint = session_service.request_fingerprint(request)
+    if (
+        user is None
+        or not user.pin_hash
+        or not await session_service.has_registered_device(db, user, fingerprint)
+    ):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=PIN_REJECTED)
+
+    day_key = _pin_day_key(user.id)
+    if int(await redis_client.get(day_key) or 0) >= settings.PIN_MAX_FAILURES_PER_DAY:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=PIN_LOCKED)
+
+    await _enforce_ip_policy(db, user, request)
+
+    if not verify_password(payload.pin, user.pin_hash):
+        await _register_failed_login(lock_key)
+        if await redis_client.incr(day_key) == 1:
+            await redis_client.expire(day_key, 86400)
+        await security_service.record_event(
+            db,
+            organization_id=user.organization_id,
+            event_type=SecurityEventType.LOGIN_FAILED,
+            user_id=user.id,
+            request=request,
+        )
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=PIN_REJECTED)
+
+    await _clear_failed_logins(lock_key)
+    await redis_client.delete(day_key)
+    return await _finalize_login(db, user, request, remember_device=False, device_was_known=True)
+
+
+async def pin_enroll(
+    db: AsyncSession, payload: PinEnrollRequest, request: Request | None = None
+) -> TokenResponse:
+    """Choose a PIN on this phone, proved by a code the landlord handed over.
+
+    This phone becomes the caretaker's phone: every other session and registered
+    phone is cancelled, so a lost phone stops working the moment its replacement
+    is set up. Any lockout from wrong PINs is cleared.
+    """
+    phone = normalize_phone(payload.phone_number)
+    fingerprint = session_service.request_fingerprint(request)
+    if fingerprint is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This phone could not be identified. Open RentFlow in your phone's browser.",
+        )
+
+    user = await _caretaker_by_phone(db, phone)
+    if user is None or not await otp_service.verify_otp(LOGIN_OTP_PURPOSE, str(user.id), payload.code):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code")
+
+    await _enforce_ip_policy(db, user, request)
+
+    user.pin_hash = hash_password(payload.pin)
+    await session_service.revoke_all(db, user.id)
+    await session_service.revoke_all_devices(db, user.id)
+    await session_service.trust_device(
+        db,
+        user,
+        fingerprint,
+        request.headers.get("user-agent") if request else None,
+        days=settings.PIN_DEVICE_TRUST_DAYS,
+    )
+    await _clear_failed_logins(_pin_lock_key(phone))
+    await redis_client.delete(_pin_day_key(user.id))
+    audit_service.record(
+        db,
+        organization_id=user.organization_id,
+        action="user.pin_set",
+        entity_type="user",
+        entity_id=user.id,
+        actor=user,
+        summary=f"{user.full_name} set a sign-in PIN on a new phone",
+        request=request,
+    )
+    return await _finalize_login(db, user, request, remember_device=False, device_was_known=True)

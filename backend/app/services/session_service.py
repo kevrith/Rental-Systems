@@ -23,7 +23,7 @@ from app.core.security import (
 )
 from app.models.organization import Organization
 from app.models.session import TrustedDevice, UserSession
-from app.models.user import DEFAULT_INACTIVITY_TIMEOUT_MINUTES, User
+from app.models.user import DEFAULT_INACTIVITY_TIMEOUT_MINUTES, User, UserRole
 from app.schemas.auth import TokenResponse
 
 
@@ -115,6 +115,13 @@ async def enforce_session_cap(db: AsyncSession, user: User, keep_session_id: uui
     return len(surplus)
 
 
+def session_lifetime_days(user: User) -> int:
+    """How long a sign-in lasts before a fresh one is needed."""
+    if user.role == UserRole.TENANT:
+        return settings.TENANT_SESSION_DAYS
+    return settings.REFRESH_TOKEN_EXPIRE_DAYS
+
+
 async def create_session(
     db: AsyncSession, user: User, request: Request | None = None
 ) -> tuple[UserSession, TokenResponse]:
@@ -132,7 +139,7 @@ async def create_session(
         ip_address=client_ip(request),
         location=request.headers.get("x-client-location") if request else None,
         last_active_at=now,
-        expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_at=now + timedelta(days=session_lifetime_days(user)),
     )
     db.add(session)
     await db.flush()
@@ -145,7 +152,7 @@ async def create_session(
 
 
 def _mint(user: User, session: UserSession) -> TokenResponse:
-    refresh_token = create_refresh_token(str(user.id), str(session.id))
+    refresh_token = create_refresh_token(str(user.id), str(session.id), days=session_lifetime_days(user))
     session.refresh_token_hash = hash_token(refresh_token)
     return TokenResponse(
         access_token=create_access_token(
@@ -261,13 +268,18 @@ async def is_trusted_device(db: AsyncSession, user: User, fingerprint: str | Non
 
 
 async def trust_device(
-    db: AsyncSession, user: User, fingerprint: str | None, user_agent: str | None
+    db: AsyncSession,
+    user: User,
+    fingerprint: str | None,
+    user_agent: str | None,
+    *,
+    days: int | None = None,
 ) -> TrustedDevice | None:
     if not fingerprint:
         return None
 
     now = datetime.now(UTC)
-    expires_at = now + timedelta(days=settings.TRUSTED_DEVICE_DAYS)
+    expires_at = now + timedelta(days=days if days is not None else settings.TRUSTED_DEVICE_DAYS)
 
     device = await db.scalar(
         select(TrustedDevice).where(
@@ -289,6 +301,41 @@ async def trust_device(
         device.last_used_at = now
         device.expires_at = expires_at
     return device
+
+
+async def has_registered_device(db: AsyncSession, user: User, fingerprint: str | None) -> bool:
+    """Whether this browser is a phone registered to the user (live, not revoked).
+
+    Unlike `is_trusted_device` this ignores `always_require_2fa`: that setting is
+    about skipping a code on a password sign-in, and a PIN account has no code
+    to skip. It is the registration itself that stands in for the second factor.
+    """
+    if not fingerprint:
+        return False
+    device = await db.scalar(
+        select(TrustedDevice).where(
+            TrustedDevice.user_id == user.id,
+            TrustedDevice.device_fingerprint == fingerprint,
+            TrustedDevice.revoked_at.is_(None),
+            TrustedDevice.expires_at > datetime.now(UTC),
+        )
+    )
+    if device is None:
+        return False
+    device.last_used_at = datetime.now(UTC)
+    return True
+
+
+async def revoke_all_devices(db: AsyncSession, user_id: uuid.UUID) -> int:
+    """Forget every registered phone, so only the one registered next is trusted."""
+    now = datetime.now(UTC)
+    revoked = 0
+    for device in await db.scalars(
+        select(TrustedDevice).where(TrustedDevice.user_id == user_id, TrustedDevice.revoked_at.is_(None))
+    ):
+        device.revoked_at = now
+        revoked += 1
+    return revoked
 
 
 async def is_known_device(db: AsyncSession, user: User, fingerprint: str | None) -> bool:

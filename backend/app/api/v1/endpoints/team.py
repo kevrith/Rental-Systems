@@ -10,7 +10,9 @@ from app.api.deps import OrgContext, require, require_write
 from app.core.database import get_db
 from app.core.permissions import Permission
 from app.models.session import Invitation, InvitationStatus
+from app.models.user import User
 from app.schemas.auth import MessageResponse, TokenResponse
+from app.schemas.handover import HandoverCode
 from app.schemas.user import (
     AcceptInvitationRequest,
     InvitationPreview,
@@ -19,7 +21,7 @@ from app.schemas.user import (
     TeamMemberRead,
     UserRead,
 )
-from app.services import user_service
+from app.services import auth_service, user_service
 
 router = APIRouter()
 
@@ -154,6 +156,30 @@ async def update_access(
         is_active=payload.is_active,
         property_ids=payload.property_ids,
         cash_limit=Decimal(str(payload.cash_limit)) if payload.cash_limit is not None else None,
+        request=request,
+    )
+
+
+@router.post("/{user_id}/signin-code", response_model=HandoverCode)
+async def issue_signin_code(
+    user_id: uuid.UUID,
+    request: Request,
+    context: OrgContext = Depends(require_write(Permission.USER_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> HandoverCode:
+    """Make a one-time sign-in code for a team member, to pass on by WhatsApp or SMS.
+
+    Shown once. Used while SMS delivery is off (or when someone cannot receive
+    the text), and the only way a caretaker without a delivered code gets in.
+    """
+    target = await db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return await auth_service.issue_login_code(
+        db,
+        organization_id=context.organization_id,
+        issuer=context.user,
+        target=target,
         request=request,
     )
 

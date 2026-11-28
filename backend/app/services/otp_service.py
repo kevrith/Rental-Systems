@@ -19,10 +19,23 @@ def _challenge_key(token: str) -> str:
     return f"login_challenge:{token}"
 
 
+def is_manual_delivery() -> bool:
+    """True while codes are handed over by a person instead of texted."""
+    return settings.OTP_DELIVERY == "manual"
+
+
+def code_ttl_seconds() -> int:
+    """How long a code lives under the configured delivery mode."""
+    if is_manual_delivery():
+        return settings.OTP_HANDOVER_TTL_SECONDS
+    return settings.OTP_TTL_SECONDS
+
+
 async def generate_otp(purpose: str, subject: str) -> str:
     """Create and store a fresh OTP, replacing any previous one for this purpose+subject."""
     code = "".join(secrets.choice(string.digits) for _ in range(settings.OTP_LENGTH))
-    await redis_client.set(_otp_key(purpose, subject), code, ex=settings.OTP_TTL_SECONDS)
+    ttl = code_ttl_seconds()
+    await redis_client.set(_otp_key(purpose, subject), code, ex=ttl)
     await redis_client.delete(_attempts_key(purpose, subject))
     return code
 
@@ -41,7 +54,7 @@ async def verify_otp(purpose: str, subject: str, code: str) -> bool:
     attempts_key = _attempts_key(purpose, subject)
     attempts = await redis_client.incr(attempts_key)
     if attempts == 1:
-        await redis_client.expire(attempts_key, settings.OTP_TTL_SECONDS)
+        await redis_client.expire(attempts_key, code_ttl_seconds())
     if attempts > settings.OTP_MAX_ATTEMPTS:
         await redis_client.delete(otp_key)
         return False
@@ -69,7 +82,7 @@ async def create_login_challenge(
             "device_was_known": device_was_known,
         }
     )
-    await redis_client.set(_challenge_key(token), payload, ex=settings.OTP_TTL_SECONDS)
+    await redis_client.set(_challenge_key(token), payload, ex=code_ttl_seconds())
     return token
 
 
